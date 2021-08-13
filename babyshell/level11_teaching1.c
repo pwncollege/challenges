@@ -149,7 +149,7 @@ int main(int argc, char **argv, char **envp)
     assert(fclose(stdin) == 0);
 
     printf("This challenge is about to close stderr, which means that you will\n");
-    printf("not be able to get use file descriptor 2 for output. You might still\n");
+    printf("not be able to use file descriptor 2 for output. You might still\n");
     printf("be able to use file descriptor 1 (stdout), unless this challenge\n");
     printf("closes it as well.\n");
     printf("\n");
