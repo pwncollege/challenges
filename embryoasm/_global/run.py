@@ -193,7 +193,7 @@ class EmbryoASMBase:
             In this level you will be working with memory. This will require you to read or write
             to things stored linearly in memory. If you are confused, go look at the linear
             addressing module in 'ike. You may also be asked to dereference things, possibly multiple
-            times, to things we dynamically put in memory for you use.
+            times, to things we dynamically put in memory for your use.
             """
 
         if self.bit_logic:
