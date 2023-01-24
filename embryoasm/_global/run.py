@@ -1677,7 +1677,7 @@ class EmbryoASMLevel22(EmbryoASMBase):
 
         An important note is that src_addr is an address in memory (where the string is located) and [src_addr] refers to the byte that exists at src_addr.
 
-        Therefore, the function foo excepts a byte as its first argument, and returns a byte.
+        Therefore, the function foo accepts a byte as its first argument, and returns a byte.
 
         We will now run multiple tests on your code, here is an example run:
         - (data) [{hex(self.DATA_ADDR)}] = {{10 random bytes}},
