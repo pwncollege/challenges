@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+
+import pwnlib
+
+{% from 'base_templates/names.j2' import generate_names %}
+{% set settings = namespace() %}
+{{ generate_names(settings, challenge.random) }}
+
+r = pwnlib.tubes.remote.remote("challenge.localhost", 80)
+r.send(f"GET /{{settings.endpoint_static_files}}/index.html HTTP/1.1\nHost: challenge.localhost:80\n\n".encode())
+response = r.readall().decode()
+assert "200 OK" in response or "404" in response
+print(response)
