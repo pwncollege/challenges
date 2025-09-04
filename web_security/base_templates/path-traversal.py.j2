@@ -24,3 +24,7 @@ def challenge(path="index.html"):
         flask.abort(500, requested_path + ":" + str(e))
 
 {% endblock %}
+
+{% block initialization %}
+os.makedirs(os.path.join(os.getcwd(), "files"), exist_ok=True)
+{% endblock %}
