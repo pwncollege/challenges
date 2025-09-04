@@ -1,0 +1,34 @@
+#!/opt/pwn.college/python
+
+{%- set settings = namespace(var=None) -%}
+{%- set settings.reset_uid = False -%}
+{%- set settings.reset_path = False -%}
+{%- set settings.reset_flask_host = "" -%}
+{%- set settings.flask_port = 80 -%}
+
+{% block setup %}
+{% endblock %}
+
+{% block imports %}
+{% endblock %}
+import flask
+import os
+
+app = flask.Flask(__name__)
+
+{% block handlers %}
+{% endblock %}
+{% block initialization %}
+{% endblock %}
+
+{% if settings.reset_uid %}
+os.setuid(os.geteuid())
+{% endif %}
+{% if settings.reset_path %}
+os.environ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+{% endif %}
+app.secret_key = os.urandom(8)
+{% if settings.flask_host %}
+app.config['SERVER_NAME'] = "{{settings.flask_host}}:{{settings.flask_port or 80}}"
+{% endif %}
+app.run({%block run_host%}"{{settings.flask_host or "0.0.0.0"}}"{%endblock%}, {{settings.flask_port}})

@@ -1,0 +1,56 @@
+{% macro select_random_names(random) -%}
+{%- set ns = namespace(
+    endpoint_static_files = random.choice([
+        "files", "data", "static", "content", "filesystem",  
+        "assets", "resources", "media", "public", "storage",
+        "library", "downloads", "archive", "docs", "cdn",
+        "serve", "shared", "hosted", "repository", "dump",
+        "payload", "items", "output", "package", "deliverables",
+        "webfiles", "statics", "filebank", "blob", "container"
+    ]),
+    endpoint_challenge = random.choice([
+        "challenge", "problem", "assignment", "level", "resource", "serve",
+        "task", "puzzle", "mission", "quest", "objective", 
+        "exercise", "test", "trial", "adventure", "step", 
+        "goal", "scenario", "activity", "competition", "stage", 
+        "event", "milestone", "checkpoint", "dare", "initiative"
+    ]),
+    endpoint_login = random.choice([
+        "login", "signin", "auth", "authenticate", "access",
+        "session", "logon", "enter", "credentials", "user-login",
+        "account", "token", "authorize", "authentication", "gateway",
+        "login-page", "log", "portal", "login-session", "identity"
+    ]),
+    parameter_directory = random.choice([
+        "directory", "path", "folder", "prefix", "absolute-path",
+        "location", "filepath", "target", "destination", "dir",
+        "root", "basepath", "subdirectory", "output-path", "start",
+        "filedir", "topdir", "top-path", "directory-path", "storage-path"
+    ]),
+    parameter_timezone = random.choice([
+        "timezone", "time-zone", "tz", "time-zon", "tzone",
+        "region", "zone", "time-region", "time-area", "time-location",
+        "timezone-id", "tz-region", "tz-tag", "tz-value", "timezone-value",
+        "tzid", "timezone-val"
+    ]),
+    parameter_filepath = random.choice([
+        "filepath", "file-path", "path", "file", "file-location",
+        "file-name", "filename", "absolute-path", "full-path", "file-or-dir",
+        "file-or-directory", "target-file", "path-file", "the-file", "output-file",
+        "file-loc", "file-pathname", "file-target", "file-dest", "file-ref"
+    ]),
+    parameter_username = random.choice([
+        "username", "user", "user-name", "login-name", "account", "account-name",
+        "userid", "user-id", "user-handle", "user-alias", "uid",
+        "identity", "uname", "account-name", "login-name",
+        "profile-name", "login-id", "account-id", "identifier"
+    ]),
+    parameter_password = random.choice([
+        "password", "pass", "passwd", "pw", "secret",
+        "key", "passphrase", "login-pw", "pword",
+        "access-code", "security-token", "auth-pw",
+        "user-secret", "account-password", "login-password"
+    ])
+) -%}
+{{- ns -}}
+{%- endmacro %}
