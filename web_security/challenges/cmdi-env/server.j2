@@ -1,0 +1,10 @@
+{%- extends "base_templates/cmdi.py.j2" -%}
+
+{%- block setup -%}
+  {{- super() -}}
+  {%- set settings.input_parameter = settings.parameter_timezone -%}
+  {%- set settings.default_parameter_value = "MST" -%}
+  {%- set settings.service_description = "Welcome to the timezone service! Please choose a timezone to get the time there." -%}
+{%- endblock -%}
+
+{%- block command -%}f"TZ={arg} date"{%- endblock -%}

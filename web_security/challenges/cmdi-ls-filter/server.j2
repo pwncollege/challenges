@@ -1,4 +1,4 @@
-{%- extends "base_templates/cmdi-ls.py.j2" -%}
+{%- extends "base_templates/cmdi.py.j2" -%}
 
 {%- block filter -%}
 .replace(";", "").replace("&", "").replace("|", "").replace(">", "").replace("<", "").replace("(", "").replace(")", "").replace("`", "").replace("$", "")

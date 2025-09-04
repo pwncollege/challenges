@@ -5,6 +5,9 @@
   {{- generate_names(settings, challenge.random) -}}
   {%- set settings.reset_uid = True -%}
   {%- set settings.reset_path = True -%}
+  {%- set settings.input_parameter = settings.parameter_directory -%}
+  {%- set settings.default_parameter_value = "/challenge" -%}
+  {%- set settings.service_description = "Welcome to the dirlister service! Please choose a directory to list the files of:" -%}
 {% endblock %}
 
 {% block imports %}
@@ -15,9 +18,9 @@ import subprocess
 
 @app.route("/{{settings.endpoint_challenge}}", methods=["GET"])
 def challenge():
-    arg = flask.request.args.get("{{settings.parameter_directory}}", "/challenge"){% block filter %}{% endblock %}
+    arg = flask.request.args.get("{{settings.input_parameter}}", "{{settings.default_parameter_value}}"){% block filter %}{% endblock %}
 
-    command = f"ls -l {% block quote %}{% endblock %}{arg}{% block quote2 %}{% endblock %}"
+    command = {% block command %}f"ls -l {% block quote %}{% endblock %}{arg}{% block quote2 %}{% endblock %}"{% endblock %}
 
     {% if challenge.walkthrough %}print(f"DEBUG: {command=}"){% endif %}
 
@@ -31,8 +34,8 @@ def challenge():
 
     return f"""
         <html><body>
-        Welcome to the dirlister service! Please choose a directory to list the files of:
-        <form action="/{{settings.endpoint_challenge}}"><input type=text name={{settings.parameter_directory}}><input type=submit value=Submit></form>
+        {{settings.service_description}}
+        <form action="/{{settings.endpoint_challenge}}"><input type=text name={{settings.input_parameter}}><input type=submit value=Submit></form>
         <hr>
         <b>Output of {command}:</b><br>
         <pre>{result}</pre>
