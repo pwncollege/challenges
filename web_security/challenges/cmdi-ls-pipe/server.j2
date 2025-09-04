@@ -1,0 +1,5 @@
+{%- extends "base_templates/cmdi-ls.py.j2" -%}
+
+{%- block filter -%}
+.replace(";", "")
+{%- endblock -%}

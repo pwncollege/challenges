@@ -1,0 +1,42 @@
+{%- extends "base_templates/flask.py.j2" -%}
+
+{% block setup %}
+  {%- from 'base_templates/names.j2' import generate_names -%}
+  {{- generate_names(settings, challenge.random) -}}
+  {%- set settings.reset_uid = True -%}
+  {%- set settings.reset_path = True -%}
+{% endblock %}
+
+{% block imports %}
+import subprocess
+{% endblock %}
+
+{% block handlers %}
+
+@app.route("/{{settings.endpoint_challenge}}", methods=["GET"])
+def challenge():
+    arg = flask.request.args.get("{{settings.parameter_directory}}", "/challenge"){% block filter %}{% endblock %}
+
+    command = f"ls -l {% block quote %}{% endblock %}{arg}{% block quote2 %}{% endblock %}"
+
+    {% if challenge.walkthrough %}print(f"DEBUG: {command=}"){% endif %}
+
+    result = subprocess.run(
+        command,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        encoding="latin"
+    ).stdout
+
+    return f"""
+        <html><body>
+        Welcome to the dirlister service! Please choose a directory to list the files of:
+        <form action="/{{settings.endpoint_challenge}}"><input type=text name={{settings.parameter_directory}}><input type=submit value=Submit></form>
+        <hr>
+        <b>Output of {command}:</b><br>
+        <pre>{result}</pre>
+        </body></html>
+        """
+
+{% endblock %}
