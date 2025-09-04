@@ -1,2 +1,8 @@
 **/CRYPT/** filter=git-crypt diff=git-crypt
 **/CRYPT filter=git-crypt diff=git-crypt
+**/*CRYPT*/** filter=git-crypt diff=git-crypt
+**/*CRYPT* filter=git-crypt diff=git-crypt
+**/TEST_PRIVATE/** filter=git-crypt diff=git-crypt
+**/TEST_PRIVATE filter=git-crypt diff=git-crypt
+**/*PRIVATE*/** filter=git-crypt diff=git-crypt
+**/*PRIVATE* filter=git-crypt diff=git-crypt
