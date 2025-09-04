@@ -6,3 +6,5 @@
 **/TEST_PRIVATE filter=git-crypt diff=git-crypt
 **/*PRIVATE*/** filter=git-crypt diff=git-crypt
 **/*PRIVATE* filter=git-crypt diff=git-crypt
+*/*/tests_private/** filter=git-crypt diff=git-crypt
+*/*/tests_private filter=git-crypt diff=git-crypt
