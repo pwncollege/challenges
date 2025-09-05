@@ -1,0 +1,10 @@
+{%- extends "base_templates/pwnpost-full.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.publish_method = "POST" -%}
+  {%- set settings.disable_admin_posting = True -%}
+  {%- set settings.insecure_cookie = True -%}
+  {%- set settings.show_own_drafts = True -%}
+  {%- set settings.admin_pw_code = "flag[-20:]" -%}
+{% endblock %}

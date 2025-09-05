@@ -1,0 +1,33 @@
+{%- extends "base_templates/flask.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- from 'base_templates/names.j2' import generate_names -%}
+  {{- generate_names(settings, challenge.random) -}}
+  {%- set settings.flask_host = "challenge.localhost" -%}
+  {%- set settings.service_name = "pwnmsg" -%}
+  {%- set settings.msg_in_textarea = False -%}
+  {%- set settings.parameter_message = "msg" -%}
+{% endblock %}
+
+{% block handlers %}
+@app.route("/{{settings.endpoint_challenge}}", methods=["GET"])
+def challenge_get():
+    return f"""
+        <html><body>
+        <h1>{{settings.service_name}} ephemeral message service</h1>
+        The message:
+        {% if settings.msg_in_textarea %}
+        <textarea>{{"{" + "flask.request.args.get('" + settings.parameter_message + "', '(none)')" + "}"}}</textarea>
+        {% else %}
+        {{"{" + "flask.request.args.get('" + settings.parameter_message + "', '(none)')" + "}"}}
+        {% endif %}
+        <hr>
+        <form>
+            Craft a message:
+            <input type=text name={{settings.parameter_message}}>
+            <input type=submit value="Make URL!">
+        </form>
+        </body></html>
+    """
+{% endblock %}

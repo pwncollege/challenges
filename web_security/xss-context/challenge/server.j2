@@ -1,0 +1,6 @@
+{%- extends "base_templates/pwnpost-ephemeral.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.msg_in_textarea = True -%}
+{% endblock %}

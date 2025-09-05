@@ -1,0 +1,6 @@
+{%- extends "base_templates/pwnpost-full.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.publish_method = "POST" -%}
+{% endblock %}

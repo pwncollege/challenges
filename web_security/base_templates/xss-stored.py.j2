@@ -1,0 +1,53 @@
+{%- extends "base_templates/flask.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.flask_host = "challenge.localhost" -%}
+  {%- set settings.service_name = "pwnpost" -%}
+  {%- set settings.service_description = "Welcome to pwnpost, the anonymous posting service. Post away!" -%}
+  {%- set settings.escaping = False -%}
+  {%- set settings.msg_in_textarea = False -%}
+{% endblock %}
+
+{% block imports %}
+import sqlite3
+import tempfile
+{% endblock %}
+
+{% block handlers %}
+class TemporaryDB:
+    def __init__(self):
+        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
+
+    def execute(self, sql, parameters=()):
+        connection = sqlite3.connect(self.db_file.name)
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        result = cursor.execute(sql, parameters)
+        connection.commit()
+        return result
+
+db = TemporaryDB()
+db.execute("""CREATE TABLE posts AS SELECT "First Post!" AS content""")
+
+@app.route("/", methods=["POST"])
+def challenge_post():
+    content = flask.request.form.get("content", "")
+    db.execute("INSERT INTO posts VALUES (?)", [content])
+    return flask.redirect(flask.request.path)
+
+@app.route("/", methods=["GET"])
+def challenge_get():
+    page = "<html><body>\n{{settings.service_description}}\n"
+    page += "<form method=post>Post:<input type=text name=content><input type=submit value=Submit></form>\n"
+
+    for post in db.execute("SELECT content FROM posts").fetchall():
+        {% if settings.escaping %}
+        import html
+        page += "<hr>" + html.escape(post["content"]) + "\n"
+        {% else %}
+        page += "<hr>" + post["content"] + "\n"
+        {% endif %}
+
+    return page + "</body></html>"
+{% endblock %}

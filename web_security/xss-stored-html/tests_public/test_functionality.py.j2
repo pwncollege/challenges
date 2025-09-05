@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+import subprocess
+import requests
+import atexit
+import time
+import os
+
+{% from 'base_templates/names.j2' import generate_names %}
+{% set settings = namespace() %}
+{{ generate_names(settings, challenge.random) }}
+
+FLAG = os.environ["FLAG"]
+
+proc = subprocess.Popen(['/challenge/server'])
+atexit.register(lambda: (proc.terminate(), proc.wait()))
+time.sleep(1)  # Give it time to start
+
+# Test normal posting
+response = requests.post(f"http://challenge.localhost/{{settings.endpoint_challenge}}", data={"{{settings.parameter_content}}": "Test post"})
+assert response.status_code == 200
+assert response.history[0].status_code == 302
+
+# Test that post appears
+response = requests.get(f"http://challenge.localhost/{{settings.endpoint_challenge}}")
+assert response.status_code == 200
+assert "Test post" in response.text
+
+print("Public tests passed!")
