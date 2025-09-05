@@ -1,0 +1,11 @@
+FROM {% block from %}pwncollege/challenge-simple{% endblock %}
+{% block before_copy %}{% endblock %}
+COPY . /challenge
+{% block before_setup %}{% endblock %}
+{% block setup %}
+RUN <<END
+    [ ! -f /challenge/.setup ] || /challenge/.setup
+    rm -f /challenge/Dockerfile /challenge/.setup
+END
+{% endblock %}
+{% block after_setup %}{% endblock %}

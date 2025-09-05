@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 
+import subprocess
 import pwnlib
+import atexit
+import time
 
 {% from 'base_templates/names.j2' import generate_names %}
 {% set settings = namespace() %}
 {{ generate_names(settings, challenge.random) }}
+
+proc = subprocess.Popen(['/challenge/server'])
+atexit.register(lambda: (proc.terminate(), proc.wait()))
+time.sleep(1)  # Give it time to start
 
 r = pwnlib.tubes.remote.remote("challenge.localhost", 80)
 r.send(f"GET /{{settings.endpoint_static_files}}/index.html HTTP/1.1\nHost: challenge.localhost:80\n\n".encode())

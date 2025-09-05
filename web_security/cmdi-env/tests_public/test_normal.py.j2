@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 
-import pwnlib
+import subprocess
+import requests
+import atexit
+import time
 
 {% from 'base_templates/names.j2' import generate_names %}
 {% set settings = namespace() %}
 {{ generate_names(settings, challenge.random) }}
 
-r = pwnlib.tubes.remote.remote("challenge.localhost", 80)
-r.send(f"GET /{{settings.endpoint_challenge}}?{{settings.parameter_timezone}}=MST HTTP/1.1\nHost: challenge.localhost:80\n\n".encode())
-response = r.readall().decode()
-assert "200 OK" in response
-print(response)
+proc = subprocess.Popen(['/challenge/server'])
+atexit.register(lambda: (proc.terminate(), proc.wait()))
+time.sleep(1)  # Give it time to start
+
+response = requests.get(f"http://challenge.localhost/{{settings.endpoint_challenge}}", params={"{{settings.parameter_timezone}}": "MST"})
+assert response.status_code == 200
+print(response.text)
