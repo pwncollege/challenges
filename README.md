@@ -15,6 +15,9 @@ They'll be auto-built out of these directories, probably as docker files (though
 ./build.py web_security/path-traversal-1/tests_public/test_normal.py.j2
 ```
 
+Permissions are preserved when rendering a template.
+If you want something executable, make the template executable.
+
 ## In the meantime, some musings:
 
 - we need to figure out complex setup scenarios (e.g., compilation, source removal, etc). I'm leaning toward is just requiring a Dockerfile if you want anything other than "all files get copied to /challenge".
