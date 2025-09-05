@@ -35,27 +35,64 @@ If a challenge needs build customization beyond `.setup`, it can specify its own
 ## templating
 
 Any file that ends in `.j2` is automatically jinja2-formatted during challenge building.
-Templates are passed in a `challenge` parameter that has a few useful utility functions, mostly related to seeded RNG.
-Most base templates included in this repository also support various customizations via the `settings` namespace.
-Examples abount around the repository.
+Templates are passed in a `challenge` parameter that has a few useful utility functions, mostly related to seeded RNG use at template time (e.g., `{{challenge.random.randrange()}}`).
+Examples abound around the repository.
+
+Template variables in output strings need double braces: `{{variable}}`.
+This can be confusing in python code, because python f-strings use single braces (`{variable}`), so keep that in mind.
+
+### inheriting templates
+
+There are base templates sprinkled around this repository in `base_templates` subdirectories.
+These templates typically `{% block %}` areas that you can override in your child template.
+Use `{% extends %}` to extend a base template and tweak these blocks, not `{% include %}`.
+
+Most base templates included in this repository support various customizations via a `settings` namespace that can be customized by child templates in a `setup` block.
+Set variables in `{% block setup %}` blocks and call `{{- super() -}}` to preserve parent initialization.
+
+### Key Template Files
+
+- `web_security/base_templates/flask.py.j2` - Base Flask application template
+- `web_security/base_templates/names.j2` - Macro for generating random endpoints and parameter names
+- `default-dockerfile.j2` - Default Docker container template
 
 Anything can be templated, including `./$MODULE_ID/$CHALLENGE_ID/challenge/Dockerfile.j2` (for example, to extend the `default-dockerfile.j2` template with additional packages to install and so on).
 Before extending the default template, consider if it would not be easier and more understandable to just make a full `Dockerfile`.
 
 Permissions are preserved when rendering a template.
-If you want something executable, make the template executable.
+If you want something executable, make the template executable (`chmod +x *.j2`).
 
 ## actually building
 
 The repository contains all you need to build these challenges.
 
+### Prerequisites
+
+Install required Python packages in a virtual environment:
+
+```bash
+pip install jinja2 black pyastyle pwntools
 ```
+
+### Building and Testing
+
+```bash
 # build and test
 ./build.py --test web_security/path-traversal-1
+
+# build without testing into a directory to look at
+./build.py web_security/path-traversal-1 --output-dir /tmp/output
 
 # if you want to see a single file (for easier debugging)
 ./build.py web_security/path-traversal-1/tests_public/test_normal.py.j2
 ```
+
+## Important Notes / Common Gotchas
+
+- All `.j2` template files that should produce executable output must be made executable first
+- Python scripts needing SUID should use the shebang: `#!/usr/bin/exec-suid -- /usr/bin/python3 -I`
+- Web services (if any) should run on `challenge.localhost` port 80 (tests are executed with `--add-host challenge.localhost:127.0.0.1` for proper networking)
+- Not all challenges need templates - use them only when randomization or reuse is important.
 
 # pwn.college DOJO integration
 
@@ -77,9 +114,12 @@ The process of porting is:
 1. Identify the challenges to be ported by reading the `module.yml` file.
 2. Determine any connections to the pwnshop templates by looking at `module.yml`.
 3. Look at `pwncollege-modules/$WHATEVER_MODULE_ID/__init__.py` for the appropriate class and determine the template and challenge logic to port out, if any.
-4. Port the challenge files and template and challenge logic to this repository at `./$MODULE_ID/base_templates/` and `./$MODULE_ID/$CHALLENGE_ID/challenge`.
-5. If there are templates, use `build.py` to render them and ensure that the result is identical to the previously-rendered version in whatever legacy dojo repository.
-6. Port out the challenge verification logic to `./$MODULE_ID/$CHALLENGE_ID/tests_public` and `./$MODULE_ID/$CHALLENGE_ID/tests_private`. The former should just be functionality tests and the latter should include anything that actually exploits the challenge, whether partially or fully.
+4. Create base templates in `./$MODULE_ID/base_templates/` if multiple challenges share patterns
+5. Port challenge files to `./$MODULE_ID/$CHALLENGE_ID/challenge/` (binaries, scripts, configs, etc.)
+6. If using templates, use `{% extends %}` and `{% block setup %}` for customization
+7. Ensure all executable files are marked as such: `chmod +x ./$MODULE_ID/$CHALLENGE_ID/**/*.j2`
+8. Port verification logic to `./$MODULE_ID/$CHALLENGE_ID/tests_public` (functionality) and `./$MODULE_ID/$CHALLENGE_ID/tests_private` (exploitation)
+9. Test thoroughly: `./build.py --test $MODULE_ID/$CHALLENGE_ID`
 
 
 # In the meantime, some musings:
