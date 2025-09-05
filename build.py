@@ -19,13 +19,13 @@ class Challenge:
         self.random = random.Random(1337 if seed is None else seed)
 
 def render(template, seed=None):
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader(list(pathlib.Path(template).parents)))
-    jinja_template = env.get_template(os.path.basename(template))
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(list(template.parents)))
+    jinja_template = env.get_template(template.name)
     rendered = jinja_template.render(challenge=Challenge(seed=seed))
     try:
-        if template.endswith(".py.j2") or "python" in rendered.splitlines()[0]:
+        if ".py" in template.suffixes or "python" in rendered.splitlines()[0]:
             return black.format_str(rendered, mode=black.FileMode(line_length=120))
-        elif template.endswith(".c.j2"):
+        elif ".c" in template.suffixes:
             return re.sub("\n{2,}", "\n\n", pyastyle.format(rendered, "--style=allman"))
     except black.parsing.InvalidInput as e:
         print(f"WARNING: template {template} does not format properly: {e}")
@@ -38,7 +38,7 @@ def render_challenge(template_dir, output_dir=None, seed=None):
     for j2_file in template_dir.rglob("*.j2"):
         dst_j2_file = rendered_dir / j2_file.relative_to(template_dir)
         output_file = dst_j2_file.with_suffix('')
-        output_file.write_text(render(str(j2_file), seed=seed))
+        output_file.write_text(render(j2_file, seed=seed))
         output_file.chmod(j2_file.stat().st_mode)
         dst_j2_file.unlink()
 
@@ -47,7 +47,7 @@ def render_challenge(template_dir, output_dir=None, seed=None):
 def test_challenge(challenge_dir, image_name=None):
     image_name = image_name or os.path.basename(challenge_dir)
     if not (challenge_dir/"challenge/Dockerfile").exists():
-        pathlib.Path(challenge_dir/"challenge/Dockerfile").write_text(render(os.path.dirname(__file__) + "/default-dockerfile.j2"))
+        pathlib.Path(challenge_dir/"challenge/Dockerfile").write_text(render(pathlib.Path(__file__).parent/"default-dockerfile.j2"))
 
     temp_flag = pathlib.Path(f"/tmp/{image_name}-flag")
     temp_flag.write_text("pwn.college{"+base64.b64encode(os.urandom(40)).decode()+"}")
@@ -77,18 +77,18 @@ def test_challenge(challenge_dir, image_name=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Render challenge templates")
-    parser.add_argument("challenge_dir", help="Challenge directory to build/test", type=pathlib.Path)
+    parser.add_argument("challenge", help="Challenge directory to build/test", type=pathlib.Path)
     parser.add_argument("--output-dir", help="Output file or directory", type=pathlib.Path)
     parser.add_argument("--test", action="store_true", help="Test the challenge by building Docker image and running tests")
     parser.add_argument("--seed", action="store", help="The random seed for templating", default=random.randrange(2**64))
     parser.add_argument("--image-name", help="Docker image name to use for testing (default: directory name)")
     args = parser.parse_args()
 
-    if args.challenge_dir.is_file():
-        print(render(args.challenge_dir, seed=args.seed))
+    if args.challenge.is_file():
+        print(render(args.challenge, seed=args.seed))
         return 0
 
-    rendered_dir = render_challenge(args.challenge_dir, output_dir=args.output_dir, seed=args.seed)
+    rendered_dir = render_challenge(args.challenge, output_dir=args.output_dir, seed=args.seed)
     print(f"Rendered to: {rendered_dir}")
     if args.test:
         return 0 if test_challenge(rendered_dir, image_name=args.image_name) else 1
