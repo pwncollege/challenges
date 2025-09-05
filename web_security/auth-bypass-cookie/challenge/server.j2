@@ -1,0 +1,7 @@
+{%- extends "base_templates/auth-bypass.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.auth_method = "cookie" -%}
+  {%- set settings.admin_password_length = 8 -%}
+{% endblock %}

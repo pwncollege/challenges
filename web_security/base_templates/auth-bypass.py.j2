@@ -1,0 +1,74 @@
+{%- extends "base_templates/flask.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.flask_host = "challenge.localhost" -%}
+  {%- set settings.auth_method = "param" -%}
+  {%- set settings.admin_password_length = 16 -%}
+  {%- set settings.guest_password = "password" -%}
+{% endblock %}
+
+{% block imports %}
+import tempfile
+import sqlite3
+{% endblock %}
+
+{% block handlers %}
+class TemporaryDB:
+    def __init__(self):
+        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
+
+    def execute(self, sql, parameters=()):
+        connection = sqlite3.connect(self.db_file.name)
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        result = cursor.execute(sql, parameters)
+        connection.commit()
+        return result
+
+db = TemporaryDB()
+db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as password""", [os.urandom({{settings.admin_password_length}})])
+db.execute("""INSERT INTO users SELECT "guest" as username, "{{settings.guest_password}}" as password""")
+
+@app.route("/", methods=["POST"])
+def challenge_post():
+    username = flask.request.form.get("username")
+    password = flask.request.form.get("password")
+    if not username:
+        flask.abort(400, "Missing `username` form parameter")
+    if not password:
+        flask.abort(400, "Missing `password` form parameter")
+
+    user = db.execute("SELECT rowid, * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
+    if not user:
+        flask.abort(403, "Invalid username or password")
+
+    {% if settings.auth_method == "param" %}
+    return flask.redirect(f"""{flask.request.path}?session_user={username}""")
+    {% elif settings.auth_method == "cookie" %}
+    response = flask.redirect(flask.request.path)
+    response.set_cookie('session_user', username)
+    return response
+    {% endif %}
+
+@app.route("/", methods=["GET"])
+def challenge_get():
+    {% if settings.auth_method == "param" %}
+    if not (username := flask.request.args.get("session_user", None)):
+    {% elif settings.auth_method == "cookie" %}
+    if not (username := flask.request.cookies.get("session_user", None)):
+    {% endif %}
+        page = "<html><body>Welcome to the login service! Please log in as admin to get the flag."
+    else:
+        page = f"<html><body>Hello, {username}!"
+        if username == "admin":
+            page += "<br>Here is your flag: " + open("/flag").read()
+
+    return page + """
+        <hr>
+        <form method=post>
+        User:<input type=text name=username>Pass:<input type=text name=password><input type=submit value=Submit>
+        </form>
+        </body></html>
+    """
+{% endblock %}
