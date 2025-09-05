@@ -1,6 +1,10 @@
-FROM {% block from %}pwncollege/challenge-simple{% endblock %}
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y {% block default_packages %}python3 python3-flask python3-requests python3-pwntools{% endblock %} {% block additional_packages %}{% endblock %}
+{% block exec_suid %}
+ADD --chown=0:0 --chmod=6755 http://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
+{% endblock %}
 {% block before_copy %}{% endblock %}
-COPY . /challenge
+{% block copy %}COPY . /challenge{% endblock %}
 {% block before_setup %}{% endblock %}
 {% block setup %}
 RUN <<END
