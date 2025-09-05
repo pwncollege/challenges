@@ -1,0 +1,11 @@
+{%- extends "base_templates/sqli-pw.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.pw_name = "password" -%}
+  {%- set settings.guest_pw = "password" -%}
+  {%- set settings.quote_character = "'" -%}
+  {%- set settings.admin_pw_code = 'open("/flag").read()' -%}
+  {%- set settings.admin_print_flag = False -%}
+  {%- set settings.password_parameter = settings.parameter_password -%}
+{% endblock %}

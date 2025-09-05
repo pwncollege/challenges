@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+
+import subprocess
+import requests
+import atexit
+import time
+
+{% from 'base_templates/names.j2' import generate_names %}
+{% set settings = namespace() %}
+{{ generate_names(settings, challenge.random) }}
+
+proc = subprocess.Popen(['/challenge/server'])
+atexit.register(lambda: (proc.terminate(), proc.wait()))
+time.sleep(1)  # Give it time to start
+
+# Test normal login with guest account
+s = requests.Session()
+response = s.post(
+    f"http://challenge.localhost/{{settings.endpoint_login}}",
+    data={"{{settings.parameter_username}}": "guest", "{{settings.parameter_password}}": "password"}
+)
+assert response.status_code == 200
+assert "Hello, guest!" in response.text
+
+# Test invalid login
+response = s.post(
+    f"http://challenge.localhost/{{settings.endpoint_login}}",
+    data={"{{settings.parameter_username}}": "admin", "{{settings.parameter_password}}": "wrongpassword"}
+)
+assert response.status_code in [403, 500]
+
+# Test that admin login doesn't leak flag even with correct bypass
+response = s.post(
+    f"http://challenge.localhost/{{settings.endpoint_login}}",
+    data={"{{settings.parameter_username}}": "admin", "{{settings.parameter_password}}": "1' OR '1'='1"}
+)
+# Should succeed but not show flag
+assert "pwn.college" not in response.text.lower()
+
+print("Normal functionality tests passed")

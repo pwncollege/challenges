@@ -1,0 +1,5 @@
+{%- extends "base_templates/sqli-userquery.py.j2" -%}
+
+{% block setup %}
+  {%- set settings.table_identifier = "users" -%}
+{% endblock %}

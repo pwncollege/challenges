@@ -1,0 +1,11 @@
+{%- extends "base_templates/sqli-pw.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.pw_name = "pin" -%}
+  {%- set settings.guest_pw = 1337 -%}
+  {%- set settings.admin_pw_code = "random.randrange(2**32, 2**63)" -%}
+  {%- set settings.admin_print_flag = True -%}
+  {%- set settings.quote_character = "" -%}
+  {%- set settings.password_parameter = "pin" -%}
+{% endblock %}
