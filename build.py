@@ -46,13 +46,13 @@ def render_challenge(template_dir, output_dir=None, seed=None):
 
 def test_challenge(challenge_dir, image_name=None):
     image_name = image_name or os.path.basename(challenge_dir)
-    if not (challenge_dir/"src/Dockerfile").exists():
-        pathlib.Path(challenge_dir/"src/Dockerfile").write_text(render(os.path.dirname(__file__) + "/default-dockerfile.j2"))
+    if not (challenge_dir/"challenge/Dockerfile").exists():
+        pathlib.Path(challenge_dir/"challenge/Dockerfile").write_text(render(os.path.dirname(__file__) + "/default-dockerfile.j2"))
 
     temp_flag = pathlib.Path(f"/tmp/{image_name}-flag")
     temp_flag.write_text("pwn.college{"+base64.b64encode(os.urandom(40)).decode()+"}")
 
-    src_dir = os.path.join(challenge_dir, "src")
+    src_dir = os.path.join(challenge_dir, "challenge")
     result = subprocess.run(["docker", "build", "-t", image_name, src_dir], capture_output=False, check=False)
     if result.returncode != 0:
         print("ERROR: Docker build failed")
