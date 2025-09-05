@@ -5,6 +5,16 @@ This repository will one day contain all core pwn.college challenges.
 The basic idea is that challenges are just directories in here, similar to how they're specified in dojos currently.
 They'll be auto-built out of these directories, probably as docker files (though some nix stuff is another possibility), and deployed seamlessly.
 
+# Building and testing:
+
+```
+# build and test
+./build.py --test web_security/path-traversal-1
+
+# if you want to see a single file
+./build.py web_security/path-traversal-1/tests_public/test_normal.py.j2
+```
+
 ## In the meantime, some musings:
 
 - we need to figure out complex setup scenarios (e.g., compilation, source removal, etc). I'm leaning toward is just requiring a Dockerfile if you want anything other than "all files get copied to /challenge".
