@@ -8,6 +8,8 @@
   {%- set settings.insecure_cookie = False -%}
   {%- set settings.show_own_drafts = False -%}
   {%- set settings.admin_pw_code = "flag" -%}
+  {%- set settings.has_ephemeral = False -%}
+  {%- set settings.hide_admin_posts = False -%}
 {% endblock %}
 
 {% block imports %}
@@ -114,9 +116,21 @@ def challenge_publish():
     db.execute("UPDATE posts SET published = TRUE WHERE author = ?", [username])
     return flask.redirect("/")
 
+{% if settings.has_ephemeral %}
+@app.route("/ephemeral", methods=["GET"])
+def challenge_ephemeral():
+    return f"""
+        <html><body>
+        <h1>You have received an ephemeral message!</h1>
+        The message: {flask.request.args.get("msg", "(none)")}
+        <hr><form>Craft an ephemeral message:<input type=text name=msg action=/ephemeral><input type=submit value=Submit></form>
+        </body></html>
+    """
+{% endif %}
+
 @app.route("/", methods=["GET"])
 def challenge_get():
-    page = "<html><body>\nWelcome to pwnpost, now with users!<hr>\n"
+    page = "<html><body>\n{% block welcome_message %}Welcome to pwnpost, now with users!{% endblock %}<hr>\n"
     {% if settings.insecure_cookie -%}
     username, password = flask.request.cookies.get("auth", "|").split("|")
     user = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
@@ -125,6 +139,24 @@ def challenge_get():
     username = flask.session.get("username", None)
     if username:
     {%- endif +%}
+        {% if settings.hide_admin_posts -%}
+        if username == "admin":
+            page += """<b>To prevent XSS, the admin does not view messages!</b>"""
+        else:
+            page += """
+            <form action=draft method=post>
+              Post:<textarea name=content>Write something!</textarea>
+              <input type=checkbox name=publish>Publish
+              <input type=submit value=Save>
+            </form><br>
+            {% if settings.publish_method == "GET" -%}
+            <a href=publish>Publish your drafts!</a>
+            {% else -%}
+            <form action=publish method=post><input type=submit value="Publish All Drafts"></form>
+            {% endif -%}
+            <hr>
+        """
+        {%- else +%}
         page += """
             <form action=draft method=post>
               Post:<textarea name=content>Write something!</textarea>
@@ -138,15 +170,25 @@ def challenge_get():
             {% endif -%}
             <hr>
         """
+        {%- endif %}
 
         for post in db.execute("SELECT * FROM posts").fetchall():
             page += f"""<h2>Author: {post["author"]}</h2>"""
-            if post["published"]:
-                page += post["content"] + "<hr>\n"
             {% if settings.show_own_drafts -%}
-            elif post["author"] == username:
+            if post["author"] == username and not post["published"]:
                 page += "<b>YOUR DRAFT POST:</b> " + post["content"] + "<hr>\n"
+            elif post["author"] == username and post["published"]:
+                page += "<b>YOUR POST:</b> " + post["content"] + "<hr>\n"
+            {% else -%}
+            if post["author"] == username:
+                page += "<b>YOUR POST:</b> " + post["content"] + "<hr>\n"
             {% endif -%}
+            {% if settings.hide_admin_posts -%}
+            elif username == "admin":
+                page += "<b>NON-ADMIN POST HIDDEN FOR SAFETY</b><hr>\n"
+            {% endif -%}
+            elif post["published"]:
+                page += post["content"] + "<hr>\n"
             else:
                 page += f"""(Draft post, showing first 12 characters):<br>{post["content"][:12]}<hr>"""
     else:

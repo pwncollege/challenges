@@ -1,0 +1,9 @@
+{%- extends "base_templates/pwnpost-full.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.publish_method = "POST" -%}
+  {%- set settings.hide_admin_posts = True -%}
+{% endblock %}
+
+{% block welcome_message %}Welcome to pwnpost, now XSS-free (for admin, at least)!{% endblock %}

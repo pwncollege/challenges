@@ -7,7 +7,6 @@
   {%- set settings.reset_path = True -%}
   {%- set settings.input_parameter = settings.parameter_directory -%}
   {%- set settings.default_parameter_value = "/challenge" -%}
-  {%- set settings.service_description = "Welcome to the dirlister service! Please choose a directory to list the files of:" -%}
 {% endblock %}
 
 {% block imports %}
@@ -34,7 +33,7 @@ def challenge():
 
     return f"""
         <html><body>
-        {{settings.service_description}}
+        {% block service_description %}Welcome to the dirlister service! Please choose a directory to list the files of:{% endblock %}
         <form action="/{{settings.endpoint_challenge}}"><input type=text name={{settings.input_parameter}}><input type=submit value=Submit></form>
         <hr>
         <b>Output of {command}:</b><br>

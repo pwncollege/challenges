@@ -1,0 +1,9 @@
+{%- extends "base_templates/victim-selenium.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.specify_url = False -%}
+  {%- set settings.login_first = True -%}
+  {%- set settings.use_partial_flag = True -%}
+  {%- set settings.visit_attacker = True -%}
+{% endblock %}

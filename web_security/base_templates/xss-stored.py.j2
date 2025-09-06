@@ -4,7 +4,6 @@
   {{- super() -}}
   {%- set settings.flask_host = "challenge.localhost" -%}
   {%- set settings.service_name = "pwnpost" -%}
-  {%- set settings.service_description = "Welcome to pwnpost, the anonymous posting service. Post away!" -%}
   {%- set settings.escaping = False -%}
   {%- set settings.msg_in_textarea = False -%}
 {% endblock %}
@@ -38,7 +37,7 @@ def challenge_post():
 
 @app.route("/", methods=["GET"])
 def challenge_get():
-    page = "<html><body>\n{{settings.service_description}}\n"
+    page = "<html><body>\n{% block service_description %}Welcome to pwnpost, the anonymous posting service. Post away!{% endblock %}\n"
     page += "<form method=post>Post:<input type=text name=content><input type=submit value=Submit></form>\n"
 
     for post in db.execute("SELECT content FROM posts").fetchall():

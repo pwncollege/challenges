@@ -1,45 +1,63 @@
-#!/usr/bin/python3
-
+#!/usr/bin/env python3
 import subprocess
 import requests
+import atexit
 import time
 import os
 
-# Test basic server functionality
-def test_server():
-    # Start the server
-    server = subprocess.Popen(["/challenge/server"], 
-                             stdout=subprocess.PIPE, 
-                             stderr=subprocess.PIPE)
-    
-    # Wait for server to start
-    time.sleep(2)
-    
-    try:
-        # Test that server is running
-        response = requests.get("http://challenge.localhost:80/")
-        assert response.status_code == 200
-        assert "pwnpost" in response.text
-        
-        # Test login endpoint exists
-        response = requests.post("http://challenge.localhost:80/login",
-                                data={"username": "hacker", "password": "1337"})
-        assert response.status_code in [200, 302]
-        
-        # Test that session is created
-        session = requests.Session()
-        response = session.post("http://challenge.localhost:80/login",
-                               data={"username": "hacker", "password": "1337"})
-        
-        # Test publish endpoint requires POST  
-        response = session.post("http://challenge.localhost:80/publish")
-        assert response.status_code in [200, 302]
-        
-        print("Server functionality test passed!")
-        
-    finally:
-        server.terminate()
-        server.wait()
+FLAG = os.environ["FLAG"]
 
-if __name__ == "__main__":
-    test_server()
+proc = subprocess.Popen(['/challenge/server'])
+atexit.register(lambda: (proc.terminate(), proc.wait()))
+time.sleep(1)
+
+# Create a session to maintain cookies
+s = requests.Session()
+
+response = s.get("http://challenge.localhost/")
+assert response.status_code == 200
+assert "Welcome to pwnpost" in response.text
+assert "Login" in response.text
+
+response = s.post("http://challenge.localhost/login", data={
+    "username": "guest",
+    "password": "password"
+})
+assert response.status_code == 200
+assert response.history[0].status_code == 302
+
+response = s.get("http://challenge.localhost/")
+assert response.status_code == 200
+assert "Post:" in response.text or "textarea name=content" in response.text
+assert "Publish your drafts" in response.text or "publish" in response.text.lower()
+
+response = s.post("http://challenge.localhost/draft", data={
+    "content": "Test draft post",
+    "publish": ""
+})
+assert response.status_code == 200
+assert response.history[0].status_code == 302
+
+response = s.get("http://challenge.localhost/")
+assert response.status_code == 200
+assert "Author: guest" in response.text
+assert "Draft post" in response.text
+assert "Test draft p" in response.text
+
+response = s.post("http://challenge.localhost/publish")
+assert response.status_code == 200
+assert response.history[0].status_code == 302
+
+response = s.get("http://challenge.localhost/")
+assert response.status_code == 200
+assert "Test draft post" in response.text
+assert "Draft post" not in response.text or "Author: admin" in response.text
+
+response = requests.post("http://challenge.localhost/login", data={
+    "username": "admin",
+    "password": "wrong"
+})
+assert response.status_code == 403
+assert "Invalid username or password" in response.text
+
+print("Public tests passed!")

@@ -1,6 +1,6 @@
 {% extends "base_templates/default-dockerfile.j2" %}
-{% block additional_packages %}python3-pip wget python3-selenium curl software-properties-common{% endblock %}
-{% block before_setup %}
+{% block additional_packages %}python3-pip wget python3-selenium python3-psutil curl software-properties-common{% endblock %}
+{% block before_copy %}
 RUN add-apt-repository -y ppa:mozillateam/ppa && \
     echo 'Package: firefox*' > /etc/apt/preferences.d/mozilla-firefox && \
     echo 'Pin: release o=LP-PPA-mozillateam' >> /etc/apt/preferences.d/mozilla-firefox && \

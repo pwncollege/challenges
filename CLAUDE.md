@@ -24,6 +24,8 @@ This is the pwn.college challenge monorepo containing cybersecurity CTF challeng
 ~/.virtualenvs/pwnc/bin/python3 ./build.py MODULE_ID/CHALLENGE_ID --output-dir /tmp/output
 ```
 
+DO NOT run these scripts without ./build.py: the dependencies are not installed in the host, and some of these challenges to permanent damage to their environmnet.
+
 ### Python Environment
 
 Always use the virtual environment Python interpreter:
@@ -34,7 +36,7 @@ Always use the virtual environment Python interpreter:
 ## Architecture
 
 ### Directory Structure
-- `MODULE_ID/CHALLENGE_ID/challenge/`: Challenge source code and artifacts
+- `MODULE_ID/CHALLENGE_ID/challenge/`: Challenge source code and artifacts. IF YOU PROVIDE A DOCKERFILE, PUT IT HERE
 - `MODULE_ID/CHALLENGE_ID/tests_public/`: Unencrypted functionality tests
 - `MODULE_ID/CHALLENGE_ID/tests_private/`: Encrypted exploitation tests
 - `MODULE_ID/base_templates/`: Shared Jinja2 templates for the module

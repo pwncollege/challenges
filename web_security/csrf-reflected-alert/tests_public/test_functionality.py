@@ -1,44 +1,71 @@
-#!/usr/bin/python3
-
+#!/usr/bin/env python3
 import subprocess
 import requests
+import atexit
 import time
 import os
 
-# Test basic server functionality
-def test_server():
-    # Start the server
-    server = subprocess.Popen(["/challenge/server"], 
-                             stdout=subprocess.PIPE, 
-                             stderr=subprocess.PIPE)
-    
-    # Wait for server to start
-    time.sleep(2)
-    
-    try:
-        # Test that server is running
-        response = requests.get("http://challenge.localhost:80/")
-        assert response.status_code == 200
-        assert "pwnpost" in response.text
-        
-        # Test ephemeral endpoint
-        response = requests.get("http://challenge.localhost:80/ephemeral?msg=test")
-        assert response.status_code == 200
-        assert "ephemeral message" in response.text
-        assert "test" in response.text
-        
-        # Test login with cookies
-        response = requests.post("http://challenge.localhost:80/login",
-                                data={"username": "hacker", "password": "1337"},
-                                allow_redirects=False)
-        assert response.status_code == 302
-        assert "auth" in response.cookies
-        
-        print("Server functionality test passed!")
-        
-    finally:
-        server.terminate()
-        server.wait()
+FLAG = os.environ["FLAG"]
 
-if __name__ == "__main__":
-    test_server()
+proc = subprocess.Popen(['/challenge/server'])
+atexit.register(lambda: (proc.terminate(), proc.wait()))
+time.sleep(1)
+
+# Create a session to maintain cookies
+s = requests.Session()
+
+response = s.get("http://challenge.localhost/")
+assert response.status_code == 200
+assert "Welcome to pwnpost" in response.text
+assert "Login" in response.text
+
+response = s.post("http://challenge.localhost/login", data={
+    "username": "guest",
+    "password": "password"
+})
+assert response.status_code == 200
+assert response.history[0].status_code == 302
+
+response = s.get("http://challenge.localhost/")
+assert response.status_code == 200
+assert "Post:" in response.text or "textarea name=content" in response.text
+assert "Publish All Drafts" in response.text or "publish" in response.text.lower()
+
+response = s.post("http://challenge.localhost/draft", data={
+    "content": "Test draft post",
+    "publish": ""
+})
+assert response.status_code == 200
+assert response.history[0].status_code == 302
+
+response = s.get("http://challenge.localhost/")
+assert response.status_code == 200
+assert "Author: guest" in response.text
+assert "YOUR POST:" in response.text
+assert "Test draft post" in response.text
+
+response = s.post("http://challenge.localhost/publish")
+assert response.status_code == 200
+assert response.history[0].status_code == 302
+
+response = s.get("http://challenge.localhost/")
+assert response.status_code == 200
+assert "Test draft post" in response.text
+
+response = s.get("http://challenge.localhost/ephemeral")
+assert response.status_code == 200
+assert "ephemeral message" in response.text
+assert "The message: (none)" in response.text
+
+response = s.get("http://challenge.localhost/ephemeral?msg=Hello")
+assert response.status_code == 200
+assert "The message: Hello" in response.text
+
+response = requests.post("http://challenge.localhost/login", data={
+    "username": "admin",
+    "password": "wrong"
+})
+assert response.status_code == 403
+assert "Invalid username or password" in response.text
+
+print("Public tests passed!")
