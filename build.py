@@ -15,13 +15,12 @@ import os
 import re
 
 class Challenge:
-    def __init__(self, seed=None):
-        self.random = random.Random(1337 if seed is None else seed)
+    def __init__(self, seed):
+        self.random = random.Random(seed)
 
-def render(template, seed=None):
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader(list(template.parents)))
-    jinja_template = env.get_template(template.name)
-    rendered = jinja_template.render(challenge=Challenge(seed=seed))
+def render(template, seed):
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(template.parents))
+    rendered = env.get_template(template.name).render(challenge=Challenge(seed))
     try:
         if ".py" in template.suffixes or "python" in rendered.splitlines()[0]:
             return black.format_str(rendered, mode=black.FileMode(line_length=120))
@@ -32,24 +31,23 @@ def render(template, seed=None):
     return rendered
 
 def render_challenge(template_dir, output_dir=None, seed=None):
-    rendered_dir = output_dir or pathlib.Path(f"/tmp/chal-{os.urandom(4).hex()}")
+    rendered_dir = output_dir or pathlib.Path(f"/tmp/pwncollege-{template_dir.name}-{os.urandom(4).hex()}")
+    seed = random.randrange(2**64) if seed is None else seed
     shutil.copytree(template_dir, rendered_dir)
+    if (rendered_dir/"challenge").exists() and not (dockerfile_path := rendered_dir/"challenge/Dockerfile").exists():
+        dockerfile_path.write_text(render(pathlib.Path(__file__).parent/"base_templates/default-dockerfile.j2", seed))
 
-    for j2_file in template_dir.rglob("*.j2"):
-        dst_j2_file = rendered_dir / j2_file.relative_to(template_dir)
-        output_file = dst_j2_file.with_suffix('')
-        output_file.write_text(render(j2_file, seed=seed))
-        output_file.chmod(j2_file.stat().st_mode)
+    for src_j2_file in template_dir.rglob("*.j2"):
+        output_file = (dst_j2_file := rendered_dir/src_j2_file.relative_to(template_dir)).with_suffix('')
+        output_file.write_text(render(src_j2_file, seed))
+        output_file.chmod(src_j2_file.stat().st_mode)
         dst_j2_file.unlink()
 
     return rendered_dir
 
 def test_challenge(challenge_dir, image_name=None):
-    image_name = image_name or os.path.basename(challenge_dir)
-    if not (challenge_dir/"challenge/Dockerfile").exists():
-        pathlib.Path(challenge_dir/"challenge/Dockerfile").write_text(render(pathlib.Path(__file__).parent/"default-dockerfile.j2"))
-
-    temp_flag = pathlib.Path(f"/tmp/{image_name}-flag")
+    image_name = image_name or challenge_dir.name
+    temp_flag = pathlib.Path(f"/tmp/pwncollege-{image_name}-flag")
     temp_flag.write_text("pwn.college{"+base64.b64encode(os.urandom(40)).decode()+"}")
 
     src_dir = os.path.join(challenge_dir, "challenge")
@@ -80,7 +78,7 @@ def main():
     parser.add_argument("challenge", help="Challenge directory to build/test", type=pathlib.Path)
     parser.add_argument("--output-dir", help="Output file or directory", type=pathlib.Path)
     parser.add_argument("--test", action="store_true", help="Test the challenge by building Docker image and running tests")
-    parser.add_argument("--seed", action="store", help="The random seed for templating", default=random.randrange(2**64))
+    parser.add_argument("--seed", action="store", help="The random seed for templating", default=None, type=int)
     parser.add_argument("--image-name", help="Docker image name to use for testing (default: directory name)")
     args = parser.parse_args()
 

@@ -1,4 +1,0 @@
-{% extends "default-dockerfile.j2" %}
-{% block before_copy %}
-RUN apt-get update && apt-get install -y python3-pwntools && apt-get clean
-{% endblock %}

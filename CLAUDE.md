@@ -61,7 +61,7 @@ Always use the virtual environment Python interpreter:
 - Binary challenges may not need templates at all - they can be compiled and placed directly in `challenge/`
 
 ### Docker Build Process
-1. If no `Dockerfile` exists, uses `default-dockerfile.j2`
+1. If no `Dockerfile` exists, uses `./base_templates/default-dockerfile.j2`
 2. Copies `challenge/` directory to `/challenge` in container
 3. Executes `.setup` script if present during build
 4. Executes `.init` script if present at container startup
