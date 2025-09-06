@@ -62,6 +62,7 @@ def test_challenge(challenge_dir, image_name=None):
             "-v", f"{challenge_dir}:{challenge_dir}:ro",
             "-v", f"{temp_flag}:/flag:ro", "-e", f"FLAG={temp_flag.read_text()}",
             "--add-host", "challenge.localhost:127.0.0.1",
+            "--add-host", "hacker.localhost:127.0.0.1",
             image_name, test_file
         ], capture_output=False, check=False)
 
