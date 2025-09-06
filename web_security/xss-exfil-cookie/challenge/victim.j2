@@ -1,0 +1,8 @@
+{%- extends "base_templates/victim-selenium.py.j2" -%}
+
+{% block setup %}
+  {{- super() -}}
+  {%- set settings.specify_url = False -%}
+  {%- set settings.form_fields = {"username": '"admin"', "password": 'open("/flag").read().strip()[-20:]'} -%}
+  {%- set settings.reward_alert = False -%}
+{% endblock %}
