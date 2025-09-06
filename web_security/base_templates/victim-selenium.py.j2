@@ -1,4 +1,4 @@
-#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+#!/usr/bin/python3
 
 import psutil
 import urllib
@@ -15,18 +15,22 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
-os.setuid(os.geteuid())
-os.environ.clear()
-os.environ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# Don't clear environment for Firefox to work properly
 
 options = FirefoxOptions()
 options.add_argument("--headless")
-service = FirefoxService(log_path="/dev/null")
+options.set_preference("security.sandbox.content.level", 0)
+service = FirefoxService(executable_path="/usr/local/bin/geckodriver", log_path="/dev/null")
 browser = webdriver.Firefox(service=service, options=options)
 atexit.register(browser.quit)
 
-open_ports = {s.laddr.port for s in psutil.net_connections(kind="inet") if s.status == "LISTEN"}
-if 80 not in open_ports:
+# Wait for service to start
+for i in range(5):
+    open_ports = {s.laddr.port for s in psutil.net_connections(kind="inet") if s.status == "LISTEN"}
+    if 80 in open_ports:
+        break
+    time.sleep(1)
+else:
     print("Service doesn't seem to be running?")
     sys.exit(1)
 
