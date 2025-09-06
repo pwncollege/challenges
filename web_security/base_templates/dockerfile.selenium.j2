@@ -1,0 +1,5 @@
+{% extends "base_templates/default-dockerfile.j2" %}
+{% block additional_packages %}python3-pip wget firefox python3-selenium curl{% endblock %}
+{% block before_setup %}
+RUN curl -L https://github.com/mozilla/geckodriver/releases/download/v0.34.0/geckodriver-v0.34.0-linux64.tar.gz | tar xz -C /usr/local/bin
+{% endblock %}
