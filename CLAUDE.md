@@ -12,26 +12,19 @@ This is the pwn.college challenge monorepo containing cybersecurity CTF challeng
 
 ```bash
 # Build and test a challenge
-~/.virtualenvs/pwnc/bin/python3 ./build.py --test MODULE_ID/CHALLENGE_ID
+./build.py --test MODULE_ID/CHALLENGE_ID
 
 # Example: Build and test path-traversal-1
-~/.virtualenvs/pwnc/bin/python3 ./build.py --test web_security/path-traversal-1
+./build.py --test web_security/path-traversal-1
 
 # Render a single template file for debugging
-~/.virtualenvs/pwnc/bin/python3 ./build.py MODULE_ID/CHALLENGE_ID/path/to/file.j2
+./build.py MODULE_ID/CHALLENGE_ID/path/to/file.j2
 
 # Build challenge without testing
-~/.virtualenvs/pwnc/bin/python3 ./build.py MODULE_ID/CHALLENGE_ID --output-dir /tmp/output
+./build.py MODULE_ID/CHALLENGE_ID
 ```
 
 DO NOT run these scripts without ./build.py: the dependencies are not installed in the host, and some of these challenges to permanent damage to their environmnet.
-
-### Python Environment
-
-Always use the virtual environment Python interpreter:
-```bash
-~/.virtualenvs/pwnc/bin/python3
-```
 
 ## Architecture
 
@@ -84,7 +77,7 @@ Always use the virtual environment Python interpreter:
 5. Make executable files and templates executable: `chmod +x MODULE_ID/CHALLENGE_ID/**/*.j2`
 6. Write `tests_public/test_*.py.j2` for functionality verification
 7. Write `tests_private/test_*.py.j2` for exploitation verification
-8. Test with: `~/.virtualenvs/pwnc/bin/python3 ./build.py --test MODULE_ID/CHALLENGE_ID`
+8. Test with: `./build.py --test MODULE_ID/CHALLENGE_ID`
 
 ## Example Challenge Template Structures
 
