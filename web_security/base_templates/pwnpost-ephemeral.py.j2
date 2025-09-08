@@ -18,9 +18,9 @@ def challenge_get():
         <h1>{{settings.service_name}} ephemeral message service</h1>
         The message:
         {% if settings.msg_in_textarea %}
-        <textarea>{{"{" + "flask.request.args.get('" + settings.parameter_message + "', '(none)')" + "}"}}</textarea>
+        <textarea>{{"{" + 'flask.request.args.get("' + settings.parameter_message + '", "(none)")' + "}"}}</textarea>
         {% else %}
-        {{"{" + "flask.request.args.get('" + settings.parameter_message + "', '(none)')" + "}"}}
+        {{"{" + 'flask.request.args.get("' + settings.parameter_message + '", "(none)")' + "}"}}
         {% endif %}
         <hr>
         <form>

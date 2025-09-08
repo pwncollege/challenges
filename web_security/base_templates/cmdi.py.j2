@@ -3,6 +3,7 @@
 {% block setup %}
   {%- from 'base_templates/names.j2' import generate_names -%}
   {{- generate_names(settings, challenge.random) -}}
+  {%- set settings.flask_host = "challenge.localhost" -%}
   {%- set settings.reset_uid = True -%}
   {%- set settings.reset_path = True -%}
   {%- set settings.input_parameter = settings.parameter_directory -%}
@@ -21,14 +22,13 @@ def challenge():
 
     command = {% block command %}f"ls -l {% block quote %}{% endblock %}{arg}{% block quote2 %}{% endblock %}"{% endblock %}
 
-    {% if challenge.walkthrough %}print(f"DEBUG: {command=}"){% endif %}
-
+    print(f"DEBUG: {command=}")
     result = subprocess.run(
-        command,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        encoding="latin"
+        command,  # the command to run
+        shell=True,  # use the shell to run this command
+        stdout=subprocess.PIPE,  # capture the standard output
+        stderr=subprocess.STDOUT,  # 2>&1
+        encoding="latin",  # capture the resulting output as text
     ).stdout
 
     return f"""

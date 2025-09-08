@@ -3,6 +3,7 @@
 {% block setup %}
   {%- from 'base_templates/names.j2' import generate_names -%}
   {{- generate_names(settings, challenge.random) -}}
+  {%- set settings.flask_host = "challenge.localhost" -%}
 {% endblock %}
 
 {% block handlers %}
@@ -11,8 +12,7 @@
 @app.route("/{{settings.endpoint_static_files}}/<path:path>", methods=["GET"])
 def challenge(path="index.html"):
     requested_path = app.root_path + "/files/" + path{% block filter %}{% endblock %}
-
-    {% if challenge.walkthrough %}print(f"DEBUG: {requested_path=}"){% endif %}
+    print(f"DEBUG: {requested_path=}")
 
     try:
         return open(requested_path).read()
