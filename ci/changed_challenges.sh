@@ -6,6 +6,9 @@
 #
 # If no arguments provided, it will try to detect from GitHub Actions environment
 # Output: Space-separated list of changed challenge paths (module/challenge format)
+#
+# This script also detects when base templates change and includes all challenges
+# that depend on those templates
 
 set -e
 
@@ -58,15 +61,72 @@ else
     HEAD_SHA="HEAD"
 fi
 
-# Get list of changed files
-CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+# Find all challenges that use (extend/include) a template
+find_dependent_challenges() {
+    local template="$1"
+    local name=$(basename "$template")
+    local rel_path=${template#*/}  # Remove module prefix
+    
+    # Find all .j2 files in challenge dirs that reference this template
+    find . -name "*.j2" -path "*/challenge/*" 2>/dev/null | \
+        xargs grep -lE "{%-? *(extends|include).*[\"'](.*/)?(${name}|${rel_path})[\"']" 2>/dev/null | \
+        sed 's|^\./||' | cut -d'/' -f1-2 | sort -u || true
+}
 
-# Extract unique challenge paths (module/challenge format)
-CHALLENGES=$(echo "$CHANGED_FILES" | grep -E '^[^/]+/[^/]+/' | cut -d'/' -f1-2 | sort -u)
+# Recursively find all templates that depend on a given template
+find_child_templates() {
+    local template="$1"
+    local module=${template%%/*}
+    local seen=()
+    local queue=("$template")
+    
+    while [ ${#queue[@]} -gt 0 ]; do
+        local current="${queue[0]}"
+        queue=("${queue[@]:1}")  # Remove first element
+        
+        # Skip if already seen
+        [[ " ${seen[@]} " =~ " ${current} " ]] && continue
+        seen+=("$current")
+        
+        local name=$(basename "$current")
+        local rel_path=${current#*/}
+        
+        # Find templates that reference this one
+        local children=$(
+            grep -rE "{%-? *(extends|include).*[\"'](.*/)?(${name}|${rel_path})[\"']" \
+                --include="*.j2" "$module" 2>/dev/null | cut -d':' -f1 | sort -u || true
+        )
+        
+        # Add children to queue
+        for child in $children; do
+            [[ " ${seen[@]} " =~ " ${child} " ]] || queue+=("$child")
+        done
+    done
+    
+    printf '%s\n' "${seen[@]}"
+}
 
-# Filter out non-challenge directories (like base_templates, legacy, etc.)
-for CHALLENGE in $CHALLENGES; do
-    if [[ -d "$CHALLENGE/challenge" || -d "$CHALLENGE/tests_public" || -d "$CHALLENGE/tests_private" ]]; then
-        echo "$CHALLENGE"
+DIRECT_CHALLENGES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^[^/]+/[^/]+/' | cut -d'/' -f1-2 | sort -u || true)
+CHANGED_BASE_TEMPLATES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^[^/]+/base_templates/.*\.j2$' || true)
+
+declare -A AFFECTED_CHALLENGES_SET
+
+# Add directly changed challenges that exist
+for challenge in $DIRECT_CHALLENGES; do
+    if [[ -d "$challenge/challenge" || -d "$challenge/tests_public" || -d "$challenge/tests_private" ]]; then
+        AFFECTED_CHALLENGES_SET["$challenge"]=1
     fi
 done
+
+# Process base template changes
+for template in $CHANGED_BASE_TEMPLATES; do
+    # Find all templates that depend on this one (including itself)
+    for dependent_template in $(find_child_templates "$template"); do
+        # Find all challenges using this template
+        for challenge in $(find_dependent_challenges "$dependent_template"); do
+            AFFECTED_CHALLENGES_SET["$challenge"]=1
+        done
+    done
+done
+
+[ ${#AFFECTED_CHALLENGES_SET[@]} -eq 0 ] || printf '%s\n' "${!AFFECTED_CHALLENGES_SET[@]}" | sort

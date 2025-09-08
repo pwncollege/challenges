@@ -52,7 +52,7 @@ jobs:
           fi
           
           # Run the changed challenges detection script and capture output
-          CHALLENGES=$(./ci/changed_challenges.sh)
+          CHALLENGES=$(./ci/changed_challenges.sh | tr '\n' ' ')
         fi
         
         # Output for debugging
