@@ -36,8 +36,12 @@ def challenge():
         {% block service_description %}Welcome to the dirlister service! Please choose a directory to list the files of:{% endblock %}
         <form action="/{{settings.endpoint_challenge}}"><input type=text name={{settings.input_parameter}}><input type=submit value=Submit></form>
         <hr>
+        {% if settings.hide_output %}
+        <b>Ran {command}!</b><br>
+        {% else %}
         <b>Output of {command}:</b><br>
         <pre>{result}</pre>
+        {% endif %}
         </body></html>
         """
 
