@@ -17,17 +17,20 @@ def challenge_get():
         <html><body>
         <h1>{{settings.service_name}} ephemeral message service</h1>
         The message:
-        {% if settings.msg_in_textarea %}
-        <textarea>{{"{" + 'flask.request.args.get("' + settings.parameter_message + '", "(none)")' + "}"}}</textarea>
-        {% else %}
+        {%- if settings.msg_in_textarea %}
+        <form>
+            <textarea name={{settings.parameter_message}}>{{"{" + 'flask.request.args.get("' + settings.parameter_message + '", "Type your message here!")' + "}"}}</textarea>
+            <input type=submit value="Make URL!">
+        </form>
+        {%- else %}
         {{"{" + 'flask.request.args.get("' + settings.parameter_message + '", "(none)")' + "}"}}
-        {% endif %}
         <hr>
         <form>
             Craft a message:
             <input type=text name={{settings.parameter_message}}>
             <input type=submit value="Make URL!">
         </form>
+        {%- endif %}
         </body></html>
     """
 {% endblock %}

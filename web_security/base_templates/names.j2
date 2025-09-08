@@ -50,4 +50,10 @@
         "access-code", "security-token", "auth-pw",
         "user-secret", "account-password", "login-password"
     ]) -%}
+{%- set ns.parameter_content = random.choice([
+        "content", "text", "data", "message", "body",
+        "payload", "input", "value", "post", "comment",
+        "note", "entry", "submission", "material", "info",
+        "article", "update", "feed", "contents", "writing"
+    ]) -%}
 {%- endmacro %}

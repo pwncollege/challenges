@@ -7,6 +7,7 @@
   {%- set settings.disable_admin_posting = False -%}
   {%- set settings.insecure_cookie = False -%}
   {%- set settings.show_own_drafts = False -%}
+  {%- set settings.show_your_posts = False -%}
   {%- set settings.admin_pw_code = "flag" -%}
   {%- set settings.has_ephemeral = False -%}
   {%- set settings.hide_admin_posts = False -%}
@@ -21,22 +22,10 @@ import tempfile
 
 try:
     flag = open("/flag").read().strip()
-except FileNotFoundError:
-    flag = "pwn.college{fake_flag}"
+except (FileNotFoundError, PermissionError):
+    flag = "pwn.college{placeholder_flag}"
 
-class TemporaryDB:
-    def __init__(self):
-        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
-
-    def execute(self, sql, parameters=()):
-        connection = sqlite3.connect(self.db_file.name)
-        connection.row_factory = sqlite3.Row
-        cursor = connection.cursor()
-        result = cursor.execute(sql, parameters)
-        connection.commit()
-        return result
-
-db = TemporaryDB()
+{% include 'base_templates/temporarydb.py.j2' %}
 
 # https://www.sqlite.org/lang_createtable.html
 db.execute("""CREATE TABLE posts AS SELECT ? AS content, "admin" AS author, FALSE AS published""", [flag])
@@ -175,22 +164,29 @@ def challenge_get():
         for post in db.execute("SELECT * FROM posts").fetchall():
             page += f"""<h2>Author: {post["author"]}</h2>"""
             {% if settings.show_own_drafts -%}
-            if post["author"] == username and not post["published"]:
+            if post["published"]:
+                page += post["content"] + "<hr>\n"
+            elif post["author"] == username:
                 page += "<b>YOUR DRAFT POST:</b> " + post["content"] + "<hr>\n"
-            elif post["author"] == username and post["published"]:
-                page += "<b>YOUR POST:</b> " + post["content"] + "<hr>\n"
-            {% else -%}
+            else:
+                page += f"""(Draft post, showing first 12 characters):<br>{post["content"][:12]}<hr>"""
+            {% elif settings.show_your_posts -%}
             if post["author"] == username:
                 page += "<b>YOUR POST:</b> " + post["content"] + "<hr>\n"
-            {% endif -%}
             {% if settings.hide_admin_posts -%}
             elif username == "admin":
-                page += "<b>NON-ADMIN POST HIDDEN FOR SAFETY</b><hr>\n"
+                page += "<b>ADMIN POST HIDDEN FOR SAFETY</b><hr>\n"
             {% endif -%}
             elif post["published"]:
                 page += post["content"] + "<hr>\n"
             else:
                 page += f"""(Draft post, showing first 12 characters):<br>{post["content"][:12]}<hr>"""
+            {% else -%}
+            if post["published"]:
+                page += post["content"] + "<hr>\n"
+            else:
+                page += f"""(Draft post, showing first 12 characters):<br>{post["content"][:12]}<hr>"""
+            {% endif %}
     else:
         page += """
             <form action=login method=post>

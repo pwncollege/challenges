@@ -23,12 +23,12 @@ app = flask.Flask(__name__)
 
 {% if settings.reset_uid %}
 os.setuid(os.geteuid())
-{% endif %}
-{% if settings.reset_path %}
+{%- endif %}
+{%- if settings.reset_path %}
 os.environ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-{% endif %}
+{%- endif %}
 app.secret_key = os.urandom(8)
-{% if settings.flask_host %}
+{%- if settings.flask_host %}
 app.config['SERVER_NAME'] = "{{settings.flask_host}}:{{settings.flask_port or 80}}"
-{% endif %}
+{%- endif %}
 app.run({%block run_host%}"{{settings.flask_host or "0.0.0.0"}}"{%endblock%}, {{settings.flask_port}})

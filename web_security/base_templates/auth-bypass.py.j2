@@ -14,24 +14,7 @@ import sqlite3
 {% endblock %}
 
 {% block handlers %}
-{% if settings.auth_method == "param" %}
-# Don't panic about this class. It simply implements a temporary database in which
-# this application can store data. You don't need to understand its internals, just
-# that it processes SQL queries using db.execute().
-{% endif %}
-class TemporaryDB:
-    def __init__(self):
-        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
-
-    def execute(self, sql, parameters=()):
-        connection = sqlite3.connect(self.db_file.name)
-        connection.row_factory = sqlite3.Row
-        cursor = connection.cursor()
-        result = cursor.execute(sql, parameters)
-        connection.commit()
-        return result
-
-db = TemporaryDB()
+{% include 'base_templates/temporarydb.py.j2' %}
 # https://www.sqlite.org/lang_createtable.html
 db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as password""", [os.urandom({{settings.admin_password_length}})])
 # https://www.sqlite.org/lang_insert.html
@@ -61,11 +44,11 @@ def challenge_post():
 
 @app.route("/", methods=["GET"])
 def challenge_get():
-    {% if settings.auth_method == "param" %}
+    {%- if settings.auth_method == "param" %}
     if not (username := flask.request.args.get("session_user", None)):
-    {% elif settings.auth_method == "cookie" %}
+    {%- elif settings.auth_method == "cookie" %}
     if not (username := flask.request.cookies.get("session_user", None)):
-    {% endif %}
+    {%- endif %}
         page = "<html><body>Welcome to the login service! Please log in as admin to get the flag."
     else:
         page = f"<html><body>Hello, {username}!"

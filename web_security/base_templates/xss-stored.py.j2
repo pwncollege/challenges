@@ -14,19 +14,7 @@ import tempfile
 {% endblock %}
 
 {% block handlers %}
-class TemporaryDB:
-    def __init__(self):
-        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
-
-    def execute(self, sql, parameters=()):
-        connection = sqlite3.connect(self.db_file.name)
-        connection.row_factory = sqlite3.Row
-        cursor = connection.cursor()
-        result = cursor.execute(sql, parameters)
-        connection.commit()
-        return result
-
-db = TemporaryDB()
+{% include 'base_templates/temporarydb.py.j2' %}
 db.execute("""CREATE TABLE posts AS SELECT "First Post!" AS content""")
 
 @app.route("/", methods=["POST"])
