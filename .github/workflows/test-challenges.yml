@@ -1,0 +1,131 @@
+name: Test Challenges
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      test_all:
+        description: 'Test all challenges'
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has-changes: ${{ steps.set-matrix.outputs.has-changes }}
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Fetch all history for proper diff
+    
+    - name: Get challenges to test
+      id: changed-challenges
+      run: |
+        # Check if we should test all challenges (manual dispatch or schedule)
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
+          echo "Testing all challenges (triggered by ${{ github.event_name }})"
+          # Find all challenge directories
+          CHALLENGES=$(find . -type d -path "*/*/challenge" -o -path "*/*/tests_public" -o -path "*/*/tests_private" | 
+                       cut -d'/' -f2-3 | sort -u | 
+                       grep -v "^\." | 
+                       grep -v "^ci/" | 
+                       grep -v "^legacy/" | 
+                       tr '\n' ' ')
+        else
+          # Set up environment variables for the script
+          export GITHUB_EVENT_NAME="${{ github.event_name }}"
+          
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            export GITHUB_BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            export GITHUB_EVENT_BEFORE="${{ github.event.before }}"
+            export GITHUB_EVENT_AFTER="${{ github.event.after }}"
+          fi
+          
+          # Run the changed challenges detection script and capture output
+          CHALLENGES=$(./ci/changed_challenges.sh)
+        fi
+        
+        # Output for debugging
+        echo "Challenges to test: $CHALLENGES"
+        
+        # Save raw output
+        echo "challenges=$CHALLENGES" >> $GITHUB_OUTPUT
+    
+    - name: Set up matrix
+      id: set-matrix
+      run: |
+        CHALLENGES="${{ steps.changed-challenges.outputs.challenges }}"
+        
+        if [ -z "$CHALLENGES" ]; then
+          echo "No challenges to test"
+          echo "has-changes=false" >> $GITHUB_OUTPUT
+          echo 'matrix={"challenge":[]}' >> $GITHUB_OUTPUT
+        else
+          echo "has-changes=true" >> $GITHUB_OUTPUT
+          
+          # Convert space-separated list to JSON array using jq (trim whitespace first)
+          MATRIX=$(echo "$CHALLENGES" | xargs | tr ' ' '\n' | jq -R . | jq -s '{challenge: .}' -c)
+          
+          echo "Matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+        fi
+
+  test-challenges:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # Continue testing other challenges even if one fails
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update && sudo apt-get install -y git-crypt
+        pip install jinja2 black pyastyle pwntools
+    
+    - name: Remove encrypted directories
+      run: |
+        # Find and remove directories containing encrypted files using git-crypt status (these cannot be tested currently)
+        git crypt status -e | sed -e "s/ *encrypted: //" | xargs dirname | xargs rm -rf
+
+    - name: Test challenge
+      run: |
+        echo "================================================"
+        echo "Testing challenge: ${{ matrix.challenge }}"
+        echo "================================================"
+        
+        # Run the test and transform FAILED lines on the fly
+        ./build.py --test "./${{ matrix.challenge }}" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: ${{ matrix.challenge }}/|"
+        
+        # Check exit status of build.py (not sed)
+        if [ ${PIPESTATUS[0]} -eq 0 ]; then
+          echo "================================================"
+          echo "✓ ${{ matrix.challenge }} passed"
+          echo "================================================"
+        else
+          echo "================================================"
+          echo "✗ ${{ matrix.challenge }} failed"
+          echo "================================================"
+          exit 1
+        fi
