@@ -1,0 +1,10 @@
+{%- extends "base_templates/sql.py.j2" -%}
+
+{%- block setup -%}
+  {{- super() -}}
+  {%- set settings.db_state = "randomized" -%}
+  {%- set settings.doc_hint = "https://www.sqlite.org/schematab.html" -%}
+  {%- set settings.max_columns = 1 -%}
+  {%- set settings.num_queries = 2 -%}
+  {%- set settings.column_name = challenge.random.choice(["value", "content", "entry", "item", "record", "payload", "flag", "solution", "secret", "note", "text", "info", "field", "detail", "blob", "datum", "snippet", "element", "resource"]) -%}
+{%- endblock -%}

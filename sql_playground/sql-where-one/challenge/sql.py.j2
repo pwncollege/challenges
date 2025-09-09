@@ -1,0 +1,15 @@
+{%- extends "base_templates/sql.py.j2" -%}
+
+{%- block setup -%}
+  {{- super() -}}
+  {%- set settings.db_state = "flooded" -%}
+  {%- set settings.doc_hint = "https://www.sqlite.org/syntax/result-column.html" -%}
+  {%- set settings.max_rows = 1 -%}
+  {%- set settings.max_columns = 1 -%}
+  {%- set settings.flag_tag = True -%}
+  {%- set settings.tag_value_noflag = 1 -%}
+  {%- set settings.tag_value_flag = 1337 -%}
+  {%- set settings.random_flag_tag = False -%}
+  {%- set settings.table_name = challenge.random.choice(["data", "secrets", "notes", "entries", "records", "storage", "payloads", "repository", "items", "resources", "archive", "details", "information", "fragments", "logs", "dataset", "assets", "flags"]) -%}
+  {%- set settings.column_name = challenge.random.choice(["value", "content", "entry", "item", "record", "payload", "flag", "solution", "secret", "note", "text", "info", "field", "detail", "blob", "datum", "snippet", "element", "resource"]) -%}
+{%- endblock -%}

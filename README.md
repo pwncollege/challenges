@@ -111,15 +111,16 @@ The dojo repositories' `module.yml` files would sometimes specify the pwnshop de
 
 The process of porting is:
 
-1. Identify the challenges to be ported by reading the `module.yml` file.
-2. Determine any connections to the pwnshop templates by looking at `module.yml`.
-3. Look at `pwncollege-modules/$WHATEVER_MODULE_ID/__init__.py` for the appropriate class and determine the template and challenge logic to port out, if any.
+1. Identify the challenges to be ported by reading the `module.yml` file of the emodule. If you are an AI, make this your TODO list: for each challenge, you will port out the challenge itself, the `tests_public` functionality tests (that don't give away the solution), and the `tests_private` solution/vulnerability tests. List each challenge and each challenge subtask in the todo list.
+2. Determine any connections to the pwnshop templates by looking at `module.yml`. This will be specified by the `auxiliary: pwnshop:` dictionary, which will determine the pwnshop challenge class and other arguments.
+3. If a pwnshop challenge is specified, look at `pwncollege-modules/$WHATEVER_MODULE_ID/__init__.py` for the appropriate class and determine the template and challenge logic to port out, if any.
 4. Create base templates in `./$MODULE_ID/base_templates/` if multiple challenges share patterns
 5. Port challenge files to `./$MODULE_ID/$CHALLENGE_ID/challenge/` (binaries, scripts, configs, etc.)
 6. If using templates, use `{% extends %}` and `{% block setup %}` for customization
-7. Ensure all executable files are marked as such: `chmod +x ./$MODULE_ID/$CHALLENGE_ID/**/*.j2`
+7. Ensure all executable files are marked as such: `chmod +x ./$MODULE_ID/$CHALLENGE_ID/**/*.j2`. Rendered files inherit permissions from the template.
 8. Port verification logic to `./$MODULE_ID/$CHALLENGE_ID/tests_public` (functionality) and `./$MODULE_ID/$CHALLENGE_ID/tests_private` (exploitation)
 9. Test thoroughly: `./build.py --test $MODULE_ID/$CHALLENGE_ID`
+10. Once testcases pass, double-check the template (both rendered and at rest) against the legacy challenge to ensure that the challenge has been ported without any functionality change.
 
 
 # In the meantime, some musings:
