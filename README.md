@@ -52,8 +52,8 @@ Set variables in `{% block setup %}` blocks and call `{{- super() -}}` to preser
 
 ### Key Template Files
 
-- `web_security/base_templates/flask.py.j2` - Base Flask application template
-- `web_security/base_templates/names.j2` - Macro for generating random endpoints and parameter names
+- `web-security/base_templates/flask.py.j2` - Base Flask application template
+- `web-security/base_templates/names.j2` - Macro for generating random endpoints and parameter names
 - `default-dockerfile.j2` - Default Docker container template
 
 Anything can be templated, including `./$MODULE_ID/$CHALLENGE_ID/challenge/Dockerfile.j2` (for example, to extend the `default-dockerfile.j2` template with additional packages to install and so on).
@@ -78,13 +78,13 @@ pip install jinja2 black pyastyle pwntools
 
 ```bash
 # build and test
-./build.py --test web_security/path-traversal-1
+./build.py --test web-security/path-traversal-1
 
 # build without testing into a directory to look at
-./build.py web_security/path-traversal-1 --output-dir /tmp/output
+./build.py web-security/path-traversal-1 --output-dir /tmp/output
 
 # if you want to see a single file (for easier debugging)
-./build.py web_security/path-traversal-1/tests_public/test_normal.py.j2
+./build.py web-security/path-traversal-1/tests_public/test_normal.py.j2
 ```
 
 ## Important Notes / Common Gotchas

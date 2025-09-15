@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the pwn.college challenge monorepo containing cybersecurity CTF challenges. Challenges are organized as directories under modules (e.g., `web_security`, etc.) and are built as Docker containers for deployment.
+This is the pwn.college challenge monorepo containing cybersecurity CTF challenges. Challenges are organized as directories under modules (e.g., `web-security`, etc.) and are built as Docker containers for deployment.
 
 ## Key Commands
 
@@ -15,7 +15,7 @@ This is the pwn.college challenge monorepo containing cybersecurity CTF challeng
 ./build.py --test MODULE_ID/CHALLENGE_ID
 
 # Example: Build and test path-traversal-1
-./build.py --test web_security/path-traversal-1
+./build.py --test web-security/path-traversal-1
 
 # Render a single template file for debugging
 ./build.py MODULE_ID/CHALLENGE_ID/path/to/file.j2
