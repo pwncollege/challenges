@@ -2,8 +2,8 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- set settings.specify_url = False -%}
-  {%- set settings.endpoint_challenge = "" -%}
-  {%- set settings.form_fields = {"username": '"admin"', "password": 'open("/flag").read().strip()'} -%}
-  {%- set settings.reward_alert = False -%}
+  {%- set challenge.specify_url = False -%}
+  {%- set challenge.endpoint_challenge = "" -%}
+  {%- set challenge.form_fields = {"username": '"admin"', "password": 'open("/flag").read().strip()'} -%}
+  {%- set challenge.reward_alert = False -%}
 {% endblock %}

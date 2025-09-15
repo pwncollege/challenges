@@ -1,10 +1,10 @@
 #!/usr/bin/exec-suid -- /usr/bin/python3 -I
 
-{%- set settings = namespace(var=None) -%}
-{%- set settings.reset_uid = False -%}
-{%- set settings.reset_path = False -%}
-{%- set settings.reset_flask_host = "" -%}
-{%- set settings.flask_port = 80 -%}
+{%- set challenge = namespace(var=None) -%}
+{%- set challenge.reset_uid = False -%}
+{%- set challenge.reset_path = False -%}
+{%- set challenge.reset_flask_host = "" -%}
+{%- set challenge.flask_port = 80 -%}
 
 {% block setup %}
 {% endblock %}
@@ -21,14 +21,14 @@ app = flask.Flask(__name__)
 {% block initialization %}
 {% endblock %}
 
-{% if settings.reset_uid %}
+{% if challenge.reset_uid %}
 os.setuid(os.geteuid())
 {%- endif %}
-{%- if settings.reset_path %}
+{%- if challenge.reset_path %}
 os.environ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 {%- endif %}
 app.secret_key = os.urandom(8)
-{%- if settings.flask_host %}
-app.config['SERVER_NAME'] = "{{settings.flask_host}}:{{settings.flask_port or 80}}"
+{%- if challenge.flask_host %}
+app.config['SERVER_NAME'] = "{{challenge.flask_host}}:{{challenge.flask_port or 80}}"
 {%- endif %}
-app.run({%block run_host%}"{{settings.flask_host or "0.0.0.0"}}"{%endblock%}, {{settings.flask_port}})
+app.run({%block run_host%}"{{challenge.flask_host or "0.0.0.0"}}"{%endblock%}, {{challenge.flask_port}})

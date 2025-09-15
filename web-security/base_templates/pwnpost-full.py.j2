@@ -2,15 +2,15 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- set settings.flask_host = "challenge.localhost" -%}
-  {%- set settings.publish_method = "GET" -%}
-  {%- set settings.disable_admin_posting = False -%}
-  {%- set settings.insecure_cookie = False -%}
-  {%- set settings.show_own_drafts = False -%}
-  {%- set settings.show_your_posts = False -%}
-  {%- set settings.admin_pw_code = "flag" -%}
-  {%- set settings.has_ephemeral = False -%}
-  {%- set settings.hide_admin_posts = False -%}
+  {%- set challenge.flask_host = "challenge.localhost" -%}
+  {%- set challenge.publish_method = "GET" -%}
+  {%- set challenge.disable_admin_posting = False -%}
+  {%- set challenge.insecure_cookie = False -%}
+  {%- set challenge.show_own_drafts = False -%}
+  {%- set challenge.show_your_posts = False -%}
+  {%- set challenge.admin_pw_code = "flag" -%}
+  {%- set challenge.has_ephemeral = False -%}
+  {%- set challenge.hide_admin_posts = False -%}
 {% endblock %}
 
 {% block imports %}
@@ -29,7 +29,7 @@ except (FileNotFoundError, PermissionError):
 
 # https://www.sqlite.org/lang_createtable.html
 db.execute("""CREATE TABLE posts AS SELECT ? AS content, "admin" AS author, FALSE AS published""", [flag])
-db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as password""", [{{settings.admin_pw_code}}])
+db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as password""", [{{challenge.admin_pw_code}}])
 # https://www.sqlite.org/lang_insert.html
 db.execute("""INSERT INTO users SELECT "guest" as username, "password" as password""")
 db.execute("""INSERT INTO users SELECT "hacker" as username, "1337" as password""")
@@ -48,7 +48,7 @@ def challenge_login():
     if not user:
         flask.abort(403, "Invalid username or password")
 
-    {% if settings.insecure_cookie -%}
+    {% if challenge.insecure_cookie -%}
     response = flask.redirect("/")
     response.set_cookie('auth', username+"|"+password)
     return response
@@ -59,7 +59,7 @@ def challenge_login():
 
 @app.route("/draft", methods=["POST"])
 def challenge_draft():
-    {% if settings.insecure_cookie -%}
+    {% if challenge.insecure_cookie -%}
     username, password = flask.request.cookies.get("auth", "|").split("|")
     user = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
     if not user:
@@ -70,7 +70,7 @@ def challenge_draft():
         flask.abort(403, "Log in first!")
     {% endif %}
 
-    {% if settings.disable_admin_posting -%}
+    {% if challenge.disable_admin_posting -%}
     if username == "admin":
         flask.abort(400, "pwnpost no longer supports admin posting due to rampant flag disclosure")
     {% endif -%}
@@ -83,9 +83,9 @@ def challenge_draft():
     )
     return flask.redirect("/")
 
-@app.route("/publish", methods=["{{settings.publish_method}}"])
+@app.route("/publish", methods=["{{challenge.publish_method}}"])
 def challenge_publish():
-    {% if settings.insecure_cookie -%}
+    {% if challenge.insecure_cookie -%}
     username, password = flask.request.cookies.get("auth", "|").split("|")
     user = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
     if not user:
@@ -96,7 +96,7 @@ def challenge_publish():
         flask.abort(403, "Log in first!")
     {% endif %}
 
-    {% if settings.disable_admin_posting -%}
+    {% if challenge.disable_admin_posting -%}
     if username == "admin":
         flask.abort(400, "pwnpost no longer supports admin posting due to rampant flag disclosure")
     {% endif -%}
@@ -105,7 +105,7 @@ def challenge_publish():
     db.execute("UPDATE posts SET published = TRUE WHERE author = ?", [username])
     return flask.redirect("/")
 
-{% if settings.has_ephemeral %}
+{% if challenge.has_ephemeral %}
 @app.route("/ephemeral", methods=["GET"])
 def challenge_ephemeral():
     return f"""
@@ -120,7 +120,7 @@ def challenge_ephemeral():
 @app.route("/", methods=["GET"])
 def challenge_get():
     page = "<html><body>\n{% block welcome_message %}Welcome to pwnpost, now with users!{% endblock %}<hr>\n"
-    {% if settings.insecure_cookie -%}
+    {% if challenge.insecure_cookie -%}
     username, password = flask.request.cookies.get("auth", "|").split("|")
     user = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
     if user:
@@ -128,7 +128,7 @@ def challenge_get():
     username = flask.session.get("username", None)
     if username:
     {%- endif +%}
-        {% if settings.hide_admin_posts -%}
+        {% if challenge.hide_admin_posts -%}
         if username == "admin":
             page += """<b>To prevent XSS, the admin does not view messages!</b>"""
         else:
@@ -138,7 +138,7 @@ def challenge_get():
               <input type=checkbox name=publish>Publish
               <input type=submit value=Save>
             </form><br>
-            {% if settings.publish_method == "GET" -%}
+            {% if challenge.publish_method == "GET" -%}
             <a href=publish>Publish your drafts!</a>
             {% else -%}
             <form action=publish method=post><input type=submit value="Publish All Drafts"></form>
@@ -152,7 +152,7 @@ def challenge_get():
               <input type=checkbox name=publish>Publish
               <input type=submit value=Save>
             </form><br>
-            {% if settings.publish_method == "GET" -%}
+            {% if challenge.publish_method == "GET" -%}
             <a href=publish>Publish your drafts!</a>
             {% else -%}
             <form action=publish method=post><input type=submit value="Publish All Drafts"></form>
@@ -163,17 +163,17 @@ def challenge_get():
 
         for post in db.execute("SELECT * FROM posts").fetchall():
             page += f"""<h2>Author: {post["author"]}</h2>"""
-            {% if settings.show_own_drafts -%}
+            {% if challenge.show_own_drafts -%}
             if post["published"]:
                 page += post["content"] + "<hr>\n"
             elif post["author"] == username:
                 page += "<b>YOUR DRAFT POST:</b> " + post["content"] + "<hr>\n"
             else:
                 page += f"""(Draft post, showing first 12 characters):<br>{post["content"][:12]}<hr>"""
-            {% elif settings.show_your_posts -%}
+            {% elif challenge.show_your_posts -%}
             if post["author"] == username:
                 page += "<b>YOUR POST:</b> " + post["content"] + "<hr>\n"
-            {% if settings.hide_admin_posts -%}
+            {% if challenge.hide_admin_posts -%}
             elif username == "admin":
                 page += "<b>ADMIN POST HIDDEN FOR SAFETY</b><hr>\n"
             {% endif -%}

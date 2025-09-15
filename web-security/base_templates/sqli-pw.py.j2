@@ -1,12 +1,12 @@
 {%- extends "base_templates/flask.py.j2" -%}
 
 {% block setup %}
-  {%- from 'base_templates/names.j2' import generate_names -%}
-  {{- generate_names(settings, challenge.random) -}}
+  {%- from 'base_templates/random_names.j2' import generate_names -%}
+  {{- generate_names(challenge, random) -}}
 {% endblock %}
 
 {% block imports %}
-{% if settings.pw_name == "pin" %}
+{% if challenge.pw_name == "pin" %}
 import random
 {% endif %}
 import sqlite3
@@ -17,45 +17,45 @@ import tempfile
 {% include 'base_templates/temporarydb.py.j2' %}
 
 # https://www.sqlite.org/lang_createtable.html
-db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as {{settings.pw_name}}""", [{{settings.admin_pw_code}}])
+db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as {{challenge.pw_name}}""", [{{challenge.admin_pw_code}}])
 # https://www.sqlite.org/lang_insert.html
-db.execute("""INSERT INTO users SELECT "guest" as username, {{settings.quote_character}}{{settings.guest_pw}}{{settings.quote_character}} as {{settings.pw_name}}""")
+db.execute("""INSERT INTO users SELECT "guest" as username, {{challenge.quote_character}}{{challenge.guest_pw}}{{challenge.quote_character}} as {{challenge.pw_name}}""")
 
-@app.route("/{{settings.endpoint_login}}", methods=["POST"])
+@app.route("/{{challenge.endpoint_login}}", methods=["POST"])
 def challenge_post():
-    username = flask.request.form.get("{{settings.parameter_username}}")
-    {{settings.pw_name}} = flask.request.form.get("{{settings.password_parameter}}")
+    username = flask.request.form.get("{{challenge.parameter_username}}")
+    {{challenge.pw_name}} = flask.request.form.get("{{challenge.password_parameter}}")
     if not username:
-        flask.abort(400, "Missing `{{settings.parameter_username}}` form parameter")
-    if not {{settings.pw_name}}:
-        flask.abort(400, "Missing `{{settings.password_parameter}}` form parameter")
+        flask.abort(400, "Missing `{{challenge.parameter_username}}` form parameter")
+    if not {{challenge.pw_name}}:
+        flask.abort(400, "Missing `{{challenge.password_parameter}}` form parameter")
     
-    {% if settings.pw_name == "pin" -%}
-    if {{settings.pw_name}}[0] not in "0123456789":
-        flask.abort(400, "Invalid {{settings.password_parameter}}")
+    {% if challenge.pw_name == "pin" -%}
+    if {{challenge.pw_name}}[0] not in "0123456789":
+        flask.abort(400, "Invalid {{challenge.password_parameter}}")
     {% endif %}
 
     try:
         # https://www.sqlite.org/lang_select.html
-        query = f"SELECT rowid, * FROM users WHERE username = '{username}' AND {{settings.pw_name}} = {{settings.quote_character}}{ {{settings.pw_name}} }{{settings.quote_character}}"
+        query = f"SELECT rowid, * FROM users WHERE username = '{username}' AND {{challenge.pw_name}} = {{challenge.quote_character}}{ {{challenge.pw_name}} }{{challenge.quote_character}}"
         print(f"DEBUG: {query=}")
         user = db.execute(query).fetchone()
     except sqlite3.Error as e:
         flask.abort(500, f"Query: {query}\nError: {e}")
 
     if not user:
-        flask.abort(403, "Invalid username or {{settings.pw_name}}")
+        flask.abort(403, "Invalid username or {{challenge.pw_name}}")
 
     flask.session["user"] = username
     return flask.redirect(flask.request.path)
 
-@app.route("/{{settings.endpoint_login}}", methods=["GET"])
+@app.route("/{{challenge.endpoint_login}}", methods=["GET"])
 def challenge_get():
     if not (username := flask.session.get("user", None)):
         page = "<html><body>Welcome to the login service! Please log in as admin to get the flag."
     else:
         page = f"<html><body>Hello, {username}!"
-        {% if settings.admin_print_flag -%}
+        {% if challenge.admin_print_flag -%}
         if username == "admin":
             page += "<br>Here is your flag: " + open("/flag").read()
         {% endif %}
@@ -63,7 +63,7 @@ def challenge_get():
     return page + """
         <hr>
         <form method=post>
-        User:<input type=text name={{settings.parameter_username}}>{{settings.pw_name.title()}}:<input type=text name={{settings.password_parameter}}><input type=submit value=Submit>
+        User:<input type=text name={{challenge.parameter_username}}>{{challenge.pw_name.title()}}:<input type=text name={{challenge.password_parameter}}><input type=submit value=Submit>
         </form>
         </body></html>
     """

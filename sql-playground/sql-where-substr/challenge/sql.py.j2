@@ -2,13 +2,11 @@
 
 {%- block setup -%}
   {{- super() -}}
-  {%- set settings.db_state = "flooded" -%}
-  {%- set settings.doc_hint = "https://www.sqlite.org/lang_corefunc.html#substr" -%}
-  {%- set settings.max_rows = 1 -%}
-  {%- set settings.max_columns = 1 -%}
-  {%- set settings.flag_tag = False -%}
-  {%- set settings.tag_value_noflag = 1 -%}
-  {%- set settings.tag_value_flag = 1337 -%}
-  {%- set settings.table_name = challenge.random.choice(["data", "secrets", "notes", "entries", "records", "storage", "payloads", "repository", "items", "resources", "archive", "details", "information", "fragments", "logs", "dataset", "assets", "flags"]) -%}
-  {%- set settings.column_name = challenge.random.choice(["value", "content", "entry", "item", "record", "payload", "flag", "solution", "secret", "note", "text", "info", "field", "detail", "blob", "datum", "snippet", "element", "resource"]) -%}
+  {%- set challenge.db_state = "flooded" -%}
+  {%- set challenge.doc_hint = "https://www.sqlite.org/lang_corefunc.html#substr" -%}
+  {%- set challenge.max_rows = 1 -%}
+  {%- set challenge.max_columns = 1 -%}
+  {%- set challenge.flag_tag = False -%}
+  {%- set challenge.tag_value_noflag = 1 -%}
+  {%- set challenge.tag_value_flag = 1337 -%}
 {%- endblock -%}

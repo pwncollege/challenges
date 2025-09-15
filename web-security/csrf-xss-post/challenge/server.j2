@@ -2,13 +2,13 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- set settings.publish_method = "POST" -%}
-  {%- set settings.disable_admin_posting = True -%}
-  {%- set settings.insecure_cookie = False -%}
-  {%- set settings.admin_pw_code = "flag[-20:]" -%}
-  {%- set settings.has_ephemeral = True -%}
-  {%- set settings.hide_admin_posts = True -%}
-  {%- set settings.show_your_posts = True -%}
+  {%- set challenge.publish_method = "POST" -%}
+  {%- set challenge.disable_admin_posting = True -%}
+  {%- set challenge.insecure_cookie = False -%}
+  {%- set challenge.admin_pw_code = "flag[-20:]" -%}
+  {%- set challenge.has_ephemeral = True -%}
+  {%- set challenge.hide_admin_posts = True -%}
+  {%- set challenge.show_your_posts = True -%}
 {% endblock %}
 
 {% block welcome_message %}Welcome to pwnpost, now with users!{% endblock %}

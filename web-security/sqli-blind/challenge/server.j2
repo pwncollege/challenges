@@ -2,10 +2,10 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- set settings.pw_name = "password" -%}
-  {%- set settings.guest_pw = "password" -%}
-  {%- set settings.quote_character = "'" -%}
-  {%- set settings.admin_pw_code = 'open("/flag").read()' -%}
-  {%- set settings.admin_print_flag = False -%}
-  {%- set settings.password_parameter = settings.parameter_password -%}
+  {%- set challenge.pw_name = "password" -%}
+  {%- set challenge.guest_pw = "password" -%}
+  {%- set challenge.quote_character = "'" -%}
+  {%- set challenge.admin_pw_code = 'open("/flag").read()' -%}
+  {%- set challenge.admin_print_flag = False -%}
+  {%- set challenge.password_parameter = challenge.parameter_password -%}
 {% endblock %}

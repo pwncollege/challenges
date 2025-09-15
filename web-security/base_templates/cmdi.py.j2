@@ -1,13 +1,13 @@
 {%- extends "base_templates/flask.py.j2" -%}
 
 {% block setup %}
-  {%- from 'base_templates/names.j2' import generate_names -%}
-  {{- generate_names(settings, challenge.random) -}}
-  {%- set settings.flask_host = "challenge.localhost" -%}
-  {%- set settings.reset_uid = True -%}
-  {%- set settings.reset_path = True -%}
-  {%- set settings.input_parameter = settings.parameter_directory -%}
-  {%- set settings.default_parameter_value = "/challenge" -%}
+  {%- from 'base_templates/random_names.j2' import generate_names -%}
+  {{- generate_names(challenge, random) -}}
+  {%- set challenge.flask_host = "challenge.localhost" -%}
+  {%- set challenge.reset_uid = True -%}
+  {%- set challenge.reset_path = True -%}
+  {%- set challenge.input_parameter = challenge.parameter_directory -%}
+  {%- set challenge.default_parameter_value = "/challenge" -%}
 {% endblock %}
 
 {% block imports %}
@@ -16,9 +16,9 @@ import subprocess
 
 {% block handlers %}
 
-@app.route("/{{settings.endpoint_challenge}}", methods=["GET"])
-def challenge():
-    arg = flask.request.args.get("{{settings.input_parameter}}", "{{settings.default_parameter_value}}"){% block filter %}{% endblock %}
+@app.route("/{{challenge.endpoint_challenge}}", methods=["GET"])
+def challenge_handler():
+    arg = flask.request.args.get("{{challenge.input_parameter}}", "{{challenge.default_parameter_value}}"){% block filter %}{% endblock %}
 
     command = {% block command %}f"ls -l {% block quote %}{% endblock %}{arg}{% block quote2 %}{% endblock %}"{% endblock %}
 
@@ -34,9 +34,9 @@ def challenge():
     return f"""
         <html><body>
         {% block service_description %}Welcome to the dirlister service! Please choose a directory to list the files of:{% endblock %}
-        <form action="/{{settings.endpoint_challenge}}"><input type=text name={{settings.input_parameter}}><input type=submit value=Submit></form>
+        <form action="/{{challenge.endpoint_challenge}}"><input type=text name={{challenge.input_parameter}}><input type=submit value=Submit></form>
         <hr>
-        {% if settings.hide_output %}
+        {% if challenge.hide_output %}
         <b>Ran {command}!</b><br>
         {% else %}
         <b>Output of {command}:</b><br>

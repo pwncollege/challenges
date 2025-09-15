@@ -14,13 +14,12 @@ import sys
 import os
 import re
 
-class Challenge:
-    def __init__(self, seed):
-        self.random = random.Random(seed)
+class ChallengeRandom(random.Random):
+    pass
 
 def render(template, seed):
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(template.parents))
-    rendered = env.get_template(template.name).render(challenge=Challenge(seed), trim_blocks=True, lstrip_blocks=True)
+    rendered = env.get_template(template.name).render(random=ChallengeRandom(seed), trim_blocks=True, lstrip_blocks=True)
     try:
         if ".py" in template.suffixes or "python" in rendered.splitlines()[0]:
             return black.format_str(rendered, mode=black.FileMode(line_length=120))

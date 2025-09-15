@@ -2,10 +2,10 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- set settings.flask_host = "challenge.localhost" -%}
-  {%- set settings.auth_method = "param" -%}
-  {%- set settings.admin_password_length = 16 -%}
-  {%- set settings.guest_password = "password" -%}
+  {%- set challenge.flask_host = "challenge.localhost" -%}
+  {%- set challenge.auth_method = "param" -%}
+  {%- set challenge.admin_password_length = 16 -%}
+  {%- set challenge.guest_password = "password" -%}
 {% endblock %}
 
 {% block imports %}
@@ -16,9 +16,9 @@ import sqlite3
 {% block handlers %}
 {% include 'base_templates/temporarydb.py.j2' %}
 # https://www.sqlite.org/lang_createtable.html
-db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as password""", [os.urandom({{settings.admin_password_length}})])
+db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as password""", [os.urandom({{challenge.admin_password_length}})])
 # https://www.sqlite.org/lang_insert.html
-db.execute("""INSERT INTO users SELECT "guest" as username, "{{settings.guest_password}}" as password""")
+db.execute("""INSERT INTO users SELECT "guest" as username, "{{challenge.guest_password}}" as password""")
 
 @app.route("/", methods=["POST"])
 def challenge_post():
@@ -34,9 +34,9 @@ def challenge_post():
     if not user:
         flask.abort(403, "Invalid username or password")
 
-    {% if settings.auth_method == "param" %}
+    {% if challenge.auth_method == "param" %}
     return flask.redirect(f"""{flask.request.path}?session_user={username}""")
-    {% elif settings.auth_method == "cookie" %}
+    {% elif challenge.auth_method == "cookie" %}
     response = flask.redirect(flask.request.path)
     response.set_cookie('session_user', username)
     return response
@@ -44,9 +44,9 @@ def challenge_post():
 
 @app.route("/", methods=["GET"])
 def challenge_get():
-    {%- if settings.auth_method == "param" %}
+    {%- if challenge.auth_method == "param" %}
     if not (username := flask.request.args.get("session_user", None)):
-    {%- elif settings.auth_method == "cookie" %}
+    {%- elif challenge.auth_method == "cookie" %}
     if not (username := flask.request.cookies.get("session_user", None)):
     {%- endif %}
         page = "<html><body>Welcome to the login service! Please log in as admin to get the flag."

@@ -2,10 +2,10 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- set settings.pw_name = "pin" -%}
-  {%- set settings.guest_pw = 1337 -%}
-  {%- set settings.admin_pw_code = "random.randrange(2**32, 2**63)" -%}
-  {%- set settings.admin_print_flag = True -%}
-  {%- set settings.quote_character = "" -%}
-  {%- set settings.password_parameter = "pin" -%}
+  {%- set challenge.pw_name = "pin" -%}
+  {%- set challenge.guest_pw = 1337 -%}
+  {%- set challenge.admin_pw_code = "random.randrange(2**32, 2**63)" -%}
+  {%- set challenge.admin_print_flag = True -%}
+  {%- set challenge.quote_character = "" -%}
+  {%- set challenge.password_parameter = "pin" -%}
 {% endblock %}

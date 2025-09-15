@@ -2,8 +2,8 @@
 
 {%- block setup -%}
   {{- super() -}}
-  {%- set settings.input_parameter = settings.parameter_timezone -%}
-  {%- set settings.default_parameter_value = "MST" -%}
+  {%- set challenge.input_parameter = challenge.parameter_timezone -%}
+  {%- set challenge.default_parameter_value = "MST" -%}
 {%- endblock -%}
 
 {%- block service_description -%}Welcome to the timezone service! Please choose a timezone to get the time there.{%- endblock -%}

@@ -2,6 +2,6 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- set settings.auth_method = "param" -%}
-  {%- set settings.admin_password_length = 8 -%}
+  {%- set challenge.auth_method = "param" -%}
+  {%- set challenge.admin_password_length = 8 -%}
 {% endblock %}

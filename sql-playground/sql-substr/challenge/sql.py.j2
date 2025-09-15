@@ -2,9 +2,7 @@
 
 {%- block setup -%}
   {{- super() -}}
-  {%- set settings.db_state = "trivial" -%}
-  {%- set settings.max_characters = 5 -%}
-  {%- set settings.doc_hint = "https://www.sqlite.org/lang_corefunc.html#substr" -%}
-  {%- set settings.table_name = challenge.random.choice(["data", "secrets", "notes", "entries", "records", "storage", "payloads", "repository", "items", "resources", "archive", "details", "information", "fragments", "logs", "dataset", "assets", "flags"]) -%}
-  {%- set settings.column_name = challenge.random.choice(["value", "content", "entry", "item", "record", "payload", "flag", "solution", "secret", "note", "text", "info", "field", "detail", "blob", "datum", "snippet", "element", "resource"]) -%}
+  {%- set challenge.db_state = "trivial" -%}
+  {%- set challenge.max_characters = 5 -%}
+  {%- set challenge.doc_hint = "https://www.sqlite.org/lang_corefunc.html#substr" -%}
 {%- endblock -%}

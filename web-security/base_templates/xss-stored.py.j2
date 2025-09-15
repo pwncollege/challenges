@@ -2,10 +2,10 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- set settings.flask_host = "challenge.localhost" -%}
-  {%- set settings.service_name = "pwnpost" -%}
-  {%- set settings.escaping = False -%}
-  {%- set settings.msg_in_textarea = False -%}
+  {%- set challenge.flask_host = "challenge.localhost" -%}
+  {%- set challenge.service_name = "pwnpost" -%}
+  {%- set challenge.escaping = False -%}
+  {%- set challenge.msg_in_textarea = False -%}
 {% endblock %}
 
 {% block imports %}
@@ -29,7 +29,7 @@ def challenge_get():
     page += "<form method=post>Post:<input type=text name=content><input type=submit value=Submit></form>\n"
 
     for post in db.execute("SELECT content FROM posts").fetchall():
-        {% if settings.escaping %}
+        {% if challenge.escaping %}
         import html
         page += "<hr>" + html.escape(post["content"]) + "\n"
         {% else %}

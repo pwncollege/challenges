@@ -5,14 +5,14 @@ import requests
 import atexit
 import time
 
-{% from 'base_templates/names.j2' import generate_names %}
-{% set settings = namespace() %}
-{{ generate_names(settings, challenge.random) }}
+{% from 'base_templates/random_names.j2' import generate_names %}
+{% set challenge = namespace() %}
+{{ generate_names(challenge, random) }}
 
 proc = subprocess.Popen(['/challenge/server'])
 atexit.register(lambda: (proc.terminate(), proc.wait()))
 time.sleep(1)  # Give it time to start
 
-response = requests.get(f"http://challenge.localhost/{{settings.endpoint_challenge}}", params={"{{settings.parameter_timezone}}": "MST"})
+response = requests.get(f"http://challenge.localhost/{{challenge.endpoint_challenge}}", params={"{{challenge.parameter_timezone}}": "MST"})
 assert response.status_code == 200
 print(response.text)

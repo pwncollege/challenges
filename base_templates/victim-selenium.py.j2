@@ -1,20 +1,20 @@
 #!/usr/bin/exec-suid -- /usr/bin/python3 -I
 
-{% from 'base_templates/names.j2' import generate_names %}
-{% set settings = namespace() %}
-{{ generate_names(settings, challenge.random) }}
+{% from 'base_templates/random_names.j2' import generate_names %}
+{% set challenge = namespace() %}
+{{ generate_names(challenge, random) }}
 
 {% block setup %}
-{%- set settings.specify_url = True -%}
-{%- set settings.form_fields = {} -%}
-{%- set settings.reward_alert = False -%}
-{%- set settings.login_first = False -%}
-{%- set settings.login_username = "admin" -%}
-{%- set settings.login_password = "flag" -%}
-{%- set settings.use_partial_flag = False -%}
-{%- set settings.visit_attacker = False -%}
-{%- set settings.attacker_url = "http://hacker.localhost:1337/" -%}
-{%- set settings.check_alert = False -%}
+{%- set challenge.specify_url = True -%}
+{%- set challenge.form_fields = {} -%}
+{%- set challenge.reward_alert = False -%}
+{%- set challenge.login_first = False -%}
+{%- set challenge.login_username = "admin" -%}
+{%- set challenge.login_password = "flag" -%}
+{%- set challenge.use_partial_flag = False -%}
+{%- set challenge.visit_attacker = False -%}
+{%- set challenge.attacker_url = "http://hacker.localhost:1337/" -%}
+{%- set challenge.check_alert = False -%}
 {% endblock %}
 
 import psutil
@@ -30,7 +30,7 @@ from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException{% if settings.check_alert %}, UnexpectedAlertPresentException{% endif %}
+from selenium.common.exceptions import TimeoutException, WebDriverException{% if challenge.check_alert %}, UnexpectedAlertPresentException{% endif %}
 
 os.setuid(os.geteuid())
 os.environ.clear()
@@ -52,8 +52,8 @@ else:
     print("Service doesn't seem to be running?")
     sys.exit(1)
 
-{% if not settings.specify_url %}
-challenge_url = "http://challenge.localhost:80/{{settings.endpoint_challenge}}"
+{% if not challenge.specify_url %}
+challenge_url = "http://challenge.localhost:80/{{challenge.endpoint_challenge}}"
 {% else %}
 if len(sys.argv) == 1:
     print(f"Usage: {sys.argv[0]} URL")
@@ -70,41 +70,41 @@ if url_parsed.port not in {None, 80}:
     sys.exit(3)
 {% endif %}
 
-{% if settings.login_first %}
+{% if challenge.login_first %}
 flag = open("/flag").read().strip()
 challenge_url = "http://challenge.localhost:80/"
 
 print(f"Visiting {challenge_url}")
 browser.get(challenge_url)
 
-print("Logging in as {{settings.login_username}}...")
-browser.find_element(By.NAME, "username").send_keys("{{settings.login_username}}")
-{% if settings.login_password == "flag" %}
-browser.find_element(By.NAME, "password").send_keys({% if settings.use_partial_flag %}flag[-20:]{% else %}flag{% endif %})
+print("Logging in as {{challenge.login_username}}...")
+browser.find_element(By.NAME, "username").send_keys("{{challenge.login_username}}")
+{% if challenge.login_password == "flag" %}
+browser.find_element(By.NAME, "password").send_keys({% if challenge.use_partial_flag %}flag[-20:]{% else %}flag{% endif %})
 {% else %}
-browser.find_element(By.NAME, "password").send_keys("{{settings.login_password}}")
+browser.find_element(By.NAME, "password").send_keys("{{challenge.login_password}}")
 {% endif %}
 browser.find_element(By.NAME, "submit").submit()
 time.sleep(3)
 print("Logged in!")
 
-{% if settings.visit_attacker %}
-print("Visiting the attacker's website ({{settings.attacker_url}})...")
-browser.get("{{settings.attacker_url}}")
+{% if challenge.visit_attacker %}
+print("Visiting the attacker's website ({{challenge.attacker_url}})...")
+browser.get("{{challenge.attacker_url}}")
 {% endif %}
 {% else %}
 print(f"Visiting {challenge_url}")
 browser.get(challenge_url)
 {% endif %}
 
-{% if settings.form_fields %}
-{% for k, v in settings.form_fields.items() %}
+{% if challenge.form_fields %}
+{% for k, v in challenge.form_fields.items() %}
 browser.find_element(By.NAME, "{{k}}").send_keys({{v}})
 {% endfor %}
 browser.find_element(By.NAME, "submit").submit()
 {% endif %}
 
-{% if settings.reward_alert %}
+{% if challenge.reward_alert %}
 try:
     WebDriverWait(browser, 1).until(EC.alert_is_present())
 except TimeoutException:
@@ -113,7 +113,7 @@ except TimeoutException:
 else:
     print("Alert triggered! Your reward:")
     print(open("/flag").read().strip())
-{% elif settings.check_alert %}
+{% elif challenge.check_alert %}
 try:
     WebDriverWait(browser, 1).until(EC.alert_is_present())
 except TimeoutException:
@@ -128,7 +128,7 @@ else:
         print(flag)
     else:
         print("It looks like the alert did not come from {challenge_url}/ephemeral?")
-{% elif settings.visit_attacker %}
+{% elif challenge.visit_attacker %}
 time.sleep(3)
 print("Visited! Go check if the attack worked!")
 {% else %}

@@ -56,4 +56,16 @@
         "note", "entry", "submission", "material", "info",
         "article", "update", "feed", "contents", "writing"
     ]) -%}
+{%- set ns.table_name = random.choice([
+        "data", "secrets", "notes", "entries", "records",
+        "storage", "payloads", "repository", "items", "resources",
+        "archive", "details", "information", "fragments", "logs",
+        "dataset", "assets", "flags"
+    ]) -%}
+{%- set ns.column_name = random.choice([
+        "value", "content", "entry", "item", "record",
+        "payload", "flag", "solution", "secret", "note",
+        "text", "info", "field", "detail", "blob",
+        "datum", "snippet", "element", "resource"
+    ]) -%}
 {%- endmacro %}

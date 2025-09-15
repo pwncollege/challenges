@@ -2,9 +2,9 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- set settings.specify_url = False -%}
-  {%- set settings.login_first = True -%}
-  {%- set settings.use_partial_flag = True -%}
-  {%- set settings.visit_attacker = True -%}
-  {%- set settings.check_alert = True -%}
+  {%- set challenge.specify_url = False -%}
+  {%- set challenge.login_first = True -%}
+  {%- set challenge.use_partial_flag = True -%}
+  {%- set challenge.visit_attacker = True -%}
+  {%- set challenge.check_alert = True -%}
 {% endblock %}

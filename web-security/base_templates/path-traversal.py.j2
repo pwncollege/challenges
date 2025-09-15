@@ -1,15 +1,15 @@
 {%- extends "base_templates/flask.py.j2" -%}
 
 {% block setup %}
-  {%- from 'base_templates/names.j2' import generate_names -%}
-  {{- generate_names(settings, challenge.random) -}}
-  {%- set settings.flask_host = "challenge.localhost" -%}
+  {%- from 'base_templates/random_names.j2' import generate_names -%}
+  {{- generate_names(challenge, random) -}}
+  {%- set challenge.flask_host = "challenge.localhost" -%}
 {% endblock %}
 
 {% block handlers %}
 
-@app.route("/{{settings.endpoint_static_files}}", methods=["GET"])
-@app.route("/{{settings.endpoint_static_files}}/<path:path>", methods=["GET"])
+@app.route("/{{challenge.endpoint_static_files}}", methods=["GET"])
+@app.route("/{{challenge.endpoint_static_files}}/<path:path>", methods=["GET"])
 def challenge(path="index.html"):
     requested_path = app.root_path + "/files/" + path{% block filter %}{% endblock %}
     print(f"DEBUG: {requested_path=}")

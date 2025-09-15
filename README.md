@@ -35,7 +35,7 @@ If a challenge needs build customization beyond `.setup`, it can specify its own
 ## templating
 
 Any file that ends in `.j2` is automatically jinja2-formatted during challenge building.
-Templates are passed in a `challenge` parameter that has a few useful utility functions, mostly related to seeded RNG use at template time (e.g., `{{challenge.random.randrange()}}`).
+Templates are passed in a seeded `random` for repeatable use at template time (e.g., `{{random.randrange()}}`).
 Examples abound around the repository.
 
 Template variables in output strings need double braces: `{{variable}}`.
@@ -52,8 +52,8 @@ Set variables in `{% block setup %}` blocks and call `{{- super() -}}` to preser
 
 ### Key Template Files
 
-- `web-security/base_templates/flask.py.j2` - Base Flask application template
-- `web-security/base_templates/names.j2` - Macro for generating random endpoints and parameter names
+- `base_templates/flask.py.j2` - Base Flask application template
+- `base_templates/random_names.j2` - Macro for generating random endpoints and parameter names
 - `default-dockerfile.j2` - Default Docker container template
 
 Anything can be templated, including `./$MODULE_ID/$CHALLENGE_ID/challenge/Dockerfile.j2` (for example, to extend the `default-dockerfile.j2` template with additional packages to install and so on).

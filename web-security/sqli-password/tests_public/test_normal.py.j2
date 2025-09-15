@@ -5,9 +5,9 @@ import requests
 import atexit
 import time
 
-{% from 'base_templates/names.j2' import generate_names %}
-{% set settings = namespace() %}
-{{ generate_names(settings, challenge.random) }}
+{% from 'base_templates/random_names.j2' import generate_names %}
+{% set challenge = namespace() %}
+{{ generate_names(challenge, random) }}
 
 proc = subprocess.Popen(['/challenge/server'])
 atexit.register(lambda: (proc.terminate(), proc.wait()))
@@ -16,16 +16,16 @@ time.sleep(1)  # Give it time to start
 # Test normal login with guest account
 s = requests.Session()
 response = s.post(
-    f"http://challenge.localhost/{{settings.endpoint_login}}",
-    data={"{{settings.parameter_username}}": "guest", "{{settings.parameter_password}}": "password"}
+    f"http://challenge.localhost/{{challenge.endpoint_login}}",
+    data={"{{challenge.parameter_username}}": "guest", "{{challenge.parameter_password}}": "password"}
 )
 assert response.status_code == 200
 assert "Hello, guest!" in response.text
 
 # Test invalid login
 response = s.post(
-    f"http://challenge.localhost/{{settings.endpoint_login}}",
-    data={"{{settings.parameter_username}}": "admin", "{{settings.parameter_password}}": "wrongpassword"}
+    f"http://challenge.localhost/{{challenge.endpoint_login}}",
+    data={"{{challenge.parameter_username}}": "admin", "{{challenge.parameter_password}}": "wrongpassword"}
 )
 assert response.status_code in [403, 500]
 

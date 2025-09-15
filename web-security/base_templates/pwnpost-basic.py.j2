@@ -2,10 +2,10 @@
 
 {% block setup %}
   {{- super() -}}
-  {%- from 'base_templates/names.j2' import generate_names -%}
-  {{- generate_names(settings, challenge.random) -}}
-  {%- set settings.flask_host = "challenge.localhost" -%}
-  {%- set settings.service_name = "pwnpost" -%}
+  {%- from 'base_templates/random_names.j2' import generate_names -%}
+  {{- generate_names(challenge, random) -}}
+  {%- set challenge.flask_host = "challenge.localhost" -%}
+  {%- set challenge.service_name = "pwnpost" -%}
 {% endblock %}
 
 {% block imports %}
@@ -17,16 +17,16 @@ import tempfile
 {% include 'base_templates/temporarydb.py.j2' %}
 db.execute("""CREATE TABLE posts AS SELECT "First Post!" AS content""")
 
-@app.route("/{{settings.endpoint_challenge}}", methods=["POST"])
+@app.route("/{{challenge.endpoint_challenge}}", methods=["POST"])
 def challenge_post():
-    content = flask.request.form.get("{{settings.parameter_content}}", "")
+    content = flask.request.form.get("{{challenge.parameter_content}}", "")
     db.execute("INSERT INTO posts VALUES (?)", [content])
     return flask.redirect(flask.request.path)
 
-@app.route("/{{settings.endpoint_challenge}}", methods=["GET"])
+@app.route("/{{challenge.endpoint_challenge}}", methods=["GET"])
 def challenge_get():
-    page = "<html><body>\nWelcome to {{settings.service_name}}, the anonymous posting service. Post away!\n"
-    page += "<form method=post>Post:<input type=text name={{settings.parameter_content}}><input type=submit value=Submit></form>\n"
+    page = "<html><body>\nWelcome to {{challenge.service_name}}, the anonymous posting service. Post away!\n"
+    page += "<form method=post>Post:<input type=text name={{challenge.parameter_content}}><input type=submit value=Submit></form>\n"
 
     for post in db.execute("SELECT content FROM posts").fetchall():
         page += "<hr>" + post["content"] + "\n"
