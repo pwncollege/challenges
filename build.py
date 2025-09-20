@@ -1,6 +1,7 @@
 #!/bin/env python3
 
 import subprocess
+import textwrap
 import argparse
 import pyastyle
 import pathlib
@@ -17,8 +18,16 @@ import re
 class ChallengeRandom(random.Random):
     pass
 
+def layout_text(text):
+    return "\n".join(f'puts("{line}");' for line in textwrap.wrap(textwrap.dedent(text), width=120))
+
+@jinja2.pass_context
+def layout_text_walkthrough(context, text):
+    return layout_text(text) if not context.get("walkthrough") or context.get("challenge.walkthrough") else "\n"
+
 def render(template, seed):
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(template.parents))
+    env.filters.update({ "layout_text": layout_text, "layout_text_walkthrough": layout_text_walkthrough })
     rendered = env.get_template(template.name).render(random=ChallengeRandom(seed), trim_blocks=True, lstrip_blocks=True)
     try:
         if ".py" in template.suffixes or "python" in rendered.splitlines()[0]:
@@ -29,9 +38,8 @@ def render(template, seed):
         print(f"WARNING: template {template} does not format properly: {e}")
     return rendered
 
-def render_challenge(template_dir, output_dir=None, seed=None):
+def render_challenge(template_dir, seed, output_dir=None):
     rendered_dir = output_dir or pathlib.Path(f"/tmp/pwncollege-{template_dir.name}-{os.urandom(4).hex()}")
-    seed = random.randrange(2**64) if seed is None else seed
     shutil.copytree(template_dir, rendered_dir)
     if (rendered_dir/"challenge").exists() and not (dockerfile_path := rendered_dir/"challenge/Dockerfile").exists():
         dockerfile_path.write_text(render(pathlib.Path(__file__).parent/"base_templates/default-dockerfile.j2", seed))
@@ -44,13 +52,12 @@ def render_challenge(template_dir, output_dir=None, seed=None):
 
     return rendered_dir
 
-def test_challenge(challenge_dir, image_name=None):
+def test_challenge(challenge_dir, seed, image_name=None):
     image_name = image_name or challenge_dir.name
     temp_flag = pathlib.Path(f"/tmp/pwncollege-{image_name}-flag")
     temp_flag.write_text("pwn.college{"+base64.b64encode(os.urandom(40)).decode()+"}")
 
-    src_dir = os.path.join(challenge_dir, "challenge")
-    result = subprocess.run(["docker", "build", "-t", image_name, src_dir], capture_output=False, check=False)
+    result = subprocess.run(["docker", "build", "-t", image_name, challenge_dir/"challenge"], capture_output=False, check=False)
     if result.returncode != 0:
         print("ERROR: Docker build failed")
         return False
@@ -58,10 +65,9 @@ def test_challenge(challenge_dir, image_name=None):
     for test_file in glob.glob(str(challenge_dir/"test*/test_*")):
         result = subprocess.run([
             "docker", "run", "--rm",
-            "-v", f"{challenge_dir}:{challenge_dir}:ro",
-            "-v", f"{temp_flag}:/flag:ro", "-e", f"FLAG={temp_flag.read_text()}",
-            "--add-host", "challenge.localhost:127.0.0.1",
-            "--add-host", "hacker.localhost:127.0.0.1",
+            "-v", f"{challenge_dir}:{challenge_dir}:ro", "-v", f"{temp_flag}:/flag:ro",
+            "-e", f"FLAG={temp_flag.read_text()}", "-e", f"SEED={seed}",
+            "--add-host", "challenge.localhost:127.0.0.1", "--add-host", "hacker.localhost:127.0.0.1",
             image_name, test_file
         ], capture_output=False, check=False)
 
@@ -70,14 +76,13 @@ def test_challenge(challenge_dir, image_name=None):
         else:
             print(f"FAILED: {test_file} failed (exit code: {result.returncode})")
             return False
-
     return True
 
 def main():
     parser = argparse.ArgumentParser(description="Render challenge templates")
     parser.add_argument("challenge", help="Challenge directory to build/test", type=pathlib.Path)
     parser.add_argument("--output-dir", help="Output file or directory", type=pathlib.Path)
-    parser.add_argument("--test", action="store_true", help="Test the challenge by building Docker image and running tests")
+    parser.add_argument("--no-test", action="store_true", help="Don't test the challenge (by building Docker image and running tests)")
     parser.add_argument("--seed", action="store", help="The random seed for templating", default=None, type=int)
     parser.add_argument("--image-name", help="Docker image name to use for testing (default: directory name)")
     args = parser.parse_args()
@@ -86,12 +91,10 @@ def main():
         print(render(args.challenge, seed=args.seed))
         return 0
 
-    rendered_dir = render_challenge(args.challenge, output_dir=args.output_dir, seed=args.seed)
+    seed = random.randrange(2**64) if args.seed is None else args.seed
+    rendered_dir = render_challenge(args.challenge, seed, output_dir=args.output_dir)
     print(f"Rendered to: {rendered_dir}")
-    if args.test:
-        return 0 if test_challenge(rendered_dir, image_name=args.image_name) else 1
-
-    return 0
+    return 0 if args.no_test or test_challenge(rendered_dir, seed, image_name=args.image_name) else 1
 
 if __name__ == "__main__":
     sys.exit(main())
