@@ -1,10 +1,12 @@
 #!/usr/bin/exec-suid -- /usr/bin/python3 -I
 
-{%- set challenge = namespace(var=None) -%}
-{%- set challenge.reset_uid = False -%}
-{%- set challenge.reset_path = False -%}
-{%- set challenge.reset_flask_host = "" -%}
-{%- set challenge.flask_port = 80 -%}
+{%- if challenge is not defined -%}
+  {%- set challenge = namespace(var=None) -%}
+  {%- set challenge.reset_uid = False -%}
+  {%- set challenge.reset_path = False -%}
+  {%- set challenge.reset_flask_host = "" -%}
+  {%- set challenge.flask_port = 80 -%}
+{%- endif -%}
 
 {% block setup %}
 {% endblock %}
