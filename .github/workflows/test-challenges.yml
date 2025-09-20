@@ -116,7 +116,7 @@ jobs:
         echo "================================================"
         
         # Run the test and transform FAILED lines on the fly
-        ./build.py --test "./${{ matrix.challenge }}" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: ${{ matrix.challenge }}/|"
+        ./build.py "./${{ matrix.challenge }}" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: ${{ matrix.challenge }}/|"
         
         # Check exit status of build.py (not sed)
         if [ ${PIPESTATUS[0]} -eq 0 ]; then
