@@ -14,6 +14,22 @@ The repository structure is:
 - `./$MODULE_ID/$CHALLENGE_ID/tests_public`: unencrypted tests used to test challenge functionality before deployment and also to test community contributions via CI
 - `./$MODULE_ID/$CHALLENGE_ID/tests_private`: encrypted tests used to ensure challenge solvability before deployment
 
+# Decrypting the solutions
+
+The solutions and other private testcases in this repository are encrypted with [git-crypt](https://github.com/AGWA/git-crypt).
+To decrypt them, you will need to:
+
+```
+git crypt unlock /path/to/keyfile 
+```
+
+Each module has its own keyfile that you'll need to be given to see/modify solutions for that module.
+Alternatively, if your GPG key has been granted access to a solution key, you can just do:
+
+```
+git crypt unlock
+```
+
 # Building and testing:
 
 There are a few options in the challenge building process, depending on the needs of the challenge.
