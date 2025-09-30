@@ -1,11 +1,14 @@
 {% extends "base_templates/default-dockerfile.j2" %}
-{% block additional_packages %}python3-pip wget python3-selenium python3-psutil curl software-properties-common{% endblock %}
+{% block additional_packages %}{% endblock %}
 {% block before_copy %}
-RUN add-apt-repository -y ppa:mozillateam/ppa && \
-    echo 'Package: firefox*' > /etc/apt/preferences.d/mozilla-firefox && \
-    echo 'Pin: release o=LP-PPA-mozillateam' >> /etc/apt/preferences.d/mozilla-firefox && \
-    echo 'Pin-Priority: 1001' >> /etc/apt/preferences.d/mozilla-firefox && \
-    apt-get update && \
-    apt-get install -y firefox
+RUN <<END
+    apt-get install -y python3-pip wget python3-selenium python3-psutil curl software-properties-common
+    add-apt-repository -y ppa:mozillateam/ppa
+    echo 'Package: firefox*' > /etc/apt/preferences.d/mozilla-firefox
+    echo 'Pin: release o=LP-PPA-mozillateam' >> /etc/apt/preferences.d/mozilla-firefox
+    echo 'Pin-Priority: 1001' >> /etc/apt/preferences.d/mozilla-firefox
+    apt-get update
+    apt-get install -y firefox 
+END
 RUN curl -L https://github.com/mozilla/geckodriver/releases/download/v0.34.0/geckodriver-v0.34.0-linux64.tar.gz | tar xz -C /usr/local/bin
 {% endblock %}
