@@ -10,6 +10,7 @@ import shutil
 import jinja2
 import base64
 import black
+import shlex
 import glob
 import sys
 import os
@@ -57,25 +58,24 @@ def test_challenge(challenge_dir, seed, image_name=None):
     temp_flag = pathlib.Path(f"/tmp/pwncollege-{image_name}-flag")
     temp_flag.write_text("pwn.college{"+base64.b64encode(os.urandom(40)).decode()+"}")
 
-    result = subprocess.run(["docker", "build", "-t", image_name, challenge_dir/"challenge"], capture_output=False, check=False)
-    if result.returncode != 0:
-        print("ERROR: Docker build failed")
+    try:
+        subprocess.check_call(["docker", "build", "-t", image_name, challenge_dir/"challenge"])
+        for test_file in glob.glob(str(challenge_dir/"test*/test_*")):
+            container = subprocess.check_output([
+                "docker", "run", "--rm", "-id",
+                "--name", f"""{image_name}-{re.sub("[^a-zA-Z0-9-]", "", os.path.basename(test_file))}""",
+                "-v", f"{challenge_dir}:{challenge_dir}:ro", "-v", f"{temp_flag}:/flag:ro",
+                image_name, "sh", "-c", "read forever"
+            ]).decode().strip()
+            subprocess.check_call(["docker", "exec", container, "sh", "-c", "[ ! -e /challenge/.init ] || /challenge/.init"])
+            subprocess.check_call([
+                "docker", "exec", "-u", "1000:1000", "-e", f"FLAG={temp_flag.read_text()}", "-e", f"SEED={seed}", container, test_file
+            ])
+            print(f"PASSED: {test_file}")
+            subprocess.check_output(["docker", "kill", container])
+    except subprocess.CalledProcessError as e:
+        print(f"FAILED: {shlex.join(e.cmd)}")
         return False
-
-    for test_file in glob.glob(str(challenge_dir/"test*/test_*")):
-        result = subprocess.run([
-            "docker", "run", "--rm",
-            "-v", f"{challenge_dir}:{challenge_dir}:ro", "-v", f"{temp_flag}:/flag:ro",
-            "-e", f"FLAG={temp_flag.read_text()}", "-e", f"SEED={seed}",
-            "--add-host", "challenge.localhost:127.0.0.1", "--add-host", "hacker.localhost:127.0.0.1",
-            image_name, test_file
-        ], capture_output=False, check=False)
-
-        if result.returncode == 0:
-            print(f"PASSED: {test_file} passed")
-        else:
-            print(f"FAILED: {test_file} failed (exit code: {result.returncode})")
-            return False
     return True
 
 def main():
