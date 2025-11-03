@@ -20,7 +20,7 @@ jobs:
 
     - name: Build legacy challenges
       run: |
-        ./legacy/build.sh $(ls legacy/*/.git | sed 's|/\.git$||')
+        JOBS=20 ./legacy/build.sh $(ls legacy/*/.git | sed 's|/\.git$||')
 
     - name: List all Docker images
       run: |

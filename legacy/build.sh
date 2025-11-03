@@ -8,9 +8,9 @@ build_timestamp_utc="$(date --utc +'%Y-%m-%dT%H:%M:%SZ')"
 export build_timestamp_utc
 
 build_one_task() {
-  local dojo_root="$1" dojo_id="$2" module_id="$3" challenge_id="$4" instance_id="$5" base_image="$6"
+  local dojo_root="$1" dojo_id="$2" module_id="$3" challenge_id="$4" variant_id="$5" base_image="$6"
 
-  local image_tag="pwncollege/challenge-${module_id}-${challenge_id}${instance_id:+-${instance_id}}:latest"
+  local image_tag="pwncollege/challenge-${module_id}-${challenge_id}${variant_id:+-${variant_id}}:latest"
 
   local dockerfile_content="# syntax=docker/dockerfile:1\nFROM ${base_image}\n"
 
@@ -23,14 +23,14 @@ build_one_task() {
     done < <(find "$challenge_dir" -maxdepth 1 -xtype f -print0)
   fi
 
-  if [[ -n "$instance_id" ]]; then
-    local instance_dir="${challenge_dir}/_${instance_id}"
-    if [[ -d "$instance_dir" ]]; then
+  if [[ -n "$variant_id" ]]; then
+    local variant_dir="${challenge_dir}/_${variant_id}"
+    if [[ -d "$variant_dir" ]]; then
       while IFS= read -r -d '' file_path; do
         local rel_src="${file_path#${dojo_root}/}"
-        local image_path="/challenge/${file_path#${instance_dir}/}"
+        local image_path="/challenge/${file_path#${variant_dir}/}"
         dockerfile_content+="COPY --chmod=4755 --chown=0:0 ${rel_src} ${image_path}\n"
-      done < <(find "$instance_dir" -xtype f -print0)
+      done < <(find "$variant_dir" -xtype f -print0)
     fi
   fi
 
@@ -39,7 +39,7 @@ build_one_task() {
     --annotation "college.pwn.dojo=${dojo_id}" \
     --annotation "college.pwn.module=${module_id}" \
     --annotation "college.pwn.challenge=${challenge_id}" \
-    ${instance_id:+--annotation "college.pwn.challenge-instance=${instance_id}"} \
+    ${variant_id:+--annotation "college.pwn.challenge-variant=${variant_id}"} \
     --annotation "org.opencontainers.image.created=${build_timestamp_utc}" \
     --pull --quiet -f - "$dojo_root" > /dev/null 2>&1 \
   || { echo "[ERROR] Failed to build image: ${image_tag}" >&2; exit 1; }
@@ -53,7 +53,7 @@ generate_tasks_for_dojo() {
   local dojo_manifest="${dojo_root}/dojo.yml"
   [[ -f "$dojo_manifest" ]] || { echo "[WARN] No dojo.yml in ${dojo_root}, skipping" >&2; return; }
 
-  local dojo_id modules_list challenges_list module_id challenge_id base_image challenge_root instance_id
+  local dojo_id modules_list challenges_list module_id challenge_id base_image challenge_root variant_id
   dojo_id="$(yq -r '.id' "$dojo_manifest")"
   modules_list="$(yq -r '.modules[].id' "$dojo_manifest")"
 
@@ -84,9 +84,9 @@ generate_tasks_for_dojo() {
       fi
 
       find "$challenge_root" -maxdepth 1 -type d -name '_*' -print0 |
-      while IFS= read -r -d '' instance_dir; do
-        instance_id="${instance_dir##*/_}"
-        printf '%s\0%s\0%s\0%s\0%s\0%s\0' "$dojo_root" "$dojo_id" "$module_id" "$challenge_id" "$instance_id" "$base_image"
+      while IFS= read -r -d '' variant_dir; do
+        variant_id="${variant_dir##*/_}"
+        printf '%s\0%s\0%s\0%s\0%s\0%s\0' "$dojo_root" "$dojo_id" "$module_id" "$challenge_id" "$variant_id" "$base_image"
       done
     done
   done
