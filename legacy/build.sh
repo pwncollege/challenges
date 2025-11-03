@@ -67,11 +67,14 @@ generate_tasks_for_dojo() {
     ] | .[]' "$module_manifest")"
 
     for challenge_id in $challenges_list; do
-      base_image="$(yq -r --arg id "$challenge_id" '
-        [
-          (.challenges[]? | select(.id==$id) | .image),
-          (.resources[]? | select(.type=="challenge" and .id==$id) | .image)
-        ] | map(select(.!=null and .!="" )) | .[0] // ""' "$module_manifest")"
+      base_image="$(
+        challenge_id="$challenge_id" yq -r '
+          [
+            (.challenges[]? | select(.id==env.challenge_id) | .image),
+            (.resources[]? | select(.type=="challenge" and .id==env.challenge_id) | .image)
+          ]
+          | map(select(.!=null and .!="" )) | .[0] // ""' "$module_manifest"
+      )"
       base_image="${base_image:-pwncollege/challenge-legacy:latest}"
 
       challenge_root="${dojo_root}/${module_id}/${challenge_id}"
