@@ -1,0 +1,21 @@
+[submodule "legacy/welcome-dojo"]
+	path = legacy/welcome-dojo
+	url = https://github.com/pwncollege/welcome-dojo
+[submodule "legacy/fundamentals-dojo"]
+	path = legacy/fundamentals-dojo
+	url = https://github.com/pwncollege/fundamentals-dojo
+[submodule "legacy/intro-to-cybersecurity-dojo"]
+	path = legacy/intro-to-cybersecurity-dojo
+	url = https://github.com/pwncollege/intro-to-cybersecurity-dojo
+[submodule "legacy/program-security-dojo"]
+	path = legacy/program-security-dojo
+	url = https://github.com/pwncollege/program-security-dojo
+[submodule "legacy/system-security-dojo"]
+	path = legacy/system-security-dojo
+	url = https://github.com/pwncollege/system-security-dojo
+[submodule "legacy/software-exploitation-dojo"]
+	path = legacy/software-exploitation-dojo
+	url = https://github.com/pwncollege/software-exploitation-dojo
+[submodule "legacy/archive-dojo"]
+	path = legacy/archive-dojo
+	url = https://github.com/pwncollege/archive-dojo
