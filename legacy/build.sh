@@ -70,8 +70,8 @@ generate_tasks_for_dojo() {
       base_image="$(
         challenge_id="$challenge_id" yq -r '
           [
-            (.challenges[]? | select(.id==env.challenge_id) | .image),
-            (.resources[]? | select(.type=="challenge" and .id==env.challenge_id) | .image)
+            (.challenges[]? | select(.id==env(challenge_id)) | .image),
+            (.resources[]? | select(.type=="challenge" and .id==env(challenge_id)) | .image)
           ]
           | map(select(.!=null and .!="" )) | .[0] // ""' "$module_manifest"
       )"
