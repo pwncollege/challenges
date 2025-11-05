@@ -49,6 +49,7 @@ for maintainer in maintainers:
         check=True,
         text=True,
         input=maintainer["key"],
+        stdout=subprocess.STDERR,
     )
 
     maintainer_groups = [
@@ -72,4 +73,5 @@ for maintainer in maintainers:
                 fingerprint,
             ],
             check=True,
+            stdout=subprocess.STDERR,
         )

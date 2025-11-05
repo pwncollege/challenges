@@ -33,4 +33,21 @@ jobs:
           git crypt unlock
 
       - name: Sync maintainers
-        run: ./ci/sync-maintainers
+        run: |
+          set -eo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          ./ci/sync-maintainers | tee /tmp/sync-maintainers.log
+
+          if ! git diff --quiet; then
+            {
+              echo "maintainers: synchronized"
+              echo
+              cat /tmp/sync-maintainers.log
+            } | git commit -F -
+            git push
+          else
+            echo "No changes to commit."
+          fi
