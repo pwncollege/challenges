@@ -1,0 +1,22 @@
+name: Sync Maintainers
+
+on:
+  push:
+    # branches: [ main ]
+    paths:
+      - "maintainers.yml"
+      - "ci/sync-maintainers"
+      - ".github/workflows/sync-maintainers.yml"
+
+jobs:
+  sync-maintainers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Sync maintainers
+        run: ./ci/sync-maintainers
