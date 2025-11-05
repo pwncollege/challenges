@@ -67,6 +67,7 @@ for maintainer in maintainers:
                 "add-gpg-user",
                 "-k",
                 group,
+                "--no-commit",
                 "--trusted",
                 fingerprint,
             ],
