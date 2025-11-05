@@ -23,13 +23,13 @@ jobs:
 
       - name: Unlock git-crypt
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_ROOT_PRIVATE_KEY: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
         run: |
-          if [ -z "$GPG_PRIVATE_KEY" ]; then
-            echo "GPG_PRIVATE_KEY is not set. Exiting."
+          if [ -z "$GPG_ROOT_PRIVATE_KEY" ]; then
+            echo "Error: GPG_ROOT_PRIVATE_KEY is not set."
             exit 1
           fi
-          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          printf '%s' "$GPG_ROOT_PRIVATE_KEY" | gpg --batch --import
           git crypt unlock
 
       - name: Sync maintainers
