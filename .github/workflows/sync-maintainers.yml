@@ -18,8 +18,19 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
-      - name: Install git-crypt
+      - name: Install git crypt
         run: sudo apt-get update && sudo apt-get install -y git-crypt
+
+      - name: Unlock git-crypt
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "GPG_PRIVATE_KEY is not set. Exiting."
+            exit 1
+          fi
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          git crypt unlock
 
       - name: Sync maintainers
         run: ./ci/sync-maintainers
