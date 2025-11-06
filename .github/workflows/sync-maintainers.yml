@@ -1,0 +1,56 @@
+name: Sync Maintainers
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "maintainers.yml"
+      - "ci/sync-maintainers"
+      - ".github/workflows/sync-maintainers.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-maintainers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install git crypt
+        run: sudo apt-get update && sudo apt-get install -y git-crypt
+
+      - name: Unlock git-crypt
+        env:
+          GPG_ROOT_PRIVATE_KEY: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GPG_ROOT_PRIVATE_KEY" ]; then
+            echo "Error: GPG_ROOT_PRIVATE_KEY is not set."
+            exit 1
+          fi
+          printf '%s' "$GPG_ROOT_PRIVATE_KEY" | gpg --batch --import
+          git crypt unlock
+
+      - name: Sync maintainers
+        run: |
+          set -eo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          ./ci/sync-maintainers | tee /tmp/sync-maintainers.log
+
+          if ! git diff --cached --quiet; then
+            {
+              echo "maintainers: synchronized"
+              echo
+              cat /tmp/sync-maintainers.log
+            } | git commit -F -
+            git push
+          else
+            echo "No changes to commit."
+          fi

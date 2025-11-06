@@ -1,0 +1,18 @@
+- name: root
+  email: root@pwn.college
+  github: pwncollege
+  groups: ["*"]
+  key: |
+    -----BEGIN PGP PUBLIC KEY BLOCK-----
+
+    mDMEaQqZ6hYJKwYBBAHaRw8BAQdACmSEPdcnlygOENHH1D1eqOzWnhnqFyXcSPO1
+    tVY+DKG0I3B3bi5jb2xsZWdlIHJvb3QgPHJvb3RAcHduLmNvbGxlZ2U+iJMEExYK
+    ADsWIQSmwb2KoZvnzBsF3W4eGA8CndVGDwUCaQqZ6gIbIwULCQgHAgIiAgYVCgkI
+    CwIEFgIDAQIeBwIXgAAKCRAeGA8CndVGD+p4AQC5mvuvaY8cavWtsvlRpH9z+0Sy
+    TUebETdZwzS+vl2UFAD/cVBFiF/ZjQLgR5T8u6Ln9CrjtWfPYiVpi8hWYid7awC4
+    OARpCpnqEgorBgEEAZdVAQUBAQdABVEUYvJrVe/E96fTj6+RFnl3cQSo5g1ZxQ/4
+    VeraHHQDAQgHiHgEGBYKACAWIQSmwb2KoZvnzBsF3W4eGA8CndVGDwUCaQqZ6gIb
+    DAAKCRAeGA8CndVGD5EdAQCFQ4m8M0ex7JHGdFXesMmqSgR2svwImrElIV0Trku6
+    kgEAxWnuV4aC9KP5eyj3qwzFCP0FWMMoDYLfFnrz0PKBSQU=
+    =mvyK
+    -----END PGP PUBLIC KEY BLOCK-----

@@ -1,0 +1,20 @@
+name: Check Maintainers
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "maintainers.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Check Maintainers
+        run: ci/check-maintainers ./maintainers.yml

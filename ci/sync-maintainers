@@ -1,0 +1,78 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "pyyaml>=6.0",
+# ]
+# ///
+
+import fnmatch
+import pathlib
+import subprocess
+import sys
+
+import yaml
+
+repository_root = pathlib.Path(
+    subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+)
+
+maintainers_path = repository_root / "maintainers.yml"
+maintainers = yaml.safe_load(maintainers_path.read_text())
+
+keys_path = repository_root / ".git-crypt" / "keys"
+all_groups = sorted(path.name for path in keys_path.iterdir())
+
+for maintainer in maintainers:
+    key_metadata = subprocess.check_output(
+        [
+            "gpg",
+            "--batch",
+            "--with-colons",
+            "--import-options",
+            "show-only",
+            "--import",
+        ],
+        text=True,
+        input=maintainer["key"],
+    )
+    fingerprint = next(
+        (
+            line.split(":")[9].upper()
+            for line in key_metadata.splitlines()
+            if line.startswith("fpr:")
+        ),
+        None,
+    )
+
+    subprocess.run(
+        ["gpg", "--batch", "--import"],
+        check=True,
+        text=True,
+        input=maintainer["key"],
+        stdout=sys.stderr,
+    )
+
+    maintainer_groups = [
+        group
+        for group in all_groups
+        if any(fnmatch.fnmatchcase(group, pattern) for pattern in maintainer["groups"])
+    ]
+
+    for group in maintainer_groups:
+        if (keys_path / group / "0" / f"{fingerprint}.gpg").exists():
+            continue
+        print(f"[+] {maintainer['name']} ({fingerprint}) -> {group}")
+        subprocess.run(
+            [
+                "git-crypt",
+                "add-gpg-user",
+                "-k",
+                group,
+                "--no-commit",
+                "--trusted",
+                fingerprint,
+            ],
+            check=True,
+            stdout=sys.stderr,
+        )

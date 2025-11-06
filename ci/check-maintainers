@@ -1,0 +1,181 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "pyyaml>=6.0",
+#   "pydantic[email]>=2.0",
+#   "requests>=2.31",
+# ]
+# ///
+
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
+from typing import List, Optional
+
+import yaml
+from pydantic import (
+    BaseModel,
+    RootModel,
+    Field,
+    EmailStr,
+    ValidationError,
+    field_validator,
+)
+from pydantic.config import ConfigDict
+
+PGP_BEGIN = "-----BEGIN PGP PUBLIC KEY BLOCK-----"
+PGP_END = "-----END PGP PUBLIC KEY BLOCK-----"
+
+UNIQUE_MAINTAINER_FIELDS = ["name", "github", "key", "email"]
+
+class Maintainer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(pattern=r"^[a-z]{3,20}$", description="3-20 lowercase letters")
+    github: str = Field(
+        pattern=r"^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$",
+        description="1-39 lowercase letters, digits, or hyphens, and cannot begin or end with a hyphen",
+    )
+    groups: List[str] = Field(
+        min_length=1, description="a non-empty list of glob patterns"
+    )
+    key: str = Field(description="a valid ASCII-armored PGP public key block")
+    email: Optional[EmailStr] = Field(
+        default=None, description="a valid email address, if provided"
+    )
+
+    @field_validator("key")
+    @classmethod
+    def key_imports_with_gpg(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("key must be a string")
+
+        key = value.strip()
+        if not (key.startswith(PGP_BEGIN) and key.endswith(PGP_END)):
+            raise ValueError("key must be an ASCII-armored PGP public key block")
+        key += "\n"
+
+        gnupghome = tempfile.mkdtemp(prefix="gpg-")
+        os.chmod(gnupghome, 0o700)
+
+        try:
+            gpg_output = subprocess.check_output(
+                [
+                    "gpg",
+                    "--batch",
+                    "--no-tty",
+                    "--import-options",
+                    "show-only",
+                    "--import",
+                ],
+                env={**os.environ, "GNUPGHOME": gnupghome},
+                text=True,
+                input=key,
+            )
+        except subprocess.CalledProcessError as e:
+            gpg_output = (e.stderr or e.stdout or "").strip()
+            raise ValueError(f"gpg import failed: {gpg_output}")
+        finally:
+            shutil.rmtree(gnupghome, ignore_errors=True)
+        return value
+
+
+class Maintainers(RootModel[List[Maintainer]]):
+    pass
+
+
+GITHUB_STEP_SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY")
+
+maintainers_path = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else None
+if not maintainers_path:
+    print(f"Usage: {sys.argv[0]} <path to maintainers.yml>", file=sys.stderr)
+    sys.exit(1)
+
+if not maintainers_path.exists():
+    print(f"Maintainers file {maintainers_path} does not exist.", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    maintainers = yaml.safe_load(maintainers_path.read_text())
+except yaml.YAMLError as e:
+    print(
+        (
+            "## ❌ Issues found in `maintainers.yml`\n"
+            "YAML parse error:\n"
+            f"\n```\n{e}\n```"
+        ),
+        file=open(GITHUB_STEP_SUMMARY, "a") if GITHUB_STEP_SUMMARY else sys.stderr,
+    )
+    sys.exit(1)
+
+try:
+    Maintainers.model_validate(maintainers)
+except ValidationError as e:
+    details = ["## ❌ Issues found in `maintainers.yml`"]
+    if any(len(error["loc"]) != 2 for error in e.errors()):
+        details.append("The maintainers file is malformed.")
+        details.append(f"\n```\n{e}\n```")
+    else:
+        maintainer_errors = {}
+        for error in e.errors():
+            index, field = error["loc"]
+            maintainer_errors.setdefault(index, {})[field] = error
+        details.append(
+            f"Found issues for {len(maintainer_errors)} maintainer(s), {sum(len(errs) for errs in maintainer_errors.values())} issue(s) total."
+        )
+        for maintainer_index, errors in sorted(maintainer_errors.items()):
+            if "name" in errors:
+                details.append(f"\n### Maintainer at index {maintainer_index}:")
+            else:
+                name = maintainers[maintainer_index]["name"]
+                details.append(
+                    f"\n### Maintainer named `{name}` (at index {maintainer_index}):"
+                )
+            for field, error in errors.items():
+                if error["type"] == "extra_forbidden":
+                    details.append(f"- **{field}** is not a valid field")
+                    continue
+                field_description = Maintainer.model_fields[field].description
+                if error["type"] == "missing":
+                    details.append(
+                        f"- **{field}** is required, but missing ({field_description})"
+                    )
+                else:
+                    details.append(f"- **{field}** is invalid ({field_description})")
+
+    print(
+        "".join(f"{detail}\n" for detail in details),
+        file=open(GITHUB_STEP_SUMMARY, "a") if GITHUB_STEP_SUMMARY else sys.stderr,
+    )
+    sys.exit(1)
+
+duplicate_value_errors = {}
+for field in UNIQUE_MAINTAINER_FIELDS:
+    shared_values = {}
+    for maintainer in maintainers:
+        shared_values.setdefault(maintainer.get(field), []).append(maintainer)
+    duplicate_values = {
+        value: maintainers
+        for value, maintainers in shared_values.items()
+        if value is not None and len(maintainers) > 1
+    }
+    for duplicate_maintainers in duplicate_values.values():
+        duplicate_value_errors.setdefault(field, []).append(duplicate_maintainers)
+if duplicate_value_errors:
+    details = ["## ❌ Issues found in `maintainers.yml`"]
+    for field in duplicate_value_errors:
+        for duplicate_maintainers in duplicate_value_errors[field]:
+            details.append(
+                f"\n### Duplicate values found for `{field}` (must be unique), shared by {len(duplicate_maintainers)} maintainers:"
+            )
+            for maintainer in duplicate_maintainers:
+                details.append(f"- `{maintainer['name']}`")
+    print(
+        "".join(f"{detail}\n" for detail in details),
+        file=open(GITHUB_STEP_SUMMARY, "a") if GITHUB_STEP_SUMMARY else sys.stderr,
+    )
+    sys.exit(1)
