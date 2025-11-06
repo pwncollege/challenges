@@ -88,21 +88,7 @@ class Maintainers(RootModel[List[Maintainer]]):
     pass
 
 
-REPOSITORY = os.environ.get("REPOSITORY")
-PR_NUMBER = os.environ.get("PR_NUMBER")
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_STEP_SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY")
-
-if not (REPOSITORY and PR_NUMBER and GITHUB_TOKEN):
-    print("Missing REPOSITORY, PR_NUMBER, or GITHUB_TOKEN in env.", file=sys.stderr)
-    sys.exit(2)
-
-headers = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
-    "Accept": "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "ci-check-maintainers",
-}
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--old", type=pathlib.Path, required=True)
