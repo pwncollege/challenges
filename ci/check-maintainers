@@ -8,7 +8,6 @@
 # ]
 # ///
 
-import argparse
 import os
 import pathlib
 import shutil
@@ -31,6 +30,7 @@ from pydantic.config import ConfigDict
 PGP_BEGIN = "-----BEGIN PGP PUBLIC KEY BLOCK-----"
 PGP_END = "-----END PGP PUBLIC KEY BLOCK-----"
 
+UNIQUE_MAINTAINER_FIELDS = ["name", "github", "key", "email"]
 
 class Maintainer(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -90,27 +90,17 @@ class Maintainers(RootModel[List[Maintainer]]):
 
 GITHUB_STEP_SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY")
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--old", type=pathlib.Path, required=True)
-parser.add_argument("--new", type=pathlib.Path, required=True)
-args = parser.parse_args()
-
-if not args.old.exists():
-    print(f"Old maintainers file {args.old} does not exist.", file=sys.stderr)
+maintainers_path = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else None
+if not maintainers_path:
+    print(f"Usage: {sys.argv[0]} <path to maintainers.yml>", file=sys.stderr)
     sys.exit(1)
-if not args.new.exists():
-    print(f"New maintainers file {args.new} does not exist.", file=sys.stderr)
+
+if not maintainers_path.exists():
+    print(f"Maintainers file {maintainers_path} does not exist.", file=sys.stderr)
     sys.exit(1)
 
 try:
-    old_maintainers = yaml.safe_load(args.old.read_text())
-except yaml.YAMLError as e:
-    print("Errors parsing old maintainers.yml:", file=sys.stderr)
-    print(e, file=sys.stderr)
-    sys.exit(1)
-
-try:
-    new_maintainers = yaml.safe_load(args.new.read_text())
+    maintainers = yaml.safe_load(maintainers_path.read_text())
 except yaml.YAMLError as e:
     print(
         (
@@ -122,19 +112,8 @@ except yaml.YAMLError as e:
     )
     sys.exit(1)
 
-if old_maintainers == new_maintainers:
-    print("No changes to maintainers.yml detected.")
-    sys.exit(0)
-
 try:
-    Maintainers.model_validate(old_maintainers)
-except ValidationError as e:
-    print("Errors in old maintainers.yml:", file=sys.stderr)
-    print(e, file=sys.stderr)
-    sys.exit(1)
-
-try:
-    Maintainers.model_validate(new_maintainers)
+    Maintainers.model_validate(maintainers)
 except ValidationError as e:
     details = ["## ❌ Issues found in `maintainers.yml`"]
     if any(len(error["loc"]) != 2 for error in e.errors()):
@@ -152,7 +131,7 @@ except ValidationError as e:
             if "name" in errors:
                 details.append(f"\n### Maintainer at index {maintainer_index}:")
             else:
-                name = new_maintainers[maintainer_index]["name"]
+                name = maintainers[maintainer_index]["name"]
                 details.append(
                     f"\n### Maintainer named `{name}` (at index {maintainer_index}):"
                 )
@@ -175,26 +154,25 @@ except ValidationError as e:
     sys.exit(1)
 
 duplicate_value_errors = {}
-unique_fields = ["name", "github", "key", "email"]
-for field in unique_fields:
+for field in UNIQUE_MAINTAINER_FIELDS:
     shared_values = {}
-    for maintainer in new_maintainers:
+    for maintainer in maintainers:
         shared_values.setdefault(maintainer.get(field), []).append(maintainer)
     duplicate_values = {
         value: maintainers
         for value, maintainers in shared_values.items()
         if value is not None and len(maintainers) > 1
     }
-    for maintainers in duplicate_values.values():
-        duplicate_value_errors.setdefault(field, []).append(maintainers)
+    for duplicate_maintainers in duplicate_values.values():
+        duplicate_value_errors.setdefault(field, []).append(duplicate_maintainers)
 if duplicate_value_errors:
     details = ["## ❌ Issues found in `maintainers.yml`"]
     for field in duplicate_value_errors:
-        for maintainers in duplicate_value_errors[field]:
+        for duplicate_maintainers in duplicate_value_errors[field]:
             details.append(
-                f"\n### Duplicate values found for `{field}` (must be unique), shared by {len(maintainers)} maintainers:"
+                f"\n### Duplicate values found for `{field}` (must be unique), shared by {len(duplicate_maintainers)} maintainers:"
             )
-            for maintainer in maintainers:
+            for maintainer in duplicate_maintainers:
                 details.append(f"- `{maintainer['name']}`")
     print(
         "".join(f"{detail}\n" for detail in details),

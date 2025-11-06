@@ -10,33 +10,11 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      # 1) Trusted code: base repo at the base SHA
-      - name: Checkout BASE (trusted)
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: base
-          persist-credentials: false
-          fetch-depth: 1
-
-      # 2) Untrusted content: PR head in a separate dir, no credentials persisted
-      - name: Checkout PR HEAD (untrusted)
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: pr
-          persist-credentials: false
-          fetch-depth: 1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
       - name: Check Maintainers
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          pr/ci/check-maintainers \
-            --old base/maintainers.yml \
-            --new pr/maintainers.yml \
+        run: ci/check-maintainers ./maintainers.yml
