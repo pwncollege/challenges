@@ -13,36 +13,28 @@ jobs:
   label:
     runs-on: ubuntu-latest
     steps:
-      - name: Detect if PR modifies maintainers.yml
-        id: diff
+      - name: Detect modified files
+        id: modified
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # List changed files in the PR
           if gh api \
                "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
                --paginate -q '.[].filename' | grep -xq 'maintainers.yml'; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "maintainers=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Ensure label exists (create or update)
+      - name: Ensure labels exist (create or update)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Try create; if exists, update color/description
           gh label create 'maintainers modified' \
             --repo "${{ github.repository }}" \
             --color F1C40F \
-            --description 'PR modifies maintainers.yml' \
-          || gh label edit 'maintainers modified' \
-            --repo "${{ github.repository }}" \
-            --color F1C40F \
-            --description 'PR modifies maintainers.yml'
+            --description 'PR modifies maintainers.yml' || true
 
       - name: Add label if modified
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.modified.outputs.maintainers == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -51,7 +43,7 @@ jobs:
             --add-label "maintainers modified"
 
       - name: Remove label if not modified
-        if: steps.diff.outputs.changed != 'true'
+        if: steps.modified.outputs.maintainers != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

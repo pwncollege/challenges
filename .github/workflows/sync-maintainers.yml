@@ -2,7 +2,7 @@ name: Sync Maintainers
 
 on:
   push:
-    # branches: [ main ]
+    branches: [ main ]
     paths:
       - "maintainers.yml"
       - "ci/sync-maintainers"
