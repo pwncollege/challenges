@@ -37,6 +37,6 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          base/ci/check-maintainers \
+          pr/ci/check-maintainers \
             --old base/maintainers.yml \
             --new pr/maintainers.yml \
