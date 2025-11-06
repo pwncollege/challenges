@@ -16,3 +16,23 @@
     kgEAxWnuV4aC9KP5eyj3qwzFCP0FWMMoDYLfFnrz0PKBSQU=
     =mvyK
     -----END PGP PUBLIC KEY BLOCK-----
+
+
+- name: connor
+  email: connor@connornelson.com
+  github: connornelson
+  groups: ["*"]
+  key: |
+    -----BEGIN PGP PUBLIC KEY BLOCK-----
+
+    mDMEaNM0IBYJKwYBBAHaRw8BAQdARZB5G+5n7Agin2ecURyZf9tj/SdDR3GsYFRD
+    50UdAZ60J0Nvbm5vciBOZWxzb24gPGNvbm5vckBjb25ub3JuZWxzb24uY29tPoiT
+    BBMWCgA7FiEE0RSHEpHp7nBHH4vP9C2y/xGRXn8FAmjTNCACGwMFCwkIBwICIgIG
+    FQoJCAsCBBYCAwECHgcCF4AACgkQ9C2y/xGRXn/wUAD+MIKfW7T4RcMYbIsAYtcF
+    7YfYdPpvjTfEv2e7TRppDtQA/ApShEbk5fF1BiRIEw4ocT/fNTzGu191plqZUb+Q
+    zCQAuDgEaNM0IBIKKwYBBAGXVQEFAQEHQKZBv3bHfJNjjnHwTd9ectgw0yahlwgs
+    2Tgs+frdG0xzAwEIB4h4BBgWCgAgFiEE0RSHEpHp7nBHH4vP9C2y/xGRXn8FAmjT
+    NCACGwwACgkQ9C2y/xGRXn/sJQD/TxtrBccnVJqEt89Jri1E8UiBY/DLUCYhQtEN
+    spm8LYwBAOA8FQ9wXepXIKVk6bMHSTTuW/Fcwr4wxv+IxMAdgOYF
+    =auuL
+    -----END PGP PUBLIC KEY BLOCK-----
