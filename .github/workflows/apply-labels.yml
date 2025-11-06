@@ -1,7 +1,7 @@
 name: Apply PR Labels
 
 on:
-  pull_request_target:
+  pull_request_target:  # This event is *dangerous*, we must be careful about running untrusted code!
     types: [opened, synchronize, reopened]
 
 permissions:
