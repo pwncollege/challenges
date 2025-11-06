@@ -7,12 +7,13 @@
 # ///
 
 import fnmatch
+import pathlib
 import subprocess
-from pathlib import Path
+import sys
 
 import yaml
 
-repository_root = Path(
+repository_root = pathlib.Path(
     subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
 )
 
@@ -49,7 +50,7 @@ for maintainer in maintainers:
         check=True,
         text=True,
         input=maintainer["key"],
-        stdout=subprocess.STDERR,
+        stdout=sys.stderr,
     )
 
     maintainer_groups = [
@@ -73,5 +74,5 @@ for maintainer in maintainers:
                 fingerprint,
             ],
             check=True,
-            stdout=subprocess.STDERR,
+            stdout=sys.stderr,
         )
