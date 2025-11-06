@@ -8,6 +8,9 @@ on:
       - "ci/sync-maintainers"
       - ".github/workflows/sync-maintainers.yml"
 
+permissions:
+  contents: write
+
 jobs:
   sync-maintainers:
     runs-on: ubuntu-latest
@@ -41,7 +44,7 @@ jobs:
 
           ./ci/sync-maintainers | tee /tmp/sync-maintainers.log
 
-          if ! git diff --quiet; then
+          if ! git diff --cached --quiet; then
             {
               echo "maintainers: synchronized"
               echo
