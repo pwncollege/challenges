@@ -54,3 +54,6 @@ if [ -x /challenge/.init ]; then
     exec /challenge/.init
 fi
 EOF
+
+ARG CHALLENGE_PATH="/opt/dojos/{{ challenge_path }"
+ENV CHALLENGE_PATH="${CHALLENGE_PATH}"
