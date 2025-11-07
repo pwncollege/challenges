@@ -1,2 +1,4 @@
 maintainers modified:
-  - 'maintainers.yml'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'maintainers.yml'
