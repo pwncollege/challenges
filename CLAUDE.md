@@ -32,7 +32,7 @@ DO NOT run these scripts without ./build.py: the dependencies are not installed 
 - `MODULE_ID/CHALLENGE_ID/challenge/`: Challenge source code and artifacts. IF YOU PROVIDE A DOCKERFILE, PUT IT HERE
 - `MODULE_ID/CHALLENGE_ID/tests_public/`: Unencrypted functionality tests
 - `MODULE_ID/CHALLENGE_ID/tests_private/`: Encrypted exploitation tests
-- `MODULE_ID/base_templates/`: Shared Jinja2 templates for the module
+- `MODULE_ID/common/`: Shared Jinja2 templates for the module
 
 ### Templating System
 - Files ending in `.j2` are Jinja2 templates rendered during build
@@ -42,7 +42,7 @@ DO NOT run these scripts without ./build.py: the dependencies are not installed 
 - C templates are auto-formatted with astyle
 
 ### Template Inheritance and Variables
-- Challenge templates should use `{% extends %}` not `{% include %}` for base templates
+- Challenge templates should use `{% extends %}` not `{% include %}` when referencing shared templates from `common/`
 - Use `{% block setup %}` to set variables on the `settings` namespace
 - Call `super()` in setup blocks to preserve parent template initialization
 - The `settings` namespace is created by flask.py.j2 and passed through the template hierarchy
@@ -56,7 +56,7 @@ DO NOT run these scripts without ./build.py: the dependencies are not installed 
 - Binary challenges may not need templates at all - they can be compiled and placed directly in `challenge/`
 
 ### Docker Build Process
-1. If no `Dockerfile` exists, uses `./base_templates/default-dockerfile.j2`
+1. If no `Dockerfile` exists, uses `./common/default-dockerfile.j2`
 2. Copies `challenge/` directory to `/challenge` in container
 3. Executes `.setup` script if present during build
 4. Executes `.init` script if present at container startup
@@ -71,9 +71,9 @@ DO NOT run these scripts without ./build.py: the dependencies are not installed 
 ## Challenge Development Workflow
 
 1. Create challenge directory: `MODULE_ID/CHALLENGE_ID/`
-2. Create or extend base templates in `MODULE_ID/base_templates/` if needed
+2. Create or extend common templates in `MODULE_ID/common/` if needed
 3. Add challenge files to `challenge/` directory (binaries, scripts, configs, etc.)
-4. If using templates, extend appropriate base template and set variables in `{% block setup %}`
+4. If using templates, extend the appropriate common template and set variables in `{% block setup %}`
 5. Make executable files and templates executable: `chmod +x MODULE_ID/CHALLENGE_ID/**/*.j2`
 6. Write `tests_public/test_*.py.j2` for functionality verification
 7. Write `tests_private/test_*.py.j2` for exploitation verification
@@ -83,7 +83,7 @@ DO NOT run these scripts without ./build.py: the dependencies are not installed 
 
 ### Web Challenge (Flask-based)
 ```jinja2
-{%- extends "base_templates/sqli-pw.py.j2" -%}
+{%- extends "common/sqli-pw.py.j2" -%}
 
 {% block setup %}
   {{- super() -}}
@@ -107,7 +107,7 @@ Can be a simple Python/Bash script with or without templating, depending on rand
 - Templates can extend `default-dockerfile.j2` or provide custom Dockerfiles
 - Challenge verification should be split between public (functionality) and private (exploitation) tests
 - The `challenge` object is available in templates with a seeded `random` attribute for deterministic randomization
-- Use existing base templates where possible (flask.py.j2, cmdi.py.j2, sqli-pw.py.j2, etc.)
+- Use existing common templates where possible (flask.py.j2, cmdi.py.j2, sqli-pw.py.j2, etc.)
 - Study existing challenges (cmdi-*, path-traversal-*) for patterns and conventions
 
 ## Porting Legacy Challenges

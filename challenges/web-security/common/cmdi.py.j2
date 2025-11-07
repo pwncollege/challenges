@@ -1,7 +1,7 @@
-{%- extends "base_templates/flask.py.j2" -%}
+{%- extends "common/flask.py.j2" -%}
 
 {% block setup %}
-  {%- from 'base_templates/random_names.j2' import generate_names -%}
+  {%- from 'common/random_names.j2' import generate_names -%}
   {{- generate_names(challenge, random) -}}
   {%- set challenge.flask_host = "challenge.localhost" -%}
   {%- set challenge.reset_uid = True -%}

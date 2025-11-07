@@ -59,17 +59,17 @@ This can be confusing in python code, because python f-strings use single braces
 
 ### inheriting templates
 
-There are base templates sprinkled around this repository in `base_templates` subdirectories.
+There are shared "common" templates sprinkled around this repository in `common` subdirectories (these replaced the older `base_templates` convention).
 These templates typically `{% block %}` areas that you can override in your child template.
-Use `{% extends %}` to extend a base template and tweak these blocks, not `{% include %}`.
+Use `{% extends %}` to extend a common template and tweak these blocks, not `{% include %}`.
 
-Most base templates included in this repository support various customizations via a `settings` namespace that can be customized by child templates in a `setup` block.
+Most common templates included in this repository support various customizations via a `settings` namespace that can be customized by child templates in a `setup` block.
 Set variables in `{% block setup %}` blocks and call `{{- super() -}}` to preserve parent initialization.
 
 ### Key Template Files
 
-- `base_templates/flask.py.j2` - Base Flask application template
-- `base_templates/random_names.j2` - Macro for generating random endpoints and parameter names
+- `common/flask.py.j2` - Common Flask application template
+- `common/random_names.j2` - Macro for generating random endpoints and parameter names
 - `default-dockerfile.j2` - Default Docker container template
 
 Anything can be templated, including `./$MODULE_ID/$CHALLENGE_ID/challenge/Dockerfile.j2` (for example, to extend the `default-dockerfile.j2` template with additional packages to install and so on).
@@ -130,7 +130,7 @@ The process of porting is:
 1. Identify the challenges to be ported by reading the `module.yml` file of the emodule. If you are an AI, make this your TODO list: for each challenge, you will port out the challenge itself, the `tests_public` functionality tests (that don't give away the solution), and the `tests_private` solution/vulnerability tests. List each challenge and each challenge subtask in the todo list.
 2. Determine any connections to the pwnshop templates by looking at `module.yml`. This will be specified by the `auxiliary: pwnshop:` dictionary, which will determine the pwnshop challenge class and other arguments.
 3. If a pwnshop challenge is specified, look at `pwncollege-modules/$WHATEVER_MODULE_ID/__init__.py` for the appropriate class and determine the template and challenge logic to port out, if any.
-4. Create base templates in `./$MODULE_ID/base_templates/` if multiple challenges share patterns
+4. Create common templates in `./$MODULE_ID/common/` if multiple challenges share patterns
 5. Port challenge files to `./$MODULE_ID/$CHALLENGE_ID/challenge/` (binaries, scripts, configs, etc.)
 6. If using templates, use `{% extends %}` and `{% block setup %}` for customization
 7. Ensure all executable files are marked as such: `chmod +x ./$MODULE_ID/$CHALLENGE_ID/**/*.j2`. Rendered files inherit permissions from the template.
