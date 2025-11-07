@@ -1,8 +1,0 @@
-*/*/tests_private/** filter=git-crypt diff=git-crypt
-*/*/tests_private filter=git-crypt diff=git-crypt
-web-security/*/tests_private/** filter=git-crypt-web-security diff=git-crypt-web-security
-web-security/*/tests_private filter=git-crypt-web-security diff=git-crypt-web-security
-sql-playground/*/tests_private/** filter=git-crypt-sql-playground diff=git-crypt-sql-playground
-sql-playground/*/tests_private filter=git-crypt-sql-playground diff=git-crypt-sql-playground
-what-is-a-bug/*/tests_private/** filter=git-crypt-what-is-a-bug diff=git-crypt-what-is-a-bug
-what-is-a-bug/*/tests_private filter=git-crypt-what-is-a-bug diff=git-crypt-what-is-a-bug
