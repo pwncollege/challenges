@@ -21,12 +21,12 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       has-changes: ${{ steps.set-matrix.outputs.has-changes }}
-    
+
     steps:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0  # Fetch all history for proper diff
-    
+
     - name: Get challenges to test
       id: changed-challenges
       run: |
@@ -40,39 +40,39 @@ jobs:
         else
           # Set up environment variables for the script
           export GITHUB_EVENT_NAME="${{ github.event_name }}"
-          
+
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             export GITHUB_BASE_SHA="${{ github.event.pull_request.base.sha }}"
           else
             export GITHUB_EVENT_BEFORE="${{ github.event.before }}"
             export GITHUB_EVENT_AFTER="${{ github.event.after }}"
           fi
-          
+
           # Run the changed challenges detection script and capture output
-          CHALLENGES=$(./ci/changed_challenges.sh | tr '\n' ' ')
+          CHALLENGES=$(./ci/list-changed-challenges | tr '\n' ' ')
         fi
-        
+
         # Output for debugging
         echo "Challenges to test: $CHALLENGES"
-        
+
         # Save raw output
         echo "challenges=$CHALLENGES" >> $GITHUB_OUTPUT
-    
+
     - name: Set up matrix
       id: set-matrix
       run: |
         CHALLENGES="${{ steps.changed-challenges.outputs.challenges }}"
-        
+
         if [ -z "$CHALLENGES" ]; then
           echo "No challenges to test"
           echo "has-changes=false" >> $GITHUB_OUTPUT
           echo 'matrix={"challenge":[]}' >> $GITHUB_OUTPUT
         else
           echo "has-changes=true" >> $GITHUB_OUTPUT
-          
+
           # Convert space-separated list to JSON array using jq (trim whitespace first)
           MATRIX=$(echo "$CHALLENGES" | xargs | tr ' ' '\n' | jq -R . | jq -s '{challenge: .}' -c)
-          
+
           echo "Matrix: $MATRIX"
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
         fi
@@ -84,22 +84,22 @@ jobs:
     strategy:
       fail-fast: false  # Continue testing other challenges even if one fails
       matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
-    
+
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
         cache-dependency-glob: build
-    
+
     - name: Set up Docker
       uses: docker/setup-buildx-action@v3
-    
+
     - name: Install git-crypt
       run: |
         sudo apt-get update && sudo apt-get install -y git-crypt
-    
+
     - name: Remove encrypted directories
       run: |
         # Find and remove directories containing encrypted files using git-crypt status (these cannot be tested currently)
@@ -110,10 +110,10 @@ jobs:
         echo "================================================"
         echo "Testing challenge: ${{ matrix.challenge }}"
         echo "================================================"
-        
+
         # Run the test and transform FAILED lines on the fly
         ./build "./challenges/${{ matrix.challenge }}" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: ${{ matrix.challenge }}/|"
-        
+
         # Check exit status of build (not sed)
         if [ ${PIPESTATUS[0]} -eq 0 ]; then
           echo "================================================"
