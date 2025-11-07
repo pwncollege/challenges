@@ -1,0 +1,11 @@
+#!/usr/bin/python
+
+from pathlib import Path
+import sys
+
+entries = list(Path("/challenge").iterdir())
+if not entries:
+    sys.exit("No challenge files found")
+
+print("Challenge files:")
+print("\n".join(map(str, entries)))

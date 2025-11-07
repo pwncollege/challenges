@@ -6,30 +6,32 @@ FROM pwncollege/challenge-legacy:latest
 WORKDIR /opt/dojos
 
 # Getting Started
-ADD https://github.com/pwncollege/welcome-dojo ./welcome-dojo
-ADD https://github.com/pwncollege/linux-luminarium ./linux-luminarium
-ADD https://github.com/pwncollege/computing-101 ./computing-101
-ADD https://github.com/pwncollege/fundamentals-dojo ./fundamentals-dojo
+ADD https://github.com/pwncollege/welcome-dojo.git ./welcome-dojo
+ADD https://github.com/pwncollege/linux-luminarium.git ./linux-luminarium
+ADD https://github.com/pwncollege/computing-101.git ./computing-101
+ADD https://github.com/pwncollege/fundamentals-dojo.git ./fundamentals-dojo
 
 # Core Material
-ADD https://github.com/pwncollege/intro-to-cybersecurity-dojo ./intro-to-cybersecurity-dojo
-ADD https://github.com/pwncollege/program-security-dojo ./program-security-dojo
-ADD https://github.com/pwncollege/system-security-dojo ./system-security-dojo
-ADD https://github.com/pwncollege/software-exploitation-dojo ./software-exploitation-dojo
+ADD https://github.com/pwncollege/intro-to-cybersecurity-dojo.git ./intro-to-cybersecurity-dojo
+ADD https://github.com/pwncollege/program-security-dojo.git ./program-security-dojo
+ADD https://github.com/pwncollege/system-security-dojo.git ./system-security-dojo
+ADD https://github.com/pwncollege/software-exploitation-dojo.git ./software-exploitation-dojo
 
 # Official Community dojos
-ADD https://github.com/pwncollege/xnu-dojo ./xnu-dojo
-ADD https://github.com/pwncollege/injection-dojo ./injection-dojo
-ADD https://github.com/pwncollege/arm-dojo ./arm-dojo
-# ADD https://github.com/prathamgupta36/cryptomania ./cryptomania
-ADD https://github.com/pwncollege/windows-dojo ./windows-dojo
-# ADD https://github.com/robwaz/demo-dojo ./demo-dojo
+ADD https://github.com/pwncollege/xnu-dojo.git ./xnu-dojo
+ADD https://github.com/pwncollege/injection-dojo.git ./injection-dojo
+ADD https://github.com/pwncollege/arm-dojo.git ./arm-dojo
+# ADD https://github.com/prathamgupta36/cryptomania.git ./cryptomania
+ADD https://github.com/pwncollege/windows-dojo.git ./windows-dojo
+# ADD https://github.com/robwaz/demo-dojo.git ./demo-dojo
 
 # Archives
-ADD https://github.com/pwncollege/archive-dojo ./archive-dojo
-# ADD https://github.com/pwncollege/ctf-archive ./ctf-archive
+ADD https://github.com/pwncollege/archive-dojo.git ./archive-dojo
+# ADD https://github.com/pwncollege/ctf-archive.git ./ctf-archive
 
-COPY --chmod=755 <<EOF /challenge/.init
+WORKDIR /
+
+COPY --chmod=755 <<'EOF' /challenge/.init
 #!/bin/bash
 set -eou pipefail
 
