@@ -72,7 +72,7 @@ find_dependent_challenges() {
     # Find all .j2 files in challenge dirs that reference this template
     find challenges -name "*.j2" -path "*/challenge/*" 2>/dev/null | \
         xargs grep -lE "{%-? *(extends|include).*[\"'](.*/)?(${name}|${rel_path})[\"']" 2>/dev/null | \
-        sed 's|^challenges/||' | cut -d'/' -f1-2 | sort -u || true
+        sed 's|^challenges/||' | sed -E 's#/challenge/.*##' | sort -u || true
 }
 
 # Recursively find all templates that depend on a given template
@@ -112,8 +112,40 @@ find_child_templates() {
     printf '%s\n' "${seen[@]}"
 }
 
-DIRECT_CHALLENGES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^challenges/[^/]+/[^/]+/' | cut -d'/' -f2-3 | sort -u || true)
-CHANGED_COMMON_TEMPLATES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^challenges/[^/]+/common/.*\.j2$' || true)
+has_challenge_dir() {
+    local dir="$1"
+    [ -d "$dir/challenge" ]
+}
+
+find_challenge_root() {
+    local path="$1"
+    while [[ "$path" == challenges/* ]]; do
+        if has_challenge_dir "$path"; then
+            echo "${path#challenges/}"
+            return 0
+        fi
+        local parent
+        parent=$(dirname "$path")
+        if [ "$parent" = "$path" ]; then
+            break
+        fi
+        path="$parent"
+    done
+    return 1
+}
+
+DIRECT_CHALLENGES=$(
+    git diff --name-only "$BASE_SHA" "$HEAD_SHA" | \
+    while IFS= read -r path; do
+        [[ -z "$path" ]] && continue
+        [[ "$path" != challenges/* ]] && continue
+        dir=$(dirname "$path")
+        if challenge=$(find_challenge_root "$dir"); then
+            printf '%s\n' "$challenge"
+        fi
+    done | sort -u || true
+)
+CHANGED_COMMON_TEMPLATES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^challenges/.*/common/.*\.j2$' || true)
 
 declare -A AFFECTED_CHALLENGES_SET
 
