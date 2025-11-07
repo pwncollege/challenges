@@ -3,6 +3,28 @@
 from pathlib import Path
 import sys
 
+import yaml
+
+CHALLENGE_PATH = pathlib.Path(os.environ["CHALLENGE_PATH"])
+
+module_id = challenge_path.parent.name
+challenge_id = challenge_path.name
+
+dojo_path = challenge_path.parent.parent / "dojo.yml"
+module_path = challenge_path.parent / "module.yml"
+
+dojo = yaml.safe_load(dojo_path.read_text()) if dojo_path.exists() else None
+module = yaml.safe_load(module_path.read_text()) if module_path.exists() else dojo["modules"][module_id]
+
+challenge = (next((challenge for challenge in module.get("challenges", []) if challenge.get("id") == challenge_id), {}) or
+             next((challenge for challenge in module.get("resources", []) if challenge.get("id") == challenge_id), {}))
+if not challenge:
+    sys.exit(f"Could not find challenge {challenge_id} in module {module_id}")
+
+image = challenge.get("image") or module.get("image") or dojo.get("image") or "pwncollege/challenge-legacy:latest"
+if image not in ("pwncollege/challenge-legacy", "pwncollege/challenge-legacy:latest"):
+    sys.exit(f"Challenge {challenge_id} in module {module_id} requires unsupported image {image}")
+
 entries = list(Path("/challenge").iterdir())
 if not entries:
     sys.exit("No challenge files found")
