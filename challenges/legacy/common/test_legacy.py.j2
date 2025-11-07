@@ -6,7 +6,7 @@ import sys
 
 import yaml
 
-CHALLENGE_PATH = pathlib.Path(os.environ["CHALLENGE_PATH"])
+challenge_path = pathlib.Path(os.environ["CHALLENGE_PATH"])
 
 module_id = challenge_path.parent.name
 challenge_id = challenge_path.name
@@ -14,7 +14,10 @@ challenge_id = challenge_path.name
 dojo_path = challenge_path.parent.parent / "dojo.yml"
 module_path = challenge_path.parent / "module.yml"
 
-dojo = yaml.safe_load(dojo_path.read_text()) if dojo_path.exists() else None
+if not dojo_path.exists():
+    sys.exit("Could not find dojo.yml")
+
+dojo = yaml.safe_load(dojo_path.read_text())
 module = yaml.safe_load(module_path.read_text()) if module_path.exists() else dojo["modules"][module_id]
 
 challenge = (next((challenge for challenge in module.get("challenges", []) if challenge.get("id") == challenge_id), {}) or
