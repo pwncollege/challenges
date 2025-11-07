@@ -5,7 +5,7 @@ import atexit
 import time
 import os
 
-{% from 'base_templates/random_names.j2' import generate_names %}
+{% from 'common/random_names.j2' import generate_names %}
 {% set challenge = namespace() %}
 {{ generate_names(challenge, random) }}
 

@@ -9,7 +9,7 @@ open_ports = {s.laddr.port for s in psutil.net_connections(kind="inet") if s.sta
 if 80 not in open_ports:
     print("Service doesn't seem to be running?")
     sys.exit(1)
-{% from 'base_templates/random_names.j2' import generate_names %}
+{% from 'common/random_names.j2' import generate_names %}
 {% set challenge = namespace() %}
 {{ generate_names(challenge, random) }}
 

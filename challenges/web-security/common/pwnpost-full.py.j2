@@ -1,4 +1,4 @@
-{%- extends "base_templates/flask.py.j2" -%}
+{%- extends "common/flask.py.j2" -%}
 
 {% block setup %}
   {{- super() -}}
@@ -25,7 +25,7 @@ try:
 except (FileNotFoundError, PermissionError):
     flag = "pwn.college{placeholder_flag}"
 
-{% include 'base_templates/temporarydb.py.j2' %}
+{% include 'common/temporarydb.py.j2' %}
 
 # https://www.sqlite.org/lang_createtable.html
 db.execute("""CREATE TABLE posts AS SELECT ? AS content, "admin" AS author, FALSE AS published""", [flag])

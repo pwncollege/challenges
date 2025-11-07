@@ -1,4 +1,4 @@
-{%- extends "base_templates/flask.py.j2" -%}
+{%- extends "common/flask.py.j2" -%}
 
 {% block imports %}
 {% if challenge.table_identifier == "random_user_table" %}
@@ -12,7 +12,7 @@ import tempfile
 # Don't panic about this class. It simply implements a temporary database in which
 # this application can store data. You don't need to understand its internals, just
 # that it processes SQL queries using db.execute().
-{% include 'base_templates/temporarydb.py.j2' %}
+{% include 'common/temporarydb.py.j2' %}
 
 {% if challenge.table_identifier == "random_user_table" %}
 random_user_table = f"users_{{random.randrange(2**32, 2**33)}}"

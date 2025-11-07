@@ -7,7 +7,7 @@
 # If no arguments provided, it will try to detect from GitHub Actions environment
 # Output: Space-separated list of changed challenge paths (module/challenge format)
 #
-# This script also detects when base templates change and includes all challenges
+# This script also detects when common templates change and includes all challenges
 # that depend on those templates
 
 set -e
@@ -113,7 +113,7 @@ find_child_templates() {
 }
 
 DIRECT_CHALLENGES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^challenges/[^/]+/[^/]+/' | cut -d'/' -f2-3 | sort -u || true)
-CHANGED_BASE_TEMPLATES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^challenges/[^/]+/base_templates/.*\.j2$' || true)
+CHANGED_COMMON_TEMPLATES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^challenges/[^/]+/common/.*\.j2$' || true)
 
 declare -A AFFECTED_CHALLENGES_SET
 
@@ -124,8 +124,8 @@ for challenge in $DIRECT_CHALLENGES; do
     fi
 done
 
-# Process base template changes
-for template in $CHANGED_BASE_TEMPLATES; do
+# Process common template changes
+for template in $CHANGED_COMMON_TEMPLATES; do
     # Find all templates that depend on this one (including itself)
     for dependent_template in $(find_child_templates "$template"); do
         # Find all challenges using this template
