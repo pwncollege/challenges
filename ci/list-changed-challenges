@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Script to detect changed challenges in a git repository
-# Usage: ./changed_challenges.sh [BASE_SHA] [HEAD_SHA]
-#        ./changed_challenges.sh [BASE_SHA]  # compares BASE_SHA with HEAD
+# Usage: ./list-changed-challenges [BASE_SHA] [HEAD_SHA]
+#        ./list-changed-challenges [BASE_SHA]  # compares BASE_SHA with HEAD
 #
 # If no arguments provided, it will try to detect from GitHub Actions environment
 # Output: Space-separated list of changed challenge paths (module/challenge format)
@@ -30,7 +30,7 @@ elif [ -n "$GITHUB_EVENT_NAME" ]; then
         # For pushes, use the before and after commits from the push event
         BASE_SHA="${GITHUB_EVENT_BEFORE}"
         HEAD_SHA="${GITHUB_EVENT_AFTER}"
-        
+
         # If this is the first commit or force push with no common history
         if [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
             # Compare against empty tree
@@ -68,7 +68,7 @@ find_dependent_challenges() {
     local name=$(basename "$template")
     local rel_path=${template#challenges/}
     rel_path=${rel_path#*/}  # Remove module prefix
-    
+
     # Find all .j2 files in challenge dirs that reference this template
     find challenges -name "*.j2" -path "*/challenge/*" 2>/dev/null | \
         xargs grep -lE "{%-? *(extends|include).*[\"'](.*/)?(${name}|${rel_path})[\"']" 2>/dev/null | \
@@ -84,31 +84,31 @@ find_child_templates() {
     local module_dir="challenges/$module"
     local seen=()
     local queue=("$template")
-    
+
     while [ ${#queue[@]} -gt 0 ]; do
         local current="${queue[0]}"
         queue=("${queue[@]:1}")  # Remove first element
-        
+
         # Skip if already seen
         [[ " ${seen[@]} " =~ " ${current} " ]] && continue
         seen+=("$current")
-        
+
         local name=$(basename "$current")
         local rel_path=${current#challenges/}
         rel_path=${rel_path#*/}
-        
+
         # Find templates that reference this one
         local children=$(
             grep -rE "{%-? *(extends|include).*[\"'](.*/)?(${name}|${rel_path})[\"']" \
                 --include="*.j2" "$module_dir" 2>/dev/null | cut -d':' -f1 | sort -u || true
         )
-        
+
         # Add children to queue
         for child in $children; do
             [[ " ${seen[@]} " =~ " ${child} " ]] || queue+=("$child")
         done
     done
-    
+
     printf '%s\n' "${seen[@]}"
 }
 
