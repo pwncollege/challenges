@@ -1,52 +1,13 @@
-name: Apply PR Labels
+name: Apply Labels
 
 on:
-  pull_request_target:  # This event is *dangerous*, we must be careful about running untrusted code!
-    types: [opened, synchronize, reopened]
-
-permissions:
-  issues: write
-  pull-requests: read
-  contents: read
+  pull_request_target:
 
 jobs:
-  label:
+  labeler:
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
-      - name: Detect modified files
-        id: modified
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh api \
-               "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-               --paginate -q '.[].filename' | grep -xq 'maintainers.yml'; then
-            echo "maintainers=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Ensure labels exist (create or update)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh label create 'maintainers modified' \
-            --repo "${{ github.repository }}" \
-            --color F1C40F \
-            --description 'PR modifies maintainers.yml' || true
-
-      - name: Add label if modified
-        if: steps.modified.outputs.maintainers == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr edit ${{ github.event.pull_request.number }} \
-            --repo "${{ github.repository }}" \
-            --add-label "maintainers modified"
-
-      - name: Remove label if not modified
-        if: steps.modified.outputs.maintainers != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr edit ${{ github.event.pull_request.number }} \
-            --repo "${{ github.repository }}" \
-            --remove-label "maintainers modified" || true
+    - uses: actions/labeler@v6
