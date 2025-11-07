@@ -11,17 +11,17 @@ This is the pwn.college challenge monorepo containing cybersecurity CTF challeng
 ### Building and Testing Challenges
 
 ```bash
-# Build and test a challenge
-./build --test MODULE_ID/CHALLENGE_ID
+# Build and test a challenge (testing is now the default)
+./build MODULE_ID/CHALLENGE_ID
 
 # Example: Build and test path-traversal-1
-./build --test web-security/path-traversal-1
+./build web-security/path-traversal-1
 
 # Render a single template file for debugging
 ./build MODULE_ID/CHALLENGE_ID/path/to/file.j2
 
 # Build challenge without testing
-./build MODULE_ID/CHALLENGE_ID
+./build MODULE_ID/CHALLENGE_ID --render-only
 ```
 
 DO NOT run these scripts without ./build: the dependencies are not installed in the host, and some of these challenges to permanent damage to their environmnet.
@@ -77,7 +77,7 @@ DO NOT run these scripts without ./build: the dependencies are not installed in 
 5. Make executable files and templates executable: `chmod +x MODULE_ID/CHALLENGE_ID/**/*.j2`
 6. Write `tests_public/test_*.py.j2` for functionality verification
 7. Write `tests_private/test_*.py.j2` for exploitation verification
-8. Test with: `./build --test MODULE_ID/CHALLENGE_ID`
+8. Test with: `./build MODULE_ID/CHALLENGE_ID`
 
 ## Example Challenge Template Structures
 
