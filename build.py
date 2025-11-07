@@ -43,7 +43,7 @@ def render_challenge(template_dir, seed, output_dir=None):
     rendered_dir = output_dir or pathlib.Path(f"/tmp/pwncollege-{template_dir.name}-{os.urandom(4).hex()}")
     shutil.copytree(template_dir, rendered_dir)
     if (rendered_dir/"challenge").exists() and not (dockerfile_path := rendered_dir/"challenge/Dockerfile").exists():
-        dockerfile_path.write_text(render(pathlib.Path(__file__).parent/"base_templates/default-dockerfile.j2", seed))
+        dockerfile_path.write_text(render(pathlib.Path(__file__).parent/"challenges/base_templates/default-dockerfile.j2", seed))
 
     for j2_file in ( f.relative_to(template_dir) for f in template_dir.rglob("*.j2") ):
         (rendered_dir/j2_file).with_suffix('').write_text(render(template_dir/j2_file, seed))

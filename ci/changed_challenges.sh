@@ -64,19 +64,24 @@ fi
 # Find all challenges that use (extend/include) a template
 find_dependent_challenges() {
     local template="$1"
+    template=${template#./}
     local name=$(basename "$template")
-    local rel_path=${template#*/}  # Remove module prefix
+    local rel_path=${template#challenges/}
+    rel_path=${rel_path#*/}  # Remove module prefix
     
     # Find all .j2 files in challenge dirs that reference this template
-    find . -name "*.j2" -path "*/challenge/*" 2>/dev/null | \
+    find challenges -name "*.j2" -path "*/challenge/*" 2>/dev/null | \
         xargs grep -lE "{%-? *(extends|include).*[\"'](.*/)?(${name}|${rel_path})[\"']" 2>/dev/null | \
-        sed 's|^\./||' | cut -d'/' -f1-2 | sort -u || true
+        sed 's|^challenges/||' | cut -d'/' -f1-2 | sort -u || true
 }
 
 # Recursively find all templates that depend on a given template
 find_child_templates() {
     local template="$1"
-    local module=${template%%/*}
+    template=${template#./}
+    local module_path=${template#challenges/}
+    local module=${module_path%%/*}
+    local module_dir="challenges/$module"
     local seen=()
     local queue=("$template")
     
@@ -89,12 +94,13 @@ find_child_templates() {
         seen+=("$current")
         
         local name=$(basename "$current")
-        local rel_path=${current#*/}
+        local rel_path=${current#challenges/}
+        rel_path=${rel_path#*/}
         
         # Find templates that reference this one
         local children=$(
             grep -rE "{%-? *(extends|include).*[\"'](.*/)?(${name}|${rel_path})[\"']" \
-                --include="*.j2" "$module" 2>/dev/null | cut -d':' -f1 | sort -u || true
+                --include="*.j2" "$module_dir" 2>/dev/null | cut -d':' -f1 | sort -u || true
         )
         
         # Add children to queue
@@ -106,14 +112,14 @@ find_child_templates() {
     printf '%s\n' "${seen[@]}"
 }
 
-DIRECT_CHALLENGES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^[^/]+/[^/]+/' | cut -d'/' -f1-2 | sort -u || true)
-CHANGED_BASE_TEMPLATES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^[^/]+/base_templates/.*\.j2$' || true)
+DIRECT_CHALLENGES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^challenges/[^/]+/[^/]+/' | cut -d'/' -f2-3 | sort -u || true)
+CHANGED_BASE_TEMPLATES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^challenges/[^/]+/base_templates/.*\.j2$' || true)
 
 declare -A AFFECTED_CHALLENGES_SET
 
 # Add directly changed challenges that exist
 for challenge in $DIRECT_CHALLENGES; do
-    if [[ -d "$challenge/challenge" || -d "$challenge/tests_public" || -d "$challenge/tests_private" ]]; then
+    if [[ -d "challenges/$challenge/challenge" || -d "challenges/$challenge/tests_public" || -d "challenges/$challenge/tests_private" ]]; then
         AFFECTED_CHALLENGES_SET["$challenge"]=1
     fi
 done
