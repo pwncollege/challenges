@@ -18,7 +18,8 @@ if not dojo_path.exists():
     sys.exit("Could not find dojo.yml")
 
 dojo = yaml.safe_load(dojo_path.read_text())
-module = yaml.safe_load(module_path.read_text()) if module_path.exists() else dojo["modules"][module_id]
+module = (yaml.safe_load(module_path.read_text()) if module_path.exists() else
+          next(module for module in dojo["modules"] if module["id"] == module_id))
 
 challenge = (next((challenge for challenge in module.get("challenges", []) if challenge.get("id") == challenge_id), {}) or
              next((challenge for challenge in module.get("resources", []) if challenge.get("id") == challenge_id), {}))
