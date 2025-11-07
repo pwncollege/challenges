@@ -93,11 +93,14 @@ pip install jinja2 black pyastyle pwntools
 ### Building and Testing
 
 ```bash
-# build and test
-./build --test web-security/path-traversal-1
+# build and test (testing is now the default)
+./build web-security/path-traversal-1
+
+# build without testing (render only)
+./build web-security/path-traversal-1 --render-only
 
 # build without testing into a directory to look at
-./build web-security/path-traversal-1 --output-dir /tmp/output
+./build web-security/path-traversal-1 --render-only --output-dir /tmp/output
 
 # if you want to see a single file (for easier debugging)
 ./build web-security/path-traversal-1/tests_public/test_normal.py.j2
@@ -135,7 +138,7 @@ The process of porting is:
 6. If using templates, use `{% extends %}` and `{% block setup %}` for customization
 7. Ensure all executable files are marked as such: `chmod +x ./$MODULE_ID/$CHALLENGE_ID/**/*.j2`. Rendered files inherit permissions from the template.
 8. Port verification logic to `./$MODULE_ID/$CHALLENGE_ID/tests_public` (functionality) and `./$MODULE_ID/$CHALLENGE_ID/tests_private` (exploitation)
-9. Test thoroughly: `./build --test $MODULE_ID/$CHALLENGE_ID`
+9. Test thoroughly: `./build $MODULE_ID/$CHALLENGE_ID`
 10. Once testcases pass, double-check the template (both rendered and at rest) against the legacy challenge to ensure that the challenge has been ported without any functionality change.
 
 
