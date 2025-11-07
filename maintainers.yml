@@ -20,6 +20,7 @@
 
 - name: connor
   email: connor@connornelson.com
+  github: connornelson
   groups: ["*"]
   key: |
     -----BEGIN PGP PUBLIC KEY BLOCK-----
