@@ -80,7 +80,7 @@ def main():
     parser.add_argument("challenge", help="Challenge directory to build/test", type=pathlib.Path)
     parser.add_argument("--output-dir", help="Output file or directory", type=pathlib.Path)
     parser.add_argument("--render-only", action="store_true", help="Don't test, build, or tag.")
-    parser.add_argument("--seed", action="store", help="The random seed for templating", default=random.randrange(2**64), type=int)
+    parser.add_argument("--seed", action="store", help="The random seed for templating", default=0, type=int)
     args = parser.parse_args()
 
     if args.challenge.is_file():
