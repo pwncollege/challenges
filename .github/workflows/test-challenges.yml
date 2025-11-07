@@ -34,8 +34,9 @@ jobs:
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
           echo "Testing all challenges (triggered by ${{ github.event_name }})"
           # Find all challenge directories
-          CHALLENGES=$(find challenges -type d \( -path "*/challenge" -o -path "*/tests_public" -o -path "*/tests_private" \) |
-                       cut -d'/' -f2-3 | sort -u |
+          CHALLENGES=$(find challenges -type d -name challenge |
+                       sed 's#^challenges/##; s#/challenge$##' |
+                       sort -u |
                        tr '\n' ' ')
         else
           # Set up environment variables for the script
