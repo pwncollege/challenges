@@ -1,0 +1,1 @@
+Smoke Test: start windows VM, Connect to port 4001

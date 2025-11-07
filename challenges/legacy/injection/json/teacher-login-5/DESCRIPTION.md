@@ -1,0 +1,1 @@
+The goal of this challenge is to manipulate the injection vulerability in the JSON file that stores the login info of each user to make the server think you are the teacher. This is going to look nearly identical to the first YAML challenge, except the structure of the payload will look quite different.

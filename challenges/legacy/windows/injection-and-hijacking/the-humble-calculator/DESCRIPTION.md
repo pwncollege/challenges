@@ -1,0 +1,1 @@
+No tricks here, just a simple calculator.  Can you obtain the flag?

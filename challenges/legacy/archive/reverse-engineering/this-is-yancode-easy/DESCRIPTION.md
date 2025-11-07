@@ -1,0 +1,1 @@
+We're about to dive into reverse engineering obfuscated code! To better prepare you for the journey ahead, this challenge is a very straightforward crackme, but using slightly different code, memory layout, and input format. We will progressively obfuscate this in future levels, but this level should be a freebie!

@@ -1,0 +1,1 @@
+This challenge requires unsupported image 'pwncollege/challenge-simple'

@@ -1,0 +1,1 @@
+Leak the flag via meltdown from another process after getting the address of its task_struct from the kernel module and using it to find and walk its page tables.  Note - This challenge must be executed inside the VM!

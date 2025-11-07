@@ -1,0 +1,1 @@
+Call a WriteFile in shellcode

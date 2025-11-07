@@ -1,0 +1,1 @@
+This challenge requires unsupported image 'mac:macos-12.5-pac-brute-force-a-key'

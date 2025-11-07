@@ -1,0 +1,1 @@
+Write an average function.

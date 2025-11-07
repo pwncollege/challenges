@@ -1,0 +1,1 @@
+Create and exploit a use-after-free vulnerability to get the flag.

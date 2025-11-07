@@ -1,0 +1,1 @@
+Shows you that an over-privileged editor is a very powerful tool!

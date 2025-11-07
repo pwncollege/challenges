@@ -1,0 +1,1 @@
+Utilize a race condition to leak information out of a program, but with *even more* additional difficulty, making the race *even* harder!

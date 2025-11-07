@@ -1,0 +1,1 @@
+The goal of this challenge is to login as the teacher to get the flag. There is a serious vulnerability in this server that allows you to use the structure of the XML file that the login data is stored in to sneakily trick the server into thinking you are the teacher. This will look similar to the previous injection challenges.

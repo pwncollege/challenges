@@ -1,0 +1,1 @@
+Lets you directly read the flag!
