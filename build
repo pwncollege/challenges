@@ -72,7 +72,7 @@ def test_challenge(challenge_dir, image_name, seed):
                 "-v", f"{challenge_dir}:{challenge_dir}:ro", "-v", f"{temp_flag}:/flag:ro",
                 image_name, "sh", "-c", "read forever"
             ]).decode().strip()
-            subprocess.check_call(["docker", "exec", container, "sh", "-c", "[ ! -e /challenge/.init ] || /challenge/.init"])
+            subprocess.check_call(["docker", "exec", "-u", "0:0", container, "sh", "-c", "[ ! -e /challenge/.init ] || /challenge/.init"])
             subprocess.check_call([
                 "docker", "exec", "-u", "1000:1000", "-e", f"FLAG={temp_flag.read_text()}", "-e", f"SEED={seed}", container, test_file
             ])
