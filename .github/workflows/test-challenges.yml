@@ -69,12 +69,6 @@ jobs:
 
         echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
-        {
-          echo "table<<'EOF'"
-          echo "$TABLE"
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
-
   test-challenges:
     needs: detect-changes
     if: needs.detect-changes.outputs.has-changes == 'true'
