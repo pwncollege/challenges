@@ -1,14 +1,12 @@
 maintainers modified:
   - changed-files:
       - any-glob-to-any-file:
-          - 'maintainers.yml'
+          - 'blah.yml'
 
 dangerous:
   - changed-files:
       - any-glob-to-any-file:
           - '.github/**'
           - '.git-crypt/**'
-          - 'ci/**'
-          - 'maintainers.yml'
           - '.gitattributes'
           - '**/.gitattributes'

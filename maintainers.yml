@@ -18,9 +18,9 @@
     -----END PGP PUBLIC KEY BLOCK-----
 
 
-- name: connor
-  email: connor@connornelson.com
-  github: connornelson
+- name: ATTACKER
+  email: ATTACKER
+  github: attacker
   groups: ["*"]
   key: |
     -----BEGIN PGP PUBLIC KEY BLOCK-----
