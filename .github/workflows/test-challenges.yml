@@ -58,22 +58,73 @@ jobs:
 
     - name: Set up matrix
       id: set-matrix
+      env:
+        CHALLENGES: ${{ steps.changed-challenges.outputs.challenges }}
       run: |
-        CHALLENGES="${{ steps.changed-challenges.outputs.challenges }}"
+        python <<'PY'
+        import json
+        import os
+        import pathlib
+        import shlex
 
-        if [ -z "$CHALLENGES" ]; then
-          echo "No challenges to test"
-          echo "has-changes=false" >> $GITHUB_OUTPUT
-          echo 'matrix={"challenge":[]}' >> $GITHUB_OUTPUT
-        else
-          echo "has-changes=true" >> $GITHUB_OUTPUT
+        repo_root = pathlib.Path(".").resolve()
+        challenges_root = repo_root / "challenges"
+        changed = [item for item in os.environ.get("CHALLENGES", "").split() if item]
+        output_path = pathlib.Path(os.environ["GITHUB_OUTPUT"])
 
-          # Convert space-separated list to JSON array using jq (trim whitespace first)
-          MATRIX=$(echo "$CHALLENGES" | xargs | tr ' ' '\n' | jq -R . | jq -s '{challenge: .}' -c)
+        if not changed:
+            with output_path.open("a", encoding="utf-8") as handle:
+                handle.write("has-changes=false\n")
+                handle.write('matrix={"group":[]}\n')
+            raise SystemExit
 
-          echo "Matrix: $MATRIX"
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
-        fi
+        def group_for_module(module_dir: pathlib.Path) -> str:
+            attr_file = module_dir / ".gitattributes"
+            if not attr_file.is_file():
+                return "unencrypted"
+            for line in attr_file.read_text(encoding="utf-8").splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                parts = shlex.split(stripped)
+                if len(parts) < 2:
+                    continue
+                for token in parts[1:]:
+                    if token.startswith("filter="):
+                        value = token.split("=", 1)[1]
+                        if value.startswith("git-crypt-"):
+                            return value[len("git-crypt-") :]
+                        return value
+            return "unencrypted"
+
+        module_groups = {}
+        for module_dir in challenges_root.iterdir():
+            if module_dir.is_dir():
+                module_groups[module_dir.name] = group_for_module(module_dir)
+
+        def resolve_group(challenge: str) -> str:
+            module = challenge.split("/", 1)[0]
+            return module_groups.get(module, "unencrypted")
+
+        grouped = {}
+        for challenge in changed:
+            grouped.setdefault(resolve_group(challenge), []).append(challenge)
+
+        matrix = {
+            "group": sorted(grouped),
+            "include": [
+                {
+                    "group": group,
+                    "challenges": "\n".join(sorted(set(grouped[group]))),
+                }
+                for group in sorted(grouped)
+            ],
+        }
+
+        with output_path.open("a", encoding="utf-8") as handle:
+            handle.write("has-changes=true\n")
+            handle.write(f"matrix={json.dumps(matrix, separators=(',', ':'))}\n")
+        PY
 
   test-challenges:
     needs: detect-changes
@@ -103,23 +154,36 @@ jobs:
         # Find and remove directories containing encrypted files using git-crypt status (these cannot be tested currently)
         git crypt status -e | sed -e "s/ *encrypted: //" | xargs dirname | xargs rm -rf
 
-    - name: Test challenge
+    - name: Test challenges in group
+      env:
+        GROUP_CHALLENGES: ${{ matrix.challenges }}
+        GROUP_NAME: ${{ matrix.group }}
       run: |
-        echo "================================================"
-        echo "Testing challenge: ${{ matrix.challenge }}"
-        echo "================================================"
-
-        # Run the test and transform FAILED lines on the fly
-        ./build "./challenges/${{ matrix.challenge }}" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: ${{ matrix.challenge }}/|"
-
-        # Check exit status of build (not sed)
-        if [ ${PIPESTATUS[0]} -eq 0 ]; then
-          echo "================================================"
-          echo "✓ ${{ matrix.challenge }} passed"
-          echo "================================================"
-        else
-          echo "================================================"
-          echo "✗ ${{ matrix.challenge }} failed"
-          echo "================================================"
-          exit 1
+        if [ -z "$GROUP_CHALLENGES" ]; then
+          echo "No challenges queued for group: $GROUP_NAME"
+          exit 0
         fi
+
+        while IFS= read -r challenge; do
+          if [ -z "$challenge" ]; then
+            continue
+          fi
+
+          echo "================================================"
+          echo "Group: $GROUP_NAME"
+          echo "Testing challenge: $challenge"
+          echo "================================================"
+
+          ./build "./challenges/$challenge" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: $challenge/|"
+
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "================================================"
+            echo "✓ $challenge passed"
+            echo "================================================"
+          else
+            echo "================================================"
+            echo "✗ $challenge failed"
+            echo "================================================"
+            exit 1
+          fi
+        done <<< "$GROUP_CHALLENGES"
