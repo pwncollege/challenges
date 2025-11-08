@@ -61,20 +61,23 @@ def render_challenge(template_dir, seed, output_dir=None):
     return rendered_dir
 
 def test_challenge(challenge_dir, image_name, seed):
-    temp_flag = pathlib.Path(challenge_dir / "flag")
-    temp_flag.write_text("pwn.college{"+base64.b64encode(os.urandom(40)).decode()+"}")
+    flag = "pwn.college{"+base64.b64encode(os.urandom(40)).decode()+"}"
 
     try:
         for test_file in glob.glob(str(challenge_dir/"test*/test_*")):
             container = subprocess.check_output([
                 "docker", "run", "--rm", "-id",
                 "--name", f"""{image_name}-{re.sub("[^a-zA-Z0-9-]", "", os.path.basename(test_file))}""",
-                "-v", f"{challenge_dir}:{challenge_dir}:ro", "-v", f"{temp_flag}:/flag:ro",
+                "-v", f"{challenge_dir}:{challenge_dir}:ro",
                 image_name, "sh", "-c", "read forever"
             ]).decode().strip()
+            subprocess.check_call([
+                "docker", "exec", "-i", "-u", "0:0", container,
+                "sh", "-c", "cat >/flag && chown 0:0 /flag && chmod 0400 /flag"
+            ], input=f"{flag}\n".encode())
             subprocess.check_call(["docker", "exec", "-u", "0:0", container, "sh", "-c", "[ ! -e /challenge/.init ] || /challenge/.init"])
             subprocess.check_call([
-                "docker", "exec", "-u", "1000:1000", "-e", f"FLAG={temp_flag.read_text()}", "-e", f"SEED={seed}", container, test_file
+                "docker", "exec", "-u", "1000:1000", "-e", f"FLAG={flag}", "-e", f"SEED={seed}", container, test_file
             ])
             print(f"PASSED: {test_file}")
             subprocess.check_output(["docker", "kill", container])
