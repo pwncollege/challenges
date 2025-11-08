@@ -19,11 +19,11 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      has-changes: ${{ steps.set-matrix.outputs.has-changes }}
+      matrix: ${{ steps.changed-challenges.outputs.matrix }}
+      has-changes: ${{ steps.changed-challenges.outputs.has-changes }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0  # Fetch all history for proper diff
 
@@ -35,118 +35,45 @@ jobs:
     - name: Get challenges to test
       id: changed-challenges
       run: |
+        set -euo pipefail
+
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
-          echo "Testing all challenges (triggered by ${{ github.event_name }})"
-          CHALLENGES=$(./ci/list-challenges | tr '\n' ' ')
+          echo "Collecting all challenges (triggered by ${{ github.event_name }})"
+          TABLE=$(./ci/list-challenges)
+          MATRIX=$(./ci/list-challenges --format matrix)
         else
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"
-            HEAD="${{ github.event.pull_request.head.sha }}"
+            REF="${{ github.event.pull_request.base.sha }}"
           else
-            BASE="${{ github.event.before }}"
-            HEAD="${{ github.event.after }}"
+            REF="${{ github.event.before }}"
           fi
 
-          CHALLENGES=$(./ci/list-challenges --only-modified "$BASE" "$HEAD" | tr '\n' ' ')
+          if [ -z "$REF" ] || [ "$REF" = "0000000000000000000000000000000000000000" ]; then
+            REF=$(git hash-object -t tree /dev/null)
+          fi
+
+          echo "Collecting challenges modified since $REF"
+          TABLE=$(./ci/list-challenges --modified-since "$REF")
+          MATRIX=$(./ci/list-challenges --modified-since "$REF" --format matrix)
         fi
 
-        echo "Challenges to test: $CHALLENGES"
-        echo "challenges=$CHALLENGES" >> $GITHUB_OUTPUT
+        echo "Challenges to test:"
+        echo "$TABLE"
 
-    - name: Set up matrix
-      id: set-matrix
-      env:
-        CHALLENGES: ${{ steps.changed-challenges.outputs.challenges }}
-      run: |
-        python <<'PY'
-        import fnmatch
-        import json
-        import os
-        import pathlib
-        import shlex
+        if [ "$MATRIX" = '{"group":[],"include":[]}' ]; then
+          echo "No challenges to test"
+          echo "has-changes=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "has-changes=true" >> "$GITHUB_OUTPUT"
+        fi
 
-        repo_root = pathlib.Path(".").resolve()
-        challenges_root = repo_root / "challenges"
-        changed = [item for item in os.environ.get("CHALLENGES", "").split() if item]
-        output_path = pathlib.Path(os.environ["GITHUB_OUTPUT"])
+        echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
-        if not changed:
-            with output_path.open("a", encoding="utf-8") as handle:
-                handle.write("has-changes=false\n")
-                handle.write('matrix={"group":[]}\n')
-            raise SystemExit
-
-        def parse_git_crypt_attr(attr_path: pathlib.Path):
-            entries = []
-            for line in attr_path.read_text(encoding="utf-8").splitlines():
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#"):
-                    continue
-                parts = shlex.split(stripped)
-                if len(parts) < 2:
-                    continue
-                pattern, attrs = parts[0], parts[1:]
-                for token in attrs:
-                    if token.startswith("filter=git-crypt-"):
-                        value = token.split("=", 1)[1]
-                        entries.append((pattern, value[len("git-crypt-") :]))
-            return entries
-
-        def list_challenge_files(challenge_path: pathlib.Path):
-            files = [path for path in challenge_path.rglob("*") if path.is_file()]
-            if not files:
-                # Even if the directory is empty, treat the directory itself as a candidate
-                files.append(challenge_path)
-            return files
-
-        def find_group(challenge: str) -> str:
-            challenge_path = challenges_root / challenge
-            if not challenge_path.exists():
-                return "default"
-
-            files = list_challenge_files(challenge_path)
-
-            ancestors = []
-            current = challenge_path
-            while True:
-                ancestors.append(current)
-                if current == challenges_root or current.parent == current:
-                    break
-                current = current.parent
-
-            for ancestor in ancestors:
-                attr_file = ancestor / ".gitattributes"
-                if not attr_file.is_file():
-                    continue
-                for pattern, group in parse_git_crypt_attr(attr_file):
-                    for file_path in files:
-                        try:
-                            relative = file_path.relative_to(attr_file.parent).as_posix()
-                        except ValueError:
-                            continue
-                        if fnmatch.fnmatch(relative, pattern):
-                            return group
-            return "default"
-
-        grouped = {}
-        for challenge in changed:
-            grouped.setdefault(find_group(challenge), []).append(challenge)
-
-        matrix = {
-            "group": sorted(grouped),
-            "include": [
-                {
-                    "group": group,
-                    "challenges": "\n".join(sorted(set(grouped[group]))),
-                }
-                for group in sorted(grouped)
-            ],
-        }
-
-        with output_path.open("a", encoding="utf-8") as handle:
-            handle.write("has-changes=true\n")
-            handle.write(f"matrix={json.dumps(matrix, separators=(',', ':'))}\n")
-        PY
+        {
+          echo "table<<'EOF'"
+          echo "$TABLE"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
 
   test-challenges:
     needs: detect-changes
@@ -157,7 +84,7 @@ jobs:
       matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install uv
       uses: astral-sh/setup-uv@v7
