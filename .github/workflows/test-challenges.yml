@@ -107,20 +107,20 @@ jobs:
         GROUP_CHALLENGES_CONTENT="${GROUP_CHALLENGES:-}"
 
         if [ -z "$GROUP_CHALLENGES_CONTENT" ]; then
-          echo "::notice::No challenges queued"
+          echo "No challenges queued"
           exit 0
         fi
 
         readarray -t CHALLENGE_LIST <<< "$GROUP_CHALLENGES_CONTENT"
 
         if [ "${#CHALLENGE_LIST[@]}" -eq 0 ]; then
-          echo "::notice::No challenges queued"
+          echo "No challenges queued"
           exit 0
         fi
         TOTAL="${#CHALLENGE_LIST[@]}"
 
         if [ "$TOTAL" -eq 0 ]; then
-          echo "::notice::No challenges queued"
+          echo "No challenges queued"
           exit 0
         fi
 
@@ -134,8 +134,8 @@ jobs:
         done
         echo "::endgroup::"
 
-        echo "::notice::Group: $GROUP_NAME"
-        echo "::notice::Testing ${#CHALLENGE_LIST[@]} challenge(s)"
+        echo "Group: $GROUP_NAME"
+        echo "Testing ${#CHALLENGE_LIST[@]} challenge(s)"
 
         PASSED=()
         FAILED=()
@@ -152,10 +152,11 @@ jobs:
           echo "::group::[$BAR] [${CURRENT}/${TOTAL}] Testing $challenge"
           echo "Testing $challenge"
           echo "Progress: [$BAR] (${CURRENT}/${TOTAL})"
-          if ./build "./challenges/$challenge" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: $challenge/|"; then
-            echo "::notice::✓ $challenge passed"
+          if OUTPUT=$(./build "./challenges/$challenge" 2>&1); then
+            echo "✓ $challenge passed"
             PASSED+=("$challenge")
           else
+            printf '%s\n' "$OUTPUT"
             echo "::error::✗ $challenge failed"
             FAILED+=("$challenge")
           fi
