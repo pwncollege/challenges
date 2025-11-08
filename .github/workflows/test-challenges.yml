@@ -50,10 +50,7 @@ jobs:
           CHALLENGES=$(./ci/list-challenges --only-modified "$BASE" "$HEAD" | tr '\n' ' ')
         fi
 
-        # Output for debugging
         echo "Challenges to test: $CHALLENGES"
-
-        # Save raw output
         echo "challenges=$CHALLENGES" >> $GITHUB_OUTPUT
 
     - name: Set up matrix
@@ -62,6 +59,7 @@ jobs:
         CHALLENGES: ${{ steps.changed-challenges.outputs.challenges }}
       run: |
         python <<'PY'
+        import fnmatch
         import json
         import os
         import pathlib
@@ -78,37 +76,61 @@ jobs:
                 handle.write('matrix={"group":[]}\n')
             raise SystemExit
 
-        def group_for_module(module_dir: pathlib.Path) -> str:
-            attr_file = module_dir / ".gitattributes"
-            if not attr_file.is_file():
-                return "unencrypted"
-            for line in attr_file.read_text(encoding="utf-8").splitlines():
+        def parse_git_crypt_attr(attr_path: pathlib.Path):
+            entries = []
+            for line in attr_path.read_text(encoding="utf-8").splitlines():
                 stripped = line.strip()
                 if not stripped or stripped.startswith("#"):
                     continue
                 parts = shlex.split(stripped)
                 if len(parts) < 2:
                     continue
-                for token in parts[1:]:
-                    if token.startswith("filter="):
+                pattern, attrs = parts[0], parts[1:]
+                for token in attrs:
+                    if token.startswith("filter=git-crypt-"):
                         value = token.split("=", 1)[1]
-                        if value.startswith("git-crypt-"):
-                            return value[len("git-crypt-") :]
-                        return value
-            return "unencrypted"
+                        entries.append((pattern, value[len("git-crypt-") :]))
+            return entries
 
-        module_groups = {}
-        for module_dir in challenges_root.iterdir():
-            if module_dir.is_dir():
-                module_groups[module_dir.name] = group_for_module(module_dir)
+        def list_challenge_files(challenge_path: pathlib.Path):
+            files = [path for path in challenge_path.rglob("*") if path.is_file()]
+            if not files:
+                # Even if the directory is empty, treat the directory itself as a candidate
+                files.append(challenge_path)
+            return files
 
-        def resolve_group(challenge: str) -> str:
-            module = challenge.split("/", 1)[0]
-            return module_groups.get(module, "unencrypted")
+        def find_group(challenge: str) -> str:
+            challenge_path = challenges_root / challenge
+            if not challenge_path.exists():
+                return "default"
+
+            files = list_challenge_files(challenge_path)
+
+            ancestors = []
+            current = challenge_path
+            while True:
+                ancestors.append(current)
+                if current == challenges_root or current.parent == current:
+                    break
+                current = current.parent
+
+            for ancestor in ancestors:
+                attr_file = ancestor / ".gitattributes"
+                if not attr_file.is_file():
+                    continue
+                for pattern, group in parse_git_crypt_attr(attr_file):
+                    for file_path in files:
+                        try:
+                            relative = file_path.relative_to(attr_file.parent).as_posix()
+                        except ValueError:
+                            continue
+                        if fnmatch.fnmatch(relative, pattern):
+                            return group
+            return "default"
 
         grouped = {}
         for challenge in changed:
-            grouped.setdefault(resolve_group(challenge), []).append(challenge)
+            grouped.setdefault(find_group(challenge), []).append(challenge)
 
         matrix = {
             "group": sorted(grouped),
