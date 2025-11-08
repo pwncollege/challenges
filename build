@@ -69,6 +69,7 @@ def test_challenge(challenge_dir, image_name, seed):
                 "docker", "run", "--rm", "-id",
                 "--name", f"""{image_name}-{re.sub("[^a-zA-Z0-9-]", "", os.path.basename(test_file))}""",
                 "-v", f"{challenge_dir}:{challenge_dir}:ro",
+                "--device", "/dev/kvm",
                 image_name, "sh", "-c", "read forever"
             ]).decode().strip()
             subprocess.run([

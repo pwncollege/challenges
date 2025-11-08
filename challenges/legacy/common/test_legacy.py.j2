@@ -30,9 +30,12 @@ image = challenge.get("image") or module.get("image") or dojo.get("image") or "p
 if image not in ("pwncollege/challenge-legacy", "pwncollege/challenge-legacy:latest"):
     sys.exit(f"Challenge {challenge_id} in module {module_id} requires unsupported image {image}")
 
-entries = list(pathlib.Path("/challenge").iterdir())
-if not entries:
-    sys.exit("No challenge files found")
-
-print("Challenge files:")
-print("\n".join(map(str, entries)))
+if os.access("/challenge", os.R_OK | os.X_OK):
+    entries = list(pathlib.Path("/challenge").iterdir())
+    if not entries:
+        sys.exit("No challenge files found")
+    print("Challenge files:")
+    print("\n".join(map(str, entries)))
+else:
+    # Some legacy challenges make /challenge inaccessible (e.g. legacy/linux-luminarium/processes/ps)
+    print("Challenge files are inaccessible")
