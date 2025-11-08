@@ -46,7 +46,7 @@ find "$CHALLENGE_PATH" -mindepth 1 -maxdepth 1 ! -name '_*' -exec cp -aL {} /cha
 
 instance=$(find "$CHALLENGE_PATH" -mindepth 1 -maxdepth 1 -name '_*' -type d -print0 | sort -z | head -zn1 | tr -d '\0')
 if [ -n "$instance" ]; then
-    cp -aL "$instance/.init" /challenge/.init
+    cp -aL "$instance"/. /challenge
 fi
 
 chown -R 0:0 /challenge
