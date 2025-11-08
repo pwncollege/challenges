@@ -19,11 +19,11 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      has-changes: ${{ steps.set-matrix.outputs.has-changes }}
+      matrix: ${{ steps.changed-challenges.outputs.matrix }}
+      has-changes: ${{ steps.changed-challenges.outputs.has-changes }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0  # Fetch all history for proper diff
 
@@ -35,45 +35,39 @@ jobs:
     - name: Get challenges to test
       id: changed-challenges
       run: |
+        set -euo pipefail
+
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
-          echo "Testing all challenges (triggered by ${{ github.event_name }})"
-          CHALLENGES=$(./ci/list-challenges | tr '\n' ' ')
+          echo "Collecting all challenges (triggered by ${{ github.event_name }})"
+          TABLE=$(./ci/list-challenges)
+          MATRIX=$(./ci/list-challenges --format matrix)
         else
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"
-            HEAD="${{ github.event.pull_request.head.sha }}"
+            REF="${{ github.event.pull_request.base.sha }}"
           else
-            BASE="${{ github.event.before }}"
-            HEAD="${{ github.event.after }}"
+            REF="${{ github.event.before }}"
           fi
 
-          CHALLENGES=$(./ci/list-challenges --only-modified "$BASE" "$HEAD" | tr '\n' ' ')
+          if [ -z "$REF" ] || [ "$REF" = "0000000000000000000000000000000000000000" ]; then
+            REF=$(git hash-object -t tree /dev/null)
+          fi
+
+          echo "Collecting challenges modified since $REF"
+          TABLE=$(./ci/list-challenges --modified-since "$REF")
+          MATRIX=$(./ci/list-challenges --modified-since "$REF" --format matrix)
         fi
 
-        # Output for debugging
-        echo "Challenges to test: $CHALLENGES"
+        echo "Challenges to test:"
+        echo "$TABLE"
 
-        # Save raw output
-        echo "challenges=$CHALLENGES" >> $GITHUB_OUTPUT
-
-    - name: Set up matrix
-      id: set-matrix
-      run: |
-        CHALLENGES="${{ steps.changed-challenges.outputs.challenges }}"
-
-        if [ -z "$CHALLENGES" ]; then
+        if [ "$MATRIX" = '{"group":[],"include":[]}' ]; then
           echo "No challenges to test"
-          echo "has-changes=false" >> $GITHUB_OUTPUT
-          echo 'matrix={"challenge":[]}' >> $GITHUB_OUTPUT
+          echo "has-changes=false" >> "$GITHUB_OUTPUT"
         else
-          echo "has-changes=true" >> $GITHUB_OUTPUT
-
-          # Convert space-separated list to JSON array using jq (trim whitespace first)
-          MATRIX=$(echo "$CHALLENGES" | xargs | tr ' ' '\n' | jq -R . | jq -s '{challenge: .}' -c)
-
-          echo "Matrix: $MATRIX"
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "has-changes=true" >> "$GITHUB_OUTPUT"
         fi
+
+        echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
   test-challenges:
     needs: detect-changes
@@ -84,7 +78,7 @@ jobs:
       matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install uv
       uses: astral-sh/setup-uv@v7
@@ -103,23 +97,36 @@ jobs:
         # Find and remove directories containing encrypted files using git-crypt status (these cannot be tested currently)
         git crypt status -e | sed -e "s/ *encrypted: //" | xargs dirname | xargs rm -rf
 
-    - name: Test challenge
+    - name: Test challenges in group
+      env:
+        GROUP_CHALLENGES: ${{ matrix.challenges }}
+        GROUP_NAME: ${{ matrix.group }}
       run: |
-        echo "================================================"
-        echo "Testing challenge: ${{ matrix.challenge }}"
-        echo "================================================"
-
-        # Run the test and transform FAILED lines on the fly
-        ./build "./challenges/${{ matrix.challenge }}" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: ${{ matrix.challenge }}/|"
-
-        # Check exit status of build (not sed)
-        if [ ${PIPESTATUS[0]} -eq 0 ]; then
-          echo "================================================"
-          echo "✓ ${{ matrix.challenge }} passed"
-          echo "================================================"
-        else
-          echo "================================================"
-          echo "✗ ${{ matrix.challenge }} failed"
-          echo "================================================"
-          exit 1
+        if [ -z "$GROUP_CHALLENGES" ]; then
+          echo "No challenges queued for group: $GROUP_NAME"
+          exit 0
         fi
+
+        while IFS= read -r challenge; do
+          if [ -z "$challenge" ]; then
+            continue
+          fi
+
+          echo "================================================"
+          echo "Group: $GROUP_NAME"
+          echo "Testing challenge: $challenge"
+          echo "================================================"
+
+          ./build "./challenges/$challenge" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: $challenge/|"
+
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "================================================"
+            echo "✓ $challenge passed"
+            echo "================================================"
+          else
+            echo "================================================"
+            echo "✗ $challenge failed"
+            echo "================================================"
+            exit 1
+          fi
+        done <<< "$GROUP_CHALLENGES"
