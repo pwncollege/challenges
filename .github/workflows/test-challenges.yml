@@ -102,31 +102,50 @@ jobs:
         GROUP_CHALLENGES: ${{ matrix.challenges }}
         GROUP_NAME: ${{ matrix.group }}
       run: |
-        if [ -z "$GROUP_CHALLENGES" ]; then
-          echo "No challenges queued for group: $GROUP_NAME"
+        set -euo pipefail
+
+        GROUP_CHALLENGES_CONTENT="${GROUP_CHALLENGES:-}"
+
+        if [ -z "$GROUP_CHALLENGES_CONTENT" ]; then
+          echo "::notice::No challenges queued"
           exit 0
         fi
 
-        while IFS= read -r challenge; do
+        readarray -t CHALLENGE_LIST <<< "$GROUP_CHALLENGES_CONTENT"
+
+        if [ "${#CHALLENGE_LIST[@]}" -eq 0 ]; then
+          echo "::notice::No challenges queued"
+          exit 0
+        fi
+
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            echo "### Challenges"
+            echo
+            echo "Testing ${#CHALLENGE_LIST[@]} challenge(s):"
+            for challenge in "${CHALLENGE_LIST[@]}"; do
+              [ -z "$challenge" ] && continue
+              echo "- \`$challenge\`"
+            done
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        echo "::notice::Group: $GROUP_NAME"
+        echo "::notice::Testing ${#CHALLENGE_LIST[@]} challenge(s)"
+
+        for challenge in "${CHALLENGE_LIST[@]}"; do
           if [ -z "$challenge" ]; then
             continue
           fi
 
-          echo "================================================"
-          echo "Group: $GROUP_NAME"
-          echo "Testing challenge: $challenge"
-          echo "================================================"
-
-          ./build "./challenges/$challenge" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: $challenge/|"
-
-          if [ ${PIPESTATUS[0]} -eq 0 ]; then
-            echo "================================================"
-            echo "✓ $challenge passed"
-            echo "================================================"
+          echo "::group::$challenge"
+          if ./build "./challenges/$challenge" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: $challenge/|"; then
+            echo "::notice::✓ $challenge passed"
           else
-            echo "================================================"
-            echo "✗ $challenge failed"
-            echo "================================================"
+            echo "::error::✗ $challenge failed"
+            echo "::endgroup::"
             exit 1
           fi
-        done <<< "$GROUP_CHALLENGES"
+          echo "::endgroup::"
+        done
