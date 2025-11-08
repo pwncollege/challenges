@@ -125,7 +125,7 @@ jobs:
         fi
 
         GROUP_LABEL="${GROUP_NAME:-unknown}"
-        echo "::group::Group summary for $GROUP_LABEL"
+        echo "::group::Test summary for $GROUP_LABEL"
         echo "Group: $GROUP_LABEL"
         echo "Total challenges: $TOTAL"
         echo "Challenges in this group:"
@@ -133,9 +133,6 @@ jobs:
           echo "- $challenge"
         done
         echo "::endgroup::"
-
-        echo "Group: $GROUP_NAME"
-        echo "Testing ${#CHALLENGE_LIST[@]} challenge(s)"
 
         PASSED=()
         FAILED=()
@@ -149,13 +146,11 @@ jobs:
           FILLED_BAR=$(printf '%*s' "$FILLED" '' | tr ' ' '#')
           EMPTY_BAR=$(printf '%*s' "$EMPTY" '' | tr ' ' '.')
           BAR="${FILLED_BAR}${EMPTY_BAR}"
-          echo "::group::[$BAR] [${CURRENT}/${TOTAL}] Testing $challenge"
-          echo "Testing $challenge"
-          echo "Progress: [$BAR] (${CURRENT}/${TOTAL})"
           if OUTPUT=$(./build "./challenges/$challenge" 2>&1); then
-            echo "✓ $challenge passed"
+            echo "::group::✓ [$BAR] [${CURRENT}/${TOTAL}] $challenge: passed"
             PASSED+=("$challenge")
           else
+            echo "::group::✗ [$BAR] [${CURRENT}/${TOTAL}] $challenge: failed"
             printf '%s\n' "$OUTPUT"
             echo "::error::✗ $challenge failed"
             FAILED+=("$challenge")
