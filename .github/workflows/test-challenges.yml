@@ -117,35 +117,89 @@ jobs:
           echo "::notice::No challenges queued"
           exit 0
         fi
+        TOTAL="${#CHALLENGE_LIST[@]}"
 
-        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-          {
-            echo "### Challenges"
-            echo
-            echo "Testing ${#CHALLENGE_LIST[@]} challenge(s):"
-            for challenge in "${CHALLENGE_LIST[@]}"; do
-              [ -z "$challenge" ] && continue
-              echo "- \`$challenge\`"
-            done
-            echo
-          } >> "$GITHUB_STEP_SUMMARY"
+        if [ "$TOTAL" -eq 0 ]; then
+          echo "::notice::No challenges queued"
+          exit 0
         fi
+
+        GROUP_LABEL="${GROUP_NAME:-unknown}"
+        echo "::group::Group summary for $GROUP_LABEL"
+        echo "Group: $GROUP_LABEL"
+        echo "Total challenges: $TOTAL"
+        echo "Challenges in this group:"
+        for challenge in "${CHALLENGE_LIST[@]}"; do
+          echo "- $challenge"
+        done
+        echo "::endgroup::"
 
         echo "::notice::Group: $GROUP_NAME"
         echo "::notice::Testing ${#CHALLENGE_LIST[@]} challenge(s)"
 
-        for challenge in "${CHALLENGE_LIST[@]}"; do
-          if [ -z "$challenge" ]; then
-            continue
-          fi
+        PASSED=()
+        FAILED=()
 
-          echo "::group::$challenge"
+        CURRENT=0
+        BAR_WIDTH=20
+        for challenge in "${CHALLENGE_LIST[@]}"; do
+          CURRENT=$((CURRENT + 1))
+          FILLED=$((CURRENT * BAR_WIDTH / TOTAL))
+          EMPTY=$((BAR_WIDTH - FILLED))
+          FILLED_BAR=$(printf '%*s' "$FILLED" '' | tr ' ' '#')
+          EMPTY_BAR=$(printf '%*s' "$EMPTY" '' | tr ' ' '.')
+          BAR="${FILLED_BAR}${EMPTY_BAR}"
+          echo "::group::[$BAR] [${CURRENT}/${TOTAL}] Testing $challenge"
+          echo "Testing $challenge"
+          echo "Progress: [$BAR] (${CURRENT}/${TOTAL})"
           if ./build "./challenges/$challenge" 2>&1 | sed "s|^FAILED: /tmp/[^/]*/|::error::TEST FAILED: $challenge/|"; then
             echo "::notice::✓ $challenge passed"
+            PASSED+=("$challenge")
           else
             echo "::error::✗ $challenge failed"
-            echo "::endgroup::"
-            exit 1
+            FAILED+=("$challenge")
           fi
           echo "::endgroup::"
         done
+
+        PASSED_COUNT="${#PASSED[@]}"
+        FAILED_COUNT="${#FAILED[@]}"
+
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            echo "### Results for group \`${GROUP_LABEL}\`"
+            echo
+            echo "- Total challenges: $TOTAL"
+            echo "- Passed: $PASSED_COUNT"
+            echo "- Failed: $FAILED_COUNT"
+            echo
+            echo "<details><summary>Passed challenges</summary>"
+            echo
+            if [ "$PASSED_COUNT" -eq 0 ]; then
+              echo "*(none)*"
+            else
+              for challenge in "${PASSED[@]}"; do
+                echo "- \`$challenge\`"
+              done
+            fi
+            echo
+            echo "</details>"
+            echo
+            echo "<details><summary>Failed challenges</summary>"
+            echo
+            if [ "$FAILED_COUNT" -eq 0 ]; then
+              echo "*(none)*"
+            else
+              for challenge in "${FAILED[@]}"; do
+                echo "- \`$challenge\`"
+              done
+            fi
+            echo
+            echo "</details>"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        if [ "$FAILED_COUNT" -gt 0 ]; then
+          exit 1
+        fi
