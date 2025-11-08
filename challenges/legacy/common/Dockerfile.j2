@@ -42,9 +42,9 @@ fi
 
 rm /challenge/.init
 
-find "$CHALLENGE_PATH" -mindepth 1 -maxdepth 1 ! -name '_*' -exec cp -aL {} /challenge \;
+find "$CHALLENGE_PATH/" -mindepth 1 -maxdepth 1 ! -name '_*' -exec cp -aL {} /challenge \;
 
-instance=$(shopt -s nullglob; set -- "$CHALLENGE_PATH"/_*/; printf '%s' "${1%/}")
+instance=$(shopt -s nullglob; set -- "$CHALLENGE_PATH"/_*/; printf '%s' "${1:-}")
 if [ -n "$instance" ]; then
     cp -aL "$instance"/. /challenge
 fi
