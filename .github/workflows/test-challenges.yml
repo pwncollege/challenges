@@ -27,30 +27,27 @@ jobs:
       with:
         fetch-depth: 0  # Fetch all history for proper diff
 
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        cache-dependency-glob: ci/list-challenges
+
     - name: Get challenges to test
       id: changed-challenges
       run: |
-        # Check if we should test all challenges (manual dispatch or schedule)
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
           echo "Testing all challenges (triggered by ${{ github.event_name }})"
-          # Find all challenge directories
-          CHALLENGES=$(find challenges -type d -name challenge |
-                       sed 's#^challenges/##; s#/challenge$##' |
-                       sort -u |
-                       tr '\n' ' ')
+          CHALLENGES=$(./ci/list-challenges | tr '\n' ' ')
         else
-          # Set up environment variables for the script
-          export GITHUB_EVENT_NAME="${{ github.event_name }}"
-
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            export GITHUB_BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
           else
-            export GITHUB_EVENT_BEFORE="${{ github.event.before }}"
-            export GITHUB_EVENT_AFTER="${{ github.event.after }}"
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.event.after }}"
           fi
 
-          # Run the changed challenges detection script and capture output
-          CHALLENGES=$(./ci/list-changed-challenges | tr '\n' ' ')
+          CHALLENGES=$(./ci/list-challenges --only-modified "$BASE" "$HEAD" | tr '\n' ' ')
         fi
 
         # Output for debugging
