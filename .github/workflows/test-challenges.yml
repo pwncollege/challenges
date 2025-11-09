@@ -120,8 +120,7 @@ jobs:
 
         challenges = os.environ["GROUP_CHALLENGES"].splitlines()
         group = os.environ["GROUP_NAME"]
-        # concurrency = os.cpu_count() or 1
-        concurrency = 8
+        concurrency = (os.cpu_count() or 1) * 2
         bar_width = 20
 
         print(f"::group::Test summary for {group}")
@@ -179,20 +178,20 @@ jobs:
                     index, challenge, status, output = await result_queue.get()
                     pending[index] = (challenge, status, output)
                     while next_index in pending:
-                        current_challenge, current_status, current_output = pending.pop(next_index)
+                        challenge, status, output = pending.pop(next_index)
+                        status_symbol = "✓" if status == 0 else "✗"
+                        status_text = "passed" if status == 0 else "failed"
                         filled = (next_index * bar_width) // len(challenges)
                         bar = "#" * filled + "." * (bar_width - filled)
-                        print(f"::group::[{bar}] [{next_index}/{len(challenges)}] Testing {current_challenge}")
-                        print(f"Testing {current_challenge}")
+                        print(f"{status_symbol} [{bar}] [{next_index}/{len(challenges)}] {challenge}: {status_text}")
 
-                        if current_status == 0:
-                            print(f"✓ {current_challenge} passed")
-                            passed.append(current_challenge)
+                        if status == 0:
+                            passed.append(challenge)
                         else:
-                            if current_output:
-                                print(current_output, end="" if current_output.endswith("\n") else "\n")
-                            print(f"::error::✗ {current_challenge} failed")
-                            failed.append(current_challenge)
+                            failed.append(challenge)
+                            if output:
+                                print(output, end="" if output.endswith("\n") else "\n")
+                            print(f"::error::✗ {challenge} {status_text}")
 
                         print("::endgroup::")
                         sys.stdout.flush()
