@@ -10,7 +10,6 @@ import time
 {{ generate_names(challenge, random) }}
 
 proc = subprocess.Popen(['/challenge/server'])
-atexit.register(lambda: (proc.terminate(), proc.wait()))
 time.sleep(1)  # Give it time to start
 
 r = pwnlib.tubes.remote.remote("challenge.localhost", 80)

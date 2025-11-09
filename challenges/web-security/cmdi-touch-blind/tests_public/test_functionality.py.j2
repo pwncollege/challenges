@@ -13,11 +13,10 @@ import os
 FLAG = os.environ.get("FLAG", "pwn.college{test}")
 
 proc = subprocess.Popen(['/challenge/server'])
-atexit.register(lambda: (proc.terminate(), proc.wait()))
 time.sleep(1)  # Give it time to start
 
 # Test that the touch service works normally
-response = requests.get(f"http://challenge.localhost/{{challenge.endpoint_challenge}}", 
+response = requests.get(f"http://challenge.localhost/{{challenge.endpoint_challenge}}",
                         params={"{{challenge.parameter_filepath}}": "/tmp/test_file"})
 assert response.status_code == 200
 assert "Welcome to the touch service" in response.text

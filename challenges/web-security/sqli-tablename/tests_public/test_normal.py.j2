@@ -6,7 +6,6 @@ import atexit
 import time
 
 proc = subprocess.Popen(['/challenge/server'])
-atexit.register(lambda: (proc.terminate(), proc.wait()))
 time.sleep(1)  # Give it time to start
 
 # Test normal query
