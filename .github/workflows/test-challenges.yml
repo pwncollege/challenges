@@ -120,7 +120,8 @@ jobs:
 
         challenges = os.environ["GROUP_CHALLENGES"].splitlines()
         group = os.environ["GROUP_NAME"]
-        concurrency = os.cpu_count() or 1
+        # concurrency = os.cpu_count() or 1
+        concurrency = 6
         bar_width = 20
 
         print(f"::group::Test summary for {group}")
