@@ -1,1 +1,0 @@
-HTML is much more versatile than just altering a webpage's front end---it is also possible to embed Javascript within it. In this challenge, your goal is just that. You will need to formulate some message that sends out the alert `Class is Canceled!` then run the victim script.

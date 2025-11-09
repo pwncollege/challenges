@@ -1,1 +1,0 @@
-This is the hardest variation of the YAML challenges, as percent encoding will not work and neither will entering directly into the text box. This time try to find the right solution yourself (there may be a few).
