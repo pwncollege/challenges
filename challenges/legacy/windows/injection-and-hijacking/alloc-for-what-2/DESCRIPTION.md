@@ -1,1 +1,0 @@
-Some virtual allocations are suspect and will result in process termination by the EDR. Can you obtain the flag?
