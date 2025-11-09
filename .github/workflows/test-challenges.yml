@@ -155,6 +155,7 @@ jobs:
             echo "::error::✗ $challenge failed"
             FAILED+=("$challenge")
           fi
+          df -h
           docker system df
           echo "::endgroup::"
         done
