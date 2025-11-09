@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG CHALLENGE_IMAGE={{ challenge_image }}
-FROM ${CHALLENGE_IMAGE}
+FROM scratch AS dojo-data
 
 # https://github.com/pwncollege/official-dojos
 WORKDIR /opt/dojos
@@ -36,7 +35,8 @@ ADD https://www.dropbox.com/scl/fi/cfln31ihejxyco1xb4j2o/vmlinux2?rlkey=h2tt3yuo
 ADD https://www.dropbox.com/scl/fi/uhhjp8yf65p81p31rql1e/vmlinux1?rlkey=jybroi9nsya54ffrevmnk89hg&dl=1 ./software-exploitation-dojo/kernel-exploitation/files/1/vmlinux
 ADD https://www.dropbox.com/scl/fi/hkwgmkajzw2rzas068g66/vmlinux0?rlkey=q5kkd5br7ize6n1002ghpprz3&dl=1 ./software-exploitation-dojo/kernel-exploitation/files/0/vmlinux
 
-WORKDIR /
+FROM {{ challenge_image }}
+COPY --from=dojo-data /opt/dojos /opt/dojos
 
 COPY --chmod=755 <<'EOF' /challenge/.init
 #!/bin/bash
