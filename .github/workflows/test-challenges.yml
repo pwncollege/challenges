@@ -85,18 +85,6 @@ jobs:
       with:
         cache-dependency-glob: build
 
-    - name: Set up Docker storage
-      run: |
-        echo "::group::Current disk usage"
-        df -h
-        echo "::endgroup::"
-
-        sudo systemctl stop docker
-        sudo rm -rf /var/lib/docker
-        sudo mkdir -p /mnt/docker
-        sudo ln -s /mnt/docker /var/lib/docker
-        sudo systemctl start docker
-
     - name: Set up Docker
       uses: docker/setup-buildx-action@v3
 
@@ -167,8 +155,6 @@ jobs:
             echo "::error::✗ $challenge failed"
             FAILED+=("$challenge")
           fi
-          df -h
-          docker system df
           echo "::endgroup::"
         done
 
