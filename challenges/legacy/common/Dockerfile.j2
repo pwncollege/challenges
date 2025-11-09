@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
-FROM pwncollege/challenge-legacy:latest
+ARG CHALLENGE_IMAGE={{ challenge_image }}
+FROM ${CHALLENGE_IMAGE}
 
 # https://github.com/pwncollege/official-dojos
 WORKDIR /opt/dojos

@@ -1,1 +1,0 @@
-This challenge requires unsupported image 'mac:macos-12.5-pac-direct-gadget-a-key'
