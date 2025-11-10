@@ -8,7 +8,6 @@ import os
 FLAG = os.environ["FLAG"]
 
 proc = subprocess.Popen(['/challenge/server'])
-atexit.register(lambda: (proc.terminate(), proc.wait()))
 time.sleep(1)
 
 # Create a session to maintain cookies
