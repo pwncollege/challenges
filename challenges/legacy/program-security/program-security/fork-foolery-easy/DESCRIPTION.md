@@ -1,0 +1,1 @@
+Defeat a stack canary in a PIE binary by utilizing a network-style fork server in the target binary.

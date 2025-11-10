@@ -1,0 +1,1 @@
+Concepts used: Cryptography + Binary Exploitation

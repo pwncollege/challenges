@@ -1,0 +1,1 @@
+Leverage an Array to obtain the flag.

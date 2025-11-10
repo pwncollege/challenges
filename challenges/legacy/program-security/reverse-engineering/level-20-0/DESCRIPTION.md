@@ -1,0 +1,1 @@
+Reverse engineer this custom emulator and architecture to understand how to get the flag! 

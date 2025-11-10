@@ -1,0 +1,1 @@
+Efficiently compute a sum from an array.

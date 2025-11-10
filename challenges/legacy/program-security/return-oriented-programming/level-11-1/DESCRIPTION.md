@@ -1,0 +1,1 @@
+Apply stack pivoting to call the win function.

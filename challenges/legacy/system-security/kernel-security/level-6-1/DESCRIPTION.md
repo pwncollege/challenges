@@ -1,0 +1,1 @@
+Utilize a 'buggy' kernel device and shellcode to escalate privileges to root and get the flag!

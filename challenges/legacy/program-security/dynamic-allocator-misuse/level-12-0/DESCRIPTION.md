@@ -1,0 +1,1 @@
+Leverage TCACHE exploits to cause malloc() to return a stack pointer.

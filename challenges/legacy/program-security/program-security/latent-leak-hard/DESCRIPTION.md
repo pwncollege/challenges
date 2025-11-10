@@ -1,0 +1,1 @@
+Leak data left behind unintentionally to defeat a stack canary in a PIE binary.

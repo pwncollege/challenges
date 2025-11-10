@@ -1,0 +1,1 @@
+Get started with a binary that side-channels itself!

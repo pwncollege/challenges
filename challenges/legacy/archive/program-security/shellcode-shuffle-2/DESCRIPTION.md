@@ -1,0 +1,1 @@
+Write and execute shellcode to read the flag, but your input is sorted before being executed and stdin is closed.

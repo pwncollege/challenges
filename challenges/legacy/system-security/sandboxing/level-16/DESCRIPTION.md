@@ -1,0 +1,1 @@
+Learn the implications of a different way of sandboxing, using modern namespacing techniques! But what shenanigans can you get up to with special kernel-backed filesystems?

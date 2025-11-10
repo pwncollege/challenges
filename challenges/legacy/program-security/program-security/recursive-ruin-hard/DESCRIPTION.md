@@ -1,0 +1,1 @@
+Defeat a stack canary in a PIE binary by utilizing a bug left in the binary.

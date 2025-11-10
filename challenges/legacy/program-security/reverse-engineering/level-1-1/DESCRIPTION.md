@@ -1,0 +1,1 @@
+Reverse engineer this challenge to find the correct license key.

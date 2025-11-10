@@ -1,0 +1,1 @@
+Locate the flag in memory using shellcode after all references to it have been DESTROYED, you will only have access to the "exit" system call. You will need a creative way of locating the flag's address in your process!

@@ -1,0 +1,1 @@
+Exploit a buggy kernel device to get the flag!

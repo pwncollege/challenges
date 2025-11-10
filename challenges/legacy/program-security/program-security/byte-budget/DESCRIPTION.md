@@ -1,0 +1,1 @@
+Write and execute shellcode to read the flag, but you only get 18 bytes.

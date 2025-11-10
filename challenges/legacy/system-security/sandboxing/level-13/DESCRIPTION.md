@@ -1,0 +1,1 @@
+Escape a different kind of sandbox in which a jailed child process is only communicable to from a parent process.
