@@ -10,12 +10,6 @@
 # ]
 # ///
 
-# Direction:
-# - favor minimal control flow and the fewest moving pieces possible
-# - keep the script concise instead of introducing new helper layers
-# - write out descriptive variable and function names even if longer
-# - treat outputs as simple text utilities instead of a framework
-
 from cli import cli
 
 if __name__ == "__main__":
