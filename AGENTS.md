@@ -8,23 +8,33 @@ This is the pwn.college challenge monorepo containing cybersecurity CTF challeng
 
 ## Key Commands
 
-### Building and Testing Challenges
+### Challenge CLI
+
+All workflows run through the `./challenge` CLI (implemented with Click/Rich in `cli/commands` and backed by shared helpers in `cli/lib`). The older `./build` script has been retired; never call it or duplicate its behavior.
+
+Primary commands:
 
 ```bash
-# Build and test a challenge (testing is now the default)
-./build MODULE_ID/CHALLENGE_ID
+# Test a challenge end-to-end
+./challenge test MODULE_ID/CHALLENGE_ID
 
-# Example: Build and test path-traversal-1
-./build web-security/path-traversal-1
+# Example: Test path-traversal-1
+./challenge test web-security/path-traversal-1
 
 # Render a single template file for debugging
-./build MODULE_ID/CHALLENGE_ID/path/to/file.j2
+./challenge render MODULE_ID/CHALLENGE_ID/path/to/file.j2 --output /tmp/rendered-file
 
-# Build challenge without testing
-./build MODULE_ID/CHALLENGE_ID --render-only
+# Build a challenge image without tests
+./challenge build MODULE_ID/CHALLENGE_ID
+
+# List challenges grouped by key, optionally filtered by git history
+./challenge list --modified-since origin/main
+
+# Drop into an interactive shell (use --user/--volume, or append a command)
+./challenge run --user 0 --volume /tmp/debug web-security/path-traversal-1 /bin/ls -la /challenge
 ```
 
-DO NOT run these scripts without ./build: the dependencies are not installed in the host, and some of these challenges to permanent damage to their environmnet.
+DO NOT run these scripts without ./challenge: the dependencies are not installed in the host, and some of these challenges do permanent damage to their environment.
 
 ## Architecture
 
@@ -77,7 +87,7 @@ DO NOT run these scripts without ./build: the dependencies are not installed in 
 5. Make executable files and templates executable: `chmod +x MODULE_ID/CHALLENGE_ID/**/*.j2`
 6. Write `tests_public/test_*.py.j2` for functionality verification
 7. Write `tests_private/test_*.py.j2` for exploitation verification
-8. Test with: `./build MODULE_ID/CHALLENGE_ID`
+8. Test with: `./challenge test MODULE_ID/CHALLENGE_ID`
 
 ## Example Challenge Template Structures
 
