@@ -30,7 +30,7 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
-        cache-dependency-glob: ci/list-challenges
+        cache-dependency-glob: "{pwnshop,src/pwnshop/**}"
 
     - name: Get challenges to test
       id: changed-challenges
@@ -39,8 +39,8 @@ jobs:
 
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
           echo "Collecting all challenges (triggered by ${{ github.event_name }})"
-          TABLE=$(./ci/list-challenges)
-          MATRIX=$(./ci/list-challenges --format matrix)
+          TABLE=$(./pwnshop list --format table)
+          MATRIX=$(./pwnshop list --format matrix)
         else
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             REF="${{ github.event.pull_request.base.sha }}"
@@ -53,8 +53,8 @@ jobs:
           fi
 
           echo "Collecting challenges modified since $REF"
-          TABLE=$(./ci/list-challenges --modified-since "$REF")
-          MATRIX=$(./ci/list-challenges --modified-since "$REF" --format matrix)
+          TABLE=$(./pwnshop list --modified-since "$REF" --format table)
+          MATRIX=$(./pwnshop list --modified-since "$REF" --format matrix)
         fi
 
         echo "Challenges to test:"
@@ -131,11 +131,12 @@ jobs:
             print(f"- {challenge}")
         print("::endgroup::")
 
-        async def run_build(index: int, challenge: str):
+        async def run_tests(index: int, challenge: str):
             try:
                 process = await asyncio.create_subprocess_exec(
-                    "./build",
-                    f"./challenges/{challenge}",
+                    "./pwnshop",
+                    "test",
+                    f"{group}/{challenge}",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,
                 )
@@ -143,7 +144,7 @@ jobs:
                 output = stdout_data.decode(errors="replace")
                 status = process.returncode
             except Exception as exception:
-                output = f"Failed to run build for {challenge}: {exception}\n"
+                output = f"Failed to run tests for {challenge}: {exception}\n"
                 status = 1
             return index, challenge, status, output
 
@@ -167,7 +168,7 @@ jobs:
                     if index is None or challenge is None:
                         task_queue.task_done()
                         break
-                    result = await run_build(index, challenge)
+                    result = await run_tests(index, challenge)
                     await result_queue.put(result)
                     task_queue.task_done()
 

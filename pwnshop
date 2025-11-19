@@ -1,0 +1,22 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "black",
+#   "jinja2",
+#   "pyastyle",
+#   "click",
+#   "rich",
+# ]
+# ///
+
+import pathlib
+import sys
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from pwnshop import cli
+
+if __name__ == "__main__":
+    cli()
