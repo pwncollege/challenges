@@ -41,6 +41,3 @@ def list_command(modified_since, output_format):
     console.print(fmt.format("GROUP", "PATH"), highlight=False)
     for group, challenge in rows:
         console.print(fmt.format(group, challenge), highlight=False)
-
-
-__all__ = ["list_command"]

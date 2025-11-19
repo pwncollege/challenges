@@ -108,6 +108,3 @@ def render_command(target, output_path):
             _print_contents(file_path, contents)
     finally:
         shutil.rmtree(rendered_directory, ignore_errors=True)
-
-
-__all__ = ["render_command"]

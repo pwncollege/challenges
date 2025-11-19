@@ -22,6 +22,3 @@ def build_command(challenges):
         except RuntimeError as error:
             raise click.ClickException(str(error)) from error
         console.print(f"[green]Built[/] {image_id}")
-
-
-__all__ = ["build_command"]

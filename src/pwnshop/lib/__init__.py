@@ -226,16 +226,3 @@ def discover_challenges(modified_since=None):
     for group in grouped:
         grouped[group].sort()
     return dict(sorted(grouped.items()))
-
-
-__all__ = [
-    "REPOSITORY_ROOT",
-    "DEFAULT_DOCKERFILE_PATH",
-    "CHALLENGE_SEED",
-    "render",
-    "render_challenge",
-    "run_challenge",
-    "resolve_path",
-    "build_challenge",
-    "discover_challenges",
-]

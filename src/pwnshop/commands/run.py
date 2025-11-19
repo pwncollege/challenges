@@ -39,6 +39,3 @@ def run_command(challenge_path, user, volumes, command):
     resolved_volumes = [path.resolve().as_posix() for path in volumes]
     with lib.run_challenge(image_id, volumes=resolved_volumes) as (container, flag):
         subprocess.run(["docker", "exec", f"--user={user}", "-it", container, *command])
-
-
-__all__ = ["run_command"]

@@ -47,6 +47,3 @@ def test_command(challenges):
             for test_path in test_list:
                 console.print(f"- {challenge_name}/{test_path}")
         raise click.ClickException("Some tests have failed.")
-
-
-__all__ = ["test_command"]
