@@ -30,7 +30,7 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
-        cache-dependency-glob: "{pwnshop,src/pwnshop/**}"
+        cache-dependency-glob: "{challenge,cli/**}"
 
     - name: Get challenges to test
       id: changed-challenges
@@ -39,8 +39,8 @@ jobs:
 
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
           echo "Collecting all challenges (triggered by ${{ github.event_name }})"
-          TABLE=$(./pwnshop list --format table)
-          MATRIX=$(./pwnshop list --format matrix)
+          TABLE=$(./challenge list --format table)
+          MATRIX=$(./challenge list --format matrix)
         else
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             REF="${{ github.event.pull_request.base.sha }}"
@@ -53,8 +53,8 @@ jobs:
           fi
 
           echo "Collecting challenges modified since $REF"
-          TABLE=$(./pwnshop list --modified-since "$REF" --format table)
-          MATRIX=$(./pwnshop list --modified-since "$REF" --format matrix)
+          TABLE=$(./challenge list --modified-since "$REF" --format table)
+          MATRIX=$(./challenge list --modified-since "$REF" --format matrix)
         fi
 
         echo "Challenges to test:"
@@ -134,7 +134,7 @@ jobs:
         async def run_tests(index: int, challenge: str):
             try:
                 process = await asyncio.create_subprocess_exec(
-                    "./pwnshop",
+                    "./challenge",
                     "test",
                     f"{group}/{challenge}",
                     stdout=asyncio.subprocess.PIPE,

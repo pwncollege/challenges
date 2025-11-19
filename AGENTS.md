@@ -10,7 +10,7 @@ This is the pwn.college challenge monorepo containing cybersecurity CTF challeng
 
 ### Challenge CLI
 
-All workflows run through the `./pwnshop` CLI (implemented with Click/Rich in `src/pwnshop/commands` and backed by shared helpers in `src/pwnshop/lib`). The older `./build` script has been retired; never call it or duplicate its behavior.
+All workflows run through the `./challenge` CLI (implemented with Click/Rich in `cli/commands` and backed by shared helpers in `cli/lib`). The older `./build` script has been retired; never call it or duplicate its behavior.
 
 Each subcommand accepts either a direct path or a challenge slug (e.g., `web-security/path-traversal-1`). Slugs must contain the module and challenge, and the CLI searches `./challenges` for that exact path.
 
@@ -18,25 +18,25 @@ Primary commands:
 
 ```bash
 # Test a challenge end-to-end
-./pwnshop test MODULE_ID/CHALLENGE_ID
+./challenge test MODULE_ID/CHALLENGE_ID
 
 # Example: Test path-traversal-1
-./pwnshop test web-security/path-traversal-1
+./challenge test web-security/path-traversal-1
 
 # Render a single template file for debugging
-./pwnshop render MODULE_ID/CHALLENGE_ID/path/to/file.j2 --output /tmp/rendered-file
+./challenge render MODULE_ID/CHALLENGE_ID/path/to/file.j2 --output /tmp/rendered-file
 
 # Build a challenge image without tests
-./pwnshop build MODULE_ID/CHALLENGE_ID
+./challenge build MODULE_ID/CHALLENGE_ID
 
 # List challenges grouped by key, optionally filtered by git history
-./pwnshop list --modified-since origin/main
+./challenge list --modified-since origin/main
 
 # Drop into an interactive shell (use --user/--volume, or append a command)
-./pwnshop run --user 0 --volume /tmp/debug web-security/path-traversal-1 /bin/ls -la /challenge
+./challenge run --user 0 --volume /tmp/debug web-security/path-traversal-1 /bin/ls -la /challenge
 ```
 
-DO NOT run these scripts without ./pwnshop: the dependencies are not installed in the host, and some of these challenges do permanent damage to their environment.
+DO NOT run these scripts without ./challenge: the dependencies are not installed in the host, and some of these challenges do permanent damage to their environment.
 
 ## Architecture
 
@@ -89,7 +89,7 @@ DO NOT run these scripts without ./pwnshop: the dependencies are not installed i
 5. Make executable files and templates executable: `chmod +x MODULE_ID/CHALLENGE_ID/**/*.j2`
 6. Write `tests_public/test_*.py.j2` for functionality verification
 7. Write `tests_private/test_*.py.j2` for exploitation verification
-8. Test with: `./pwnshop test MODULE_ID/CHALLENGE_ID`
+8. Test with: `./challenge test MODULE_ID/CHALLENGE_ID`
 
 ## Example Challenge Template Structures
 

@@ -13,10 +13,10 @@
 import pathlib
 import sys
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(REPO_ROOT / "src"))
+REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from pwnshop import cli
+from cli import cli
 
 if __name__ == "__main__":
     cli()
