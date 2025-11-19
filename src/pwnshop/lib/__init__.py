@@ -13,7 +13,7 @@ import black
 import jinja2
 import pyastyle
 
-REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[3]
 DEFAULT_DOCKERFILE_PATH = REPOSITORY_ROOT / "challenges/common/default-dockerfile.j2"
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
@@ -122,12 +122,21 @@ def resolve_path(path_argument):
     raw = path_argument.as_posix() if isinstance(path_argument, pathlib.Path) else str(path_argument)
     if raw.startswith("default/"):
         raw = raw[len("default/") :]
-    candidate = pathlib.Path(raw)
-    if candidate.exists():
-        return candidate
-    alternate = (REPOSITORY_ROOT / "challenges" / raw).resolve()
-    if alternate.exists():
-        return alternate
+    raw_path = pathlib.Path(raw)
+    candidate_order = [
+        raw_path,
+        (REPOSITORY_ROOT / raw_path),
+        (REPOSITORY_ROOT / "challenges" / raw_path),
+    ]
+    for candidate in candidate_order:
+        if candidate.exists():
+            return candidate.resolve()
+    search_target = raw_path.as_posix().strip("/")
+    if search_target and "/" not in search_target:
+        raise FileNotFoundError(
+            "Challenge references must include a module (e.g., module/challenge). "
+            f"Got: {path_argument}"
+        )
     raise FileNotFoundError(f"No such file or directory: {path_argument}")
 
 

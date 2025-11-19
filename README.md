@@ -32,19 +32,21 @@ git crypt unlock
 
 # Challenge CLI
 
-All developer workflows now run through the `./challenge` command. The legacy `./build` helper has been removed, so every rendered, build, run, or test action should use the new CLI instead.
+All developer workflows now run through the `./pwnshop` command. The legacy `./build` helper has been removed, so every rendered, build, run, or test action should use the new CLI instead.
 
-The CLI is implemented with Click and Rich (`cli/commands/*.py`) on top of the core helper library in `cli/lib/__init__.py`. Keeping formatting/terminal logic in the commands and reusable challenge logic in `cli/lib` makes it easy to add or modify commands without duplicating functionality.
+The CLI is implemented with Click and Rich (`src/pwnshop/commands/*.py`) on top of the core helper library in `src/pwnshop/lib/__init__.py`. Keeping formatting/terminal logic in the commands and reusable challenge logic in `src/pwnshop/lib` makes it easy to add or modify commands without duplicating functionality.
+
+All CLI subcommands accept either a direct filesystem path or a challenge slug. Slugs must include the module (e.g., `web-security/path-traversal-1`); the tool searches under `./challenges` for that module/challenge pair and errors if nothing matches.
 
 Primary entry points:
 
-- `./challenge list` — enumerate challenges, optionally filtered via `--modified-since`.
-- `./challenge render` — materialize a challenge directory or individual template (`--output` defaults to stdout and Rich labels each file when multiple outputs are rendered).
-- `./challenge build` — render and build a challenge, returning the Docker image ID.
-- `./challenge test` — render, build, and run all `test*/test_*` files inside the challenge.
-- `./challenge run` — render, build, and drop into an interactive shell inside the challenge container (use `--user=<uid>` to control the interactive user, default `1000`, `--volume <path>` to mount host paths read-only, or append a command after the challenge to run it instead of `/bin/bash`).
+- `./pwnshop list` — enumerate challenges, optionally filtered via `--modified-since`.
+- `./pwnshop render` — materialize a challenge directory or individual template (`--output` defaults to stdout and Rich labels each file when multiple outputs are rendered).
+- `./pwnshop build` — render and build a challenge, returning the Docker image ID.
+- `./pwnshop test` — render, build, and run all `test*/test_*` files inside the challenge.
+- `./pwnshop run` — render, build, and drop into an interactive shell inside the challenge container (use `--user=<uid>` to control the interactive user, default `1000`, `--volume <path>` to mount host paths read-only, or append a command after the challenge to run it instead of `/bin/bash`).
 
-Any future automation (GitHub Actions, local scripts, etc.) should shell out to `./challenge ...` rather than reimplementing pieces of the workflow.
+Any future automation (GitHub Actions, local scripts, etc.) should shell out to `./pwnshop ...` rather than reimplementing pieces of the workflow.
 
 # Building and testing
 
@@ -110,19 +112,19 @@ pip install black click jinja2 pyastyle pwntools rich
 
 ```bash
 # run the full test suite for a challenge
-./challenge test web-security/path-traversal-1
+./pwnshop test web-security/path-traversal-1
 
 # build the Docker image without testing
-./challenge build web-security/path-traversal-1
+./pwnshop build web-security/path-traversal-1
 
 # render the challenge into a directory for inspection
-./challenge render web-security/path-traversal-1 --output /tmp/output
+./pwnshop render web-security/path-traversal-1 --output /tmp/output
 
 # render a single template file to stdout (or write to a file)
-./challenge render web-security/path-traversal-1/tests_public/test_normal.py.j2 --output /tmp/output-file
+./pwnshop render web-security/path-traversal-1/tests_public/test_normal.py.j2 --output /tmp/output-file
 
 # list challenges, optionally filtered by git history
-./challenge list --modified-since origin/main
+./pwnshop list --modified-since origin/main
 ```
 
 ## Important Notes / Common Gotchas
@@ -157,7 +159,7 @@ The process of porting is:
 6. If using templates, use `{% extends %}` and `{% block setup %}` for customization
 7. Ensure all executable files are marked as such: `chmod +x ./$MODULE_ID/$CHALLENGE_ID/**/*.j2`. Rendered files inherit permissions from the template.
 8. Port verification logic to `./$MODULE_ID/$CHALLENGE_ID/tests_public` (functionality) and `./$MODULE_ID/$CHALLENGE_ID/tests_private` (exploitation)
-9. Test thoroughly: `./challenge test $MODULE_ID/$CHALLENGE_ID`
+9. Test thoroughly: `./pwnshop test $MODULE_ID/$CHALLENGE_ID`
 10. Once testcases pass, double-check the template (both rendered and at rest) against the legacy challenge to ensure that the challenge has been ported without any functionality change.
 
 

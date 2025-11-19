@@ -10,7 +10,13 @@
 # ]
 # ///
 
-from cli import cli
+import pathlib
+import sys
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from pwnshop import cli
 
 if __name__ == "__main__":
     cli()
