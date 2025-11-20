@@ -17,6 +17,3 @@ cli.add_command(build_command)
 cli.add_command(test_command)
 cli.add_command(run_command)
 cli.add_command(list_command)
-
-
-__all__ = ["cli"]
