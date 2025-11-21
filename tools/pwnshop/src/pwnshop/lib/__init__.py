@@ -7,14 +7,13 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 
 import black
 import jinja2
 import pyastyle
 
-REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[3]
-DEFAULT_DOCKERFILE_PATH = REPOSITORY_ROOT / "challenges/common/default-dockerfile.j2"
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
 
@@ -34,22 +33,13 @@ def render(template):
 
 
 def render_challenge(template_directory):
-    try:
-        challenge_name = "-".join(
-            template_directory.resolve().relative_to(REPOSITORY_ROOT / "challenges").parts
-        )
-    except ValueError as error:
-        raise FileNotFoundError(f"Challenges must live under {REPOSITORY_ROOT / 'challenges'}") from error
-    rendered_directory = pathlib.Path(f"/tmp/pwncollege-{challenge_name}-{os.urandom(4).hex()}")
-    shutil.copytree(template_directory, rendered_directory)
+    rendered_directory = pathlib.Path(tempfile.mkdtemp(prefix="pwncollege-"))
+    shutil.copytree(template_directory, rendered_directory, dirs_exist_ok=True)
     for path in (path.relative_to(template_directory) for path in template_directory.rglob("*.j2")):
         destination = (rendered_directory / path).with_suffix("")
         destination.write_text(render(template_directory / path))
         destination.chmod((template_directory / path).stat().st_mode)
         (rendered_directory / path).unlink()
-    dockerfile_path = rendered_directory / "challenge" / "Dockerfile"
-    if not dockerfile_path.exists():
-        dockerfile_path.write_text(render(DEFAULT_DOCKERFILE_PATH))
     return rendered_directory
 
 
@@ -118,28 +108,6 @@ def run_challenge(challenge_image, *, volumes=None):
         )
 
 
-def resolve_path(path_argument):
-    raw = path_argument.as_posix() if isinstance(path_argument, pathlib.Path) else str(path_argument)
-    if raw.startswith("default/"):
-        raw = raw[len("default/") :]
-    raw_path = pathlib.Path(raw)
-    candidate_order = [
-        raw_path,
-        (REPOSITORY_ROOT / raw_path),
-        (REPOSITORY_ROOT / "challenges" / raw_path),
-    ]
-    for candidate in candidate_order:
-        if candidate.exists():
-            return candidate.resolve()
-    search_target = raw_path.as_posix().strip("/")
-    if search_target and "/" not in search_target:
-        raise FileNotFoundError(
-            "Challenge references must include a module (e.g., module/challenge). "
-            f"Got: {path_argument}"
-        )
-    raise FileNotFoundError(f"No such file or directory: {path_argument}")
-
-
 def build_challenge(challenge_path):
     rendered_directory = render_challenge(challenge_path)
     try:
@@ -157,20 +125,20 @@ def build_challenge(challenge_path):
         shutil.rmtree(rendered_directory, ignore_errors=True)
 
 
-def discover_challenges(modified_since=None):
-    challenges_directory = REPOSITORY_ROOT / "challenges"
+def discover_challenges(directory, modified_since=None):
+    directory = pathlib.Path(directory)
     group_directories = sorted(
         [
-            attr_file.parent.relative_to(challenges_directory)
-            for attr_file in challenges_directory.rglob(".gitattributes")
+            attr_file.parent.relative_to(directory)
+            for attr_file in directory.rglob(".gitattributes")
         ],
         key=lambda path: len(path.parts),
         reverse=True,
     )
     grouped = defaultdict(list)
     relative_lookup = {}
-    for challenge_dir in challenges_directory.glob("**/challenge"):
-        relative_path = challenge_dir.parent.relative_to(challenges_directory)
+    for challenge_dir in directory.glob("**/challenge"):
+        relative_path = challenge_dir.parent.relative_to(directory)
         if not relative_path.parts:
             continue
         relative = relative_path.as_posix()
@@ -189,7 +157,7 @@ def discover_challenges(modified_since=None):
     if modified_since:
         diff_output = subprocess.check_output(
             ["git", "diff", "--name-only", modified_since],
-            cwd=REPOSITORY_ROOT,
+            cwd=directory,
             text=True,
         )
         prefix = pathlib.PurePosixPath("challenges")

@@ -56,7 +56,10 @@ def _print_contents(path: pathlib.Path, contents: str):
 
 
 @click.command("render")
-@click.argument("target", type=str)
+@click.argument(
+    "target",
+    type=click.Path(path_type=pathlib.Path, exists=True, dir_okay=True, file_okay=True, resolve_path=True),
+)
 @click.option(
     "--output",
     "output_path",
@@ -65,12 +68,8 @@ def _print_contents(path: pathlib.Path, contents: str):
 )
 def render_command(target, output_path):
     """Render a template file or an entire challenge directory."""
-    try:
-        target_path = lib.resolve_path(target)
-    except FileNotFoundError as error:
-        raise click.ClickException(str(error)) from error
-    if target_path.is_file():
-        rendered_contents = lib.render(target_path)
+    if target.is_file():
+        rendered_contents = lib.render(target)
         if output_path:
             if output_path.exists() and output_path.is_dir():
                 raise click.ClickException("--output points to a directory while rendering a file")
@@ -78,11 +77,11 @@ def render_command(target, output_path):
             output_path.write_text(rendered_contents)
             console.print(f"[green]Wrote[/] {output_path}")
             return
-        console.rule(str(target_path))
-        _print_contents(target_path, rendered_contents)
+        console.rule(str(target))
+        _print_contents(target, rendered_contents)
         return
     try:
-        rendered_directory = lib.render_challenge(target_path)
+        rendered_directory = lib.render_challenge(target)
     except FileNotFoundError as error:
         raise click.ClickException(str(error)) from error
     if output_path:

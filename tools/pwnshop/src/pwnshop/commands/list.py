@@ -1,4 +1,5 @@
 import json
+import pathlib
 
 import click
 from rich.console import Console
@@ -17,9 +18,14 @@ console = Console()
     default="table",
     show_default=True,
 )
-def list_command(modified_since, output_format):
+@click.argument(
+    "directory",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, resolve_path=True, path_type=pathlib.Path),
+)
+def list_command(modified_since, output_format, directory):
     """List challenges grouped by git-crypt key."""
-    group_challenges = lib.discover_challenges(modified_since=modified_since)
+    group_challenges = lib.discover_challenges(directory or pathlib.Path.cwd(), modified_since=modified_since)
     if output_format == "matrix":
         matrix = {
             "group": list(group_challenges.keys()),

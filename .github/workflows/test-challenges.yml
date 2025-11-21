@@ -30,7 +30,7 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
-        cache-dependency-glob: "{pwnshop,src/pwnshop/**}"
+        cache-dependency-glob: tools/pwnshop/**
 
     - name: Get challenges to test
       id: changed-challenges
@@ -39,8 +39,8 @@ jobs:
 
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
           echo "Collecting all challenges (triggered by ${{ github.event_name }})"
-          TABLE=$(./pwnshop list --format table)
-          MATRIX=$(./pwnshop list --format matrix)
+          TABLE=$(./pwnshop list ./challenges --format table)
+          MATRIX=$(./pwnshop list ./challenges --format matrix)
         else
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             REF="${{ github.event.pull_request.base.sha }}"
@@ -53,8 +53,8 @@ jobs:
           fi
 
           echo "Collecting challenges modified since $REF"
-          TABLE=$(./pwnshop list --modified-since "$REF" --format table)
-          MATRIX=$(./pwnshop list --modified-since "$REF" --format matrix)
+          TABLE=$(./pwnshop list ./challenges --modified-since "$REF" --format table)
+          MATRIX=$(./pwnshop list ./challenges --modified-since "$REF" --format matrix)
         fi
 
         echo "Challenges to test:"
@@ -83,7 +83,7 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
-        cache-dependency-glob: build
+        cache-dependency-glob: tools/pwnshop/**
 
     - name: Set up Docker storage
       run: |
