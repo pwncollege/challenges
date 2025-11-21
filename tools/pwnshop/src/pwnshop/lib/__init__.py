@@ -8,8 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections import defaultdict
-from typing import Iterable, Iterator, List, Optional, Sequence, Set
+from typing import Iterable, Iterator, List, Optional, Sequence
 
 import black
 import jinja2
