@@ -88,9 +88,10 @@ Set variables in `{% block setup %}` blocks and call `{{- super() -}}` to preser
 
 - `common/flask.py.j2` - Common Flask application template
 - `common/random_names.j2` - Macro for generating random endpoints and parameter names
-- `default-dockerfile.j2` - Default Docker container template
+- `common/Dockerfile.j2` - Base Docker container template to include/extend in challenges
 
-Anything can be templated, including `./$MODULE_ID/$CHALLENGE_ID/challenge/Dockerfile.j2` (for example, to extend the `default-dockerfile.j2` template with additional packages to install and so on).
+Anything can be templated, including `./$MODULE_ID/$CHALLENGE_ID/challenge/Dockerfile.j2` (for example, to extend the `common/Dockerfile.j2` template with additional packages to install and so on).
+Each challenge must provide its own `challenge/Dockerfile.j2`; there is no automatic default.
 Before extending the default template, consider if it would not be easier and more understandable to just make a full `Dockerfile`.
 
 Permissions are preserved when rendering a template.

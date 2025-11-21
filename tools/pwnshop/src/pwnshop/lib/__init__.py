@@ -7,13 +7,21 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from collections import defaultdict
 
 import black
 import jinja2
 import pyastyle
 
+
+def _find_repository_root():
+    for parent in pathlib.Path(__file__).resolve().parents:
+        if (parent / ".git").exists():
+            return parent
+    raise RuntimeError("Could not locate repository root (.git)")
+
+
+REPOSITORY_ROOT = _find_repository_root()
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
 
@@ -33,8 +41,15 @@ def render(template):
 
 
 def render_challenge(template_directory):
-    rendered_directory = pathlib.Path(tempfile.mkdtemp(prefix="pwncollege-"))
-    shutil.copytree(template_directory, rendered_directory, dirs_exist_ok=True)
+    template_directory = pathlib.Path(template_directory)
+    try:
+        challenge_name = "-".join(
+            template_directory.resolve().relative_to(REPOSITORY_ROOT / "challenges").parts
+        )
+    except ValueError as error:
+        raise FileNotFoundError(f"Challenges must live under {REPOSITORY_ROOT / 'challenges'}") from error
+    rendered_directory = pathlib.Path(f"/tmp/pwncollege-{challenge_name}-{os.urandom(4).hex()}")
+    shutil.copytree(template_directory, rendered_directory)
     for path in (path.relative_to(template_directory) for path in template_directory.rglob("*.j2")):
         destination = (rendered_directory / path).with_suffix("")
         destination.write_text(render(template_directory / path))
@@ -108,13 +123,38 @@ def run_challenge(challenge_image, *, volumes=None):
         )
 
 
+def resolve_path(path_argument):
+    raw = path_argument.as_posix() if isinstance(path_argument, pathlib.Path) else str(path_argument)
+    if raw.startswith("default/"):
+        raw = raw[len("default/") :]
+    raw_path = pathlib.Path(raw)
+    candidate_order = [
+        raw_path,
+        (REPOSITORY_ROOT / raw_path),
+        (REPOSITORY_ROOT / "challenges" / raw_path),
+    ]
+    for candidate in candidate_order:
+        if candidate.exists():
+            return candidate.resolve()
+    search_target = raw_path.as_posix().strip("/")
+    if search_target and "/" not in search_target:
+        raise FileNotFoundError(
+            "Challenge references must include a module (e.g., module/challenge). "
+            f"Got: {path_argument}"
+        )
+    raise FileNotFoundError(f"No such file or directory: {path_argument}")
+
+
 def build_challenge(challenge_path):
     rendered_directory = render_challenge(challenge_path)
     try:
-        image_id = subprocess.check_output(
-            ["docker", "build", "-q", str(rendered_directory / "challenge")],
-            text=True,
-        ).strip()
+        image_id = (
+            subprocess.check_output(
+                ["docker", "build", "-q", str(rendered_directory / "challenge")],
+                text=True,
+            )
+            .strip()
+        )
         return image_id
     except subprocess.CalledProcessError as error:
         raise RuntimeError(f"Failed to build challenge {challenge_path}") from error
@@ -122,26 +162,38 @@ def build_challenge(challenge_path):
         shutil.rmtree(rendered_directory, ignore_errors=True)
 
 
-def discover_challenges(directory, modified_since=None):
-    directory = pathlib.Path(directory)
+def discover_challenges(directory=None, modified_since=None):
+    root_directory = pathlib.Path(directory) if directory else REPOSITORY_ROOT
+    challenges_directory = (
+        root_directory / "challenges" if (root_directory / "challenges").exists() else root_directory
+    )
     group_directories = sorted(
-        [attr_file.parent.relative_to(directory) for attr_file in directory.rglob(".gitattributes")],
+        [
+            attr_file.parent.relative_to(challenges_directory)
+            for attr_file in challenges_directory.rglob(".gitattributes")
+        ],
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
+    candidate_dirs = [
+        challenge_dir.parent.relative_to(challenges_directory) for challenge_dir in challenges_directory.glob("**/challenge")
+    ]
+    ancestors = {parent.as_posix() for path in candidate_dirs for parent in path.parents}
+    challenge_dirs = sorted(
+        [path for path in candidate_dirs if path.as_posix() not in ancestors],
         key=lambda path: len(path.parts),
         reverse=True,
     )
     grouped = defaultdict(list)
     relative_lookup = {}
-    for challenge_dir in directory.glob("**/challenge"):
-        relative_path = challenge_dir.parent.relative_to(directory)
-        if not relative_path.parts:
-            continue
-        relative = relative_path.as_posix()
+    for challenge_dir in challenge_dirs:
+        relative = challenge_dir.as_posix()
         group = "default"
         challenge_name = relative
         for candidate in group_directories:
-            if not relative_path.is_relative_to(candidate):
+            if not challenge_dir.is_relative_to(candidate):
                 continue
-            remainder = relative_path.relative_to(candidate)
+            remainder = challenge_dir.relative_to(candidate)
             if remainder.parts:
                 group = candidate.as_posix()
                 challenge_name = remainder.as_posix()
@@ -151,7 +203,7 @@ def discover_challenges(directory, modified_since=None):
     if modified_since:
         diff_output = subprocess.check_output(
             ["git", "diff", "--name-only", modified_since],
-            cwd=directory,
+            cwd=REPOSITORY_ROOT,
             text=True,
         )
         prefix = pathlib.PurePosixPath("challenges")
