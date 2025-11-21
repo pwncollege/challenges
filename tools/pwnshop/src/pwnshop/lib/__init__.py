@@ -13,6 +13,7 @@ from collections import defaultdict
 import black
 import jinja2
 import pyastyle
+
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
 
@@ -110,13 +111,10 @@ def run_challenge(challenge_image, *, volumes=None):
 def build_challenge(challenge_path):
     rendered_directory = render_challenge(challenge_path)
     try:
-        image_id = (
-            subprocess.check_output(
-                ["docker", "build", "-q", str(rendered_directory / "challenge")],
-                text=True,
-            )
-            .strip()
-        )
+        image_id = subprocess.check_output(
+            ["docker", "build", "-q", str(rendered_directory / "challenge")],
+            text=True,
+        ).strip()
         return image_id
     except subprocess.CalledProcessError as error:
         raise RuntimeError(f"Failed to build challenge {challenge_path}") from error
@@ -136,7 +134,8 @@ def discover_challenges(directory, modified_since=None):
         reverse=True,
     )
     candidate_dirs = [
-        challenge_dir.parent.relative_to(challenges_directory) for challenge_dir in challenges_directory.glob("**/challenge")
+        challenge_dir.parent.relative_to(challenges_directory)
+        for challenge_dir in challenges_directory.glob("**/challenge")
     ]
     ancestors = {parent.as_posix() for path in candidate_dirs for parent in path.parents}
     challenge_dirs = sorted(
