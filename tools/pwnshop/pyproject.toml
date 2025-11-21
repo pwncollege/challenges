@@ -1,0 +1,23 @@
+[project]
+name = "pwnshop"
+version = "0.0.0"
+description = "CLI tooling for pwn.college challenges"
+requires-python = ">=3.9"
+authors = [{ name = "pwn.college" }]
+dependencies = [
+  "black",
+  "click",
+  "jinja2",
+  "pyastyle",
+  "rich",
+]
+
+[project.scripts]
+pwnshop = "pwnshop:cli"
+
+[tool.ruff]
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pwnshop"]

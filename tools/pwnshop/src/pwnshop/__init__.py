@@ -9,7 +9,7 @@ from .commands.test import test_command
 
 @click.group()
 def cli():
-    """Challenge builder utility."""
+    """Challenge management CLI."""
 
 
 cli.add_command(render_command)
