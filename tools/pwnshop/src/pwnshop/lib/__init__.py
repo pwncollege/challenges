@@ -128,9 +128,7 @@ def build_challenge(challenge_path: pathlib.Path) -> str:
 def list_groups(directory: pathlib.Path) -> List[str]:
     directory = pathlib.Path(directory)
     groups = sorted(
-        [
-            attr_file.parent.relative_to(directory) for attr_file in directory.rglob(".gitattributes")
-        ],
+        [attr_file.parent.relative_to(directory) for attr_file in directory.rglob(".gitattributes")],
         key=lambda path: len(path.parts),
         reverse=True,
     )
@@ -183,8 +181,4 @@ def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = Non
 
 
 def resolve_targets(targets: Iterable[pathlib.Path]) -> List[pathlib.Path]:
-    return [
-        target / challenge_path
-        for target in targets
-        for challenge_path in list_challenges(target)
-    ]
+    return [target / challenge_path for target in targets for challenge_path in list_challenges(target)]

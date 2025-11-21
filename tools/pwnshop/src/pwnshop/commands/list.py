@@ -44,9 +44,7 @@ def list_command(modified_since, output_format, directory):
     if output_format == "matrix":
         matrix = {
             "group": ordered_groups,
-            "include": [
-                {"group": group, "challenges": "\n".join(group_challenges[group])} for group in ordered_groups
-            ],
+            "include": [{"group": group, "challenges": "\n".join(group_challenges[group])} for group in ordered_groups],
         }
         click.echo(json.dumps(matrix, separators=(",", ":")))
         return
