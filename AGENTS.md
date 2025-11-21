@@ -68,7 +68,7 @@ DO NOT run these scripts without ./pwnshop: the dependencies are not installed i
 - Binary challenges may not need templates at all - they can be compiled and placed directly in `challenge/`
 
 ### Docker Build Process
-1. If no `Dockerfile` exists, uses `./common/default-dockerfile.j2`
+1. Every challenge must ship a `Dockerfile.j2` (typically `{% include "common/Dockerfile.j2" %}`) — there is no automatic default.
 2. Copies `challenge/` directory to `/challenge` in container
 3. Executes `.setup` script if present during build
 4. Executes `.init` script if present at container startup
@@ -116,7 +116,7 @@ Can be a simple Python/Bash script with or without templating, depending on rand
 
 - Docker is required for building and testing challenges
 - The `exec-suid` utility is automatically included for SUIDing interpreted programs
-- Templates can extend `default-dockerfile.j2` or provide custom Dockerfiles
+- Common Dockerfile lives at `challenges/common/Dockerfile.j2`; include/extend it or provide a custom one as needed.
 - Challenge verification should be split between public (functionality) and private (exploitation) tests
 - The `challenge` object is available in templates with a seeded `random` attribute for deterministic randomization
 - Use existing common templates where possible (flask.py.j2, cmdi.py.j2, sqli-pw.py.j2, etc.)

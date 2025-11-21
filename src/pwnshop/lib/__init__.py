@@ -14,7 +14,6 @@ import jinja2
 import pyastyle
 
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[3]
-DEFAULT_DOCKERFILE_PATH = REPOSITORY_ROOT / "challenges/common/default-dockerfile.j2"
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
 
@@ -47,9 +46,6 @@ def render_challenge(template_directory):
         destination.write_text(render(template_directory / path))
         destination.chmod((template_directory / path).stat().st_mode)
         (rendered_directory / path).unlink()
-    dockerfile_path = rendered_directory / "challenge" / "Dockerfile"
-    if not dockerfile_path.exists():
-        dockerfile_path.write_text(render(DEFAULT_DOCKERFILE_PATH))
     return rendered_directory
 
 
