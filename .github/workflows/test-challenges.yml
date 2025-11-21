@@ -118,8 +118,15 @@ jobs:
         import os
         import sys
 
-        challenges = os.environ["GROUP_CHALLENGES"].splitlines()
         group = os.environ["GROUP_NAME"]
+        raw_challenges = os.environ["GROUP_CHALLENGES"].splitlines()
+        def challenge_path(challenge: str) -> str:
+            parts = ["challenges"]
+            if group != "default":
+                parts.append(group)
+            parts.append(challenge)
+            return "/".join(parts)
+        challenges = [(challenge, challenge_path(challenge)) for challenge in raw_challenges]
         concurrency = (os.cpu_count() or 1) * 2
         bar_width = 20
 
@@ -127,16 +134,16 @@ jobs:
         print(f"Group: {group}")
         print(f"Total challenges: {len(challenges)}")
         print("Challenges in this group:")
-        for challenge in challenges:
-            print(f"- {challenge}")
+        for challenge, path in challenges:
+            print(f"- {challenge} ({path})")
         print("::endgroup::")
 
-        async def run_tests(index: int, challenge: str):
+        async def run_tests(index: int, challenge: str, path: str):
             try:
                 process = await asyncio.create_subprocess_exec(
                     "./pwnshop",
                     "test",
-                    f"{group}/{challenge}",
+                    path,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,
                 )
@@ -156,19 +163,19 @@ jobs:
             next_index = 1
             pending = {}
 
-            for index, challenge in enumerate(challenges, start=1):
-                await task_queue.put((index, challenge))
+            for index, (challenge, path) in enumerate(challenges, start=1):
+                await task_queue.put((index, challenge, path))
 
             for _ in range(concurrency):
-                await task_queue.put((None, None))
+                await task_queue.put((None, None, None))
 
             async def worker():
                 while True:
-                    index, challenge = await task_queue.get()
-                    if index is None or challenge is None:
+                    index, challenge, path = await task_queue.get()
+                    if index is None or challenge is None or path is None:
                         task_queue.task_done()
                         break
-                    result = await run_tests(index, challenge)
+                    result = await run_tests(index, challenge, path)
                     await result_queue.put(result)
                     task_queue.task_done()
 
