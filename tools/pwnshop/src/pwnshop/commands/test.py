@@ -11,15 +11,17 @@ console = Console()
 
 @click.command("test")
 @click.argument(
-    "challenges",
+    "targets",
     nargs=-1,
     required=True,
-    type=click.Path(path_type=pathlib.Path, exists=True, dir_okay=True, file_okay=False, resolve_path=True),
+    type=click.Path(path_type=pathlib.Path, exists=True, dir_okay=True, file_okay=False, resolve_path=False),
 )
-def test_command(challenges):
-    """Build and run tests for one or more challenges."""
+def test_command(targets):
+    """Test one or more challenges."""
+    if not (challenge_paths := lib.resolve_targets(targets)):
+        raise click.ClickException("No challenges found in provided targets.")
     failed = {}
-    for challenge_path in challenges:
+    for challenge_path in challenge_paths:
         try:
             rendered_directory = lib.render_challenge(challenge_path)
         except FileNotFoundError as error:
@@ -43,7 +45,7 @@ def test_command(challenges):
                     console.print(f"[green]PASS[/] {challenge_path}/{relative_path}")
     if failed:
         console.print("[red]The following tests have failed:[/]")
-        for challenge_name, test_list in failed.items():
+        for challenge_path, test_list in failed.items():
             for test_path in test_list:
-                console.print(f"- {challenge_name}/{test_path}")
+                console.print(f"- {challenge_path}/{test_path}")
         raise click.ClickException("Some tests have failed.")

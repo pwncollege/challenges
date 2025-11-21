@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 from collections import defaultdict
+from typing import Iterable, Iterator, List, Optional, Sequence, Set
 
 import black
 import jinja2
@@ -17,7 +18,7 @@ import pyastyle
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
 
-def render(template):
+def render(template: pathlib.Path) -> str:
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(template.parents))
     rendered = env.get_template(template.name).render(
         random=random.Random(CHALLENGE_SEED), trim_blocks=True, lstrip_blocks=True
@@ -32,7 +33,7 @@ def render(template):
     return rendered
 
 
-def render_challenge(template_directory):
+def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
     rendered_directory = pathlib.Path(tempfile.mkdtemp(prefix="pwncollege-"))
     shutil.copytree(template_directory, rendered_directory, dirs_exist_ok=True)
     for path in (path.relative_to(template_directory) for path in template_directory.rglob("*.j2")):
@@ -44,7 +45,9 @@ def render_challenge(template_directory):
 
 
 @contextlib.contextmanager
-def run_challenge(challenge_image, *, volumes=None):
+def run_challenge(
+    challenge_image: str, *, volumes: Optional[Sequence[pathlib.Path]] = None
+) -> Iterator[tuple[str, str]]:
     flag = "pwn.college{" + base64.b64encode(os.urandom(40)).decode() + "}"
     env_options = []
     for key, value in {"FLAG": flag, "SEED": str(CHALLENGE_SEED)}.items():
@@ -108,7 +111,7 @@ def run_challenge(challenge_image, *, volumes=None):
         )
 
 
-def build_challenge(challenge_path):
+def build_challenge(challenge_path: pathlib.Path) -> str:
     rendered_directory = render_challenge(challenge_path)
     try:
         image_id = subprocess.check_output(
@@ -122,80 +125,66 @@ def build_challenge(challenge_path):
         shutil.rmtree(rendered_directory, ignore_errors=True)
 
 
-def discover_challenges(directory, modified_since=None):
+def list_groups(directory: pathlib.Path) -> List[str]:
     directory = pathlib.Path(directory)
-    challenges_directory = directory / "challenges" if (directory / "challenges").exists() else directory
-    group_directories = sorted(
+    groups = sorted(
         [
-            attr_file.parent.relative_to(challenges_directory)
-            for attr_file in challenges_directory.rglob(".gitattributes")
+            attr_file.parent.relative_to(directory) for attr_file in directory.rglob(".gitattributes")
         ],
         key=lambda path: len(path.parts),
         reverse=True,
     )
+    return [group.as_posix() for group in groups]
+
+
+def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = None) -> List[pathlib.Path]:
+    directory = pathlib.Path(directory)
     candidate_dirs = [
-        challenge_dir.parent.relative_to(challenges_directory)
-        for challenge_dir in challenges_directory.glob("**/challenge")
+        challenge_dir.parent.relative_to(directory)
+        for challenge_dir in directory.glob("**/challenge")
+        if challenge_dir.is_dir()
     ]
-    ancestors = {parent.as_posix() for path in candidate_dirs for parent in path.parents}
+    ancestors = {parent.as_posix() for path in candidate_dirs for parent in path.parents if parent.as_posix() != "."}
     challenge_dirs = sorted(
         [path for path in candidate_dirs if path.as_posix() not in ancestors],
         key=lambda path: len(path.parts),
         reverse=True,
     )
-    grouped = defaultdict(list)
-    relative_lookup = {}
-    for challenge_dir in challenge_dirs:
-        relative = challenge_dir.as_posix()
-        group = "default"
-        challenge_name = relative
-        for candidate in group_directories:
-            if not challenge_dir.is_relative_to(candidate):
-                continue
-            remainder = challenge_dir.relative_to(candidate)
-            if remainder.parts:
-                group = candidate.as_posix()
-                challenge_name = remainder.as_posix()
+    challenges = list(challenge_dirs)
+    if not modified_since:
+        return challenges
+
+    relative_lookup = {path.as_posix(): path for path in challenge_dirs}
+    diff_output = subprocess.check_output(["git", "diff", "--name-only", modified_since], cwd=directory, text=True)
+    affected = set()
+    for line in diff_output.splitlines():
+        relative_line = line.strip()
+        if not relative_line:
+            continue
+        path = pathlib.PurePosixPath(relative_line)
+        relative_path = path
+        candidate = relative_path
+        while True:
+            candidate_key = candidate.as_posix()
+            if candidate_key in relative_lookup:
+                affected.add(candidate_key)
                 break
-        grouped[group].append(challenge_name)
-        relative_lookup[relative] = (group, challenge_name)
-    if modified_since:
-        diff_output = subprocess.check_output(
-            ["git", "diff", "--name-only", modified_since],
-            cwd=directory,
-            text=True,
-        )
-        prefix = pathlib.PurePosixPath("challenges")
-        affected = set()
-        for line in diff_output.splitlines():
-            relative_line = line.strip()
-            if not relative_line:
-                continue
-            path = pathlib.PurePosixPath(relative_line)
-            if not path.is_relative_to(prefix):
-                continue
-            relative_path = path.relative_to(prefix)
-            candidate = relative_path
-            while True:
-                candidate_key = candidate.as_posix()
-                if candidate_key in relative_lookup:
-                    affected.add(candidate_key)
-                    break
-                if len(candidate.parts) <= 1:
-                    break
-                candidate = candidate.parent
-            parts = relative_path.parts
-            if len(parts) > 1 and "common" in parts[1:]:
-                common_index = parts.index("common", 1)
-                ancestor = pathlib.PurePosixPath(*parts[:common_index]).as_posix()
-                for key in relative_lookup:
-                    if key.startswith(ancestor + "/"):
-                        affected.add(key)
-        filtered = defaultdict(list)
-        for key in affected:
-            group, challenge_name = relative_lookup[key]
-            filtered[group].append(challenge_name)
-        grouped = filtered
-    for group in grouped:
-        grouped[group].sort()
-    return dict(sorted(grouped.items()))
+            if len(candidate.parts) <= 1:
+                break
+            candidate = candidate.parent
+        parts = relative_path.parts
+        if len(parts) > 1 and "common" in parts[1:]:
+            common_index = parts.index("common", 1)
+            ancestor = pathlib.PurePosixPath(*parts[:common_index]).as_posix()
+            for key in relative_lookup:
+                if key.startswith(ancestor + "/"):
+                    affected.add(key)
+    return sorted((relative_lookup[item] for item in affected), key=lambda path: len(path.parts), reverse=True)
+
+
+def resolve_targets(targets: Iterable[pathlib.Path]) -> List[pathlib.Path]:
+    return [
+        target / challenge_path
+        for target in targets
+        for challenge_path in list_challenges(target)
+    ]

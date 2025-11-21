@@ -28,11 +28,11 @@ from .. import lib
 )
 @click.argument("command", nargs=-1, default=("/bin/bash",))
 def run_command(challenge_path, user, volumes, command):
-    """Drop into an interactive shell inside a challenge container."""
+    """Run interactive shell for a challenge."""
     try:
         image_id = lib.build_challenge(challenge_path)
     except RuntimeError as error:
         raise click.ClickException(str(error)) from error
-    resolved_volumes = [path.resolve().as_posix() for path in volumes]
+    resolved_volumes = [path.resolve() for path in volumes]
     with lib.run_challenge(image_id, volumes=resolved_volumes) as (container, flag):
         subprocess.run(["docker", "exec", f"--user={user}", "-it", container, *command])

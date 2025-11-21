@@ -10,14 +10,16 @@ console = Console()
 
 @click.command("build")
 @click.argument(
-    "challenges",
+    "targets",
     nargs=-1,
     required=True,
-    type=click.Path(path_type=pathlib.Path, exists=True, dir_okay=True, file_okay=False, resolve_path=True),
+    type=click.Path(path_type=pathlib.Path, exists=True, dir_okay=True, file_okay=False, resolve_path=False),
 )
-def build_command(challenges):
-    """Render and build one or more challenges."""
-    for challenge_path in challenges:
+def build_command(targets):
+    """Build one or more challenges."""
+    if not (challenge_paths := lib.resolve_targets(targets)):
+        raise click.ClickException("No challenges found in provided targets.")
+    for challenge_path in challenge_paths:
         try:
             image_id = lib.build_challenge(challenge_path)
         except RuntimeError as error:

@@ -57,8 +57,10 @@ def _print_contents(path: pathlib.Path, contents: str):
 
 @click.command("render")
 @click.argument(
-    "target",
-    type=click.Path(path_type=pathlib.Path, exists=True, dir_okay=True, file_okay=True, resolve_path=True),
+    "targets",
+    nargs=-1,
+    required=True,
+    type=click.Path(path_type=pathlib.Path, exists=True, dir_okay=True, file_okay=True, resolve_path=False),
 )
 @click.option(
     "--output",
@@ -66,44 +68,67 @@ def _print_contents(path: pathlib.Path, contents: str):
     type=click.Path(path_type=pathlib.Path, file_okay=True, dir_okay=True, writable=True, resolve_path=False),
     help="Write rendered output to this path (file or directory). Defaults to stdout.",
 )
-def render_command(target, output_path):
-    """Render a template file or an entire challenge directory."""
-    if target.is_file():
-        rendered_contents = lib.render(target)
-        if output_path:
+def render_command(targets, output_path):
+    """Render one or more challenges."""
+    if output_path and len(targets) != 1:
+        raise click.ClickException("--output requires a single target")
+
+    file_targets = [target for target in targets if target.is_file()]
+    directory_targets = [target for target in targets if target.is_dir()]
+
+    if output_path:
+        target = targets[0]
+        if target.is_file():
+            rendered_contents = lib.render(target)
             if output_path.exists() and output_path.is_dir():
                 raise click.ClickException("--output points to a directory while rendering a file")
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(rendered_contents)
             console.print(f"[green]Wrote[/] {output_path}")
             return
-        console.rule(str(target))
-        _print_contents(target, rendered_contents)
-        return
-    try:
-        rendered_directory = lib.render_challenge(target)
-    except FileNotFoundError as error:
-        raise click.ClickException(str(error)) from error
-    if output_path:
+        if not (challenge_paths := lib.resolve_targets([target])):
+            raise click.ClickException("No challenges found in provided targets.")
+        if len(challenge_paths) != 1:
+            raise click.ClickException("--output requires a single challenge target")
+        challenge_path = challenge_paths[0]
+        try:
+            rendered_directory = lib.render_challenge(challenge_path)
+        except FileNotFoundError as error:
+            raise click.ClickException(str(error)) from error
         if output_path.exists():
             raise click.ClickException(f"Refusing to overwrite existing path: {output_path}")
         shutil.copytree(rendered_directory, output_path)
         shutil.rmtree(rendered_directory)
         console.print(f"[green]Rendered[/] {output_path}")
         return
-    try:
-        files = sorted(path for path in rendered_directory.rglob("*") if path.is_file())
-        if not files:
-            console.print("[yellow]Rendered challenge has no files[/]")
-        for file_path in files:
-            relative = file_path.relative_to(rendered_directory)
-            console.rule(str(relative))
-            try:
-                contents = file_path.read_text()
-            except UnicodeDecodeError:
-                size = file_path.stat().st_size
-                console.print(f"[yellow]Binary file ({size} bytes)[/]")
-                continue
-            _print_contents(file_path, contents)
-    finally:
-        shutil.rmtree(rendered_directory, ignore_errors=True)
+
+    for file_target in file_targets:
+        rendered_contents = lib.render(file_target)
+        console.rule(str(file_target))
+        _print_contents(file_target, rendered_contents)
+
+    challenge_paths = lib.resolve_targets(directory_targets)
+    if not challenge_paths and directory_targets:
+        raise click.ClickException("No challenges found in provided targets.")
+    for challenge_path in challenge_paths:
+        try:
+            rendered_directory = lib.render_challenge(challenge_path)
+        except FileNotFoundError as error:
+            raise click.ClickException(str(error)) from error
+        try:
+            files = sorted(path for path in rendered_directory.rglob("*") if path.is_file())
+            if not files:
+                console.print("[yellow]Rendered challenge has no files[/]")
+            console.rule(str(challenge_path))
+            for file_path in files:
+                relative = file_path.relative_to(rendered_directory)
+                console.rule(str(relative))
+                try:
+                    contents = file_path.read_text()
+                except UnicodeDecodeError:
+                    size = file_path.stat().st_size
+                    console.print(f"[yellow]Binary file ({size} bytes)[/]")
+                    continue
+                _print_contents(file_path, contents)
+        finally:
+            shutil.rmtree(rendered_directory, ignore_errors=True)
