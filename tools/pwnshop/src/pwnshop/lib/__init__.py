@@ -179,5 +179,9 @@ def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = Non
     return sorted((relative_lookup[item] for item in affected), key=lambda path: len(path.parts), reverse=True)
 
 
-def resolve_targets(targets: Iterable[pathlib.Path]) -> List[pathlib.Path]:
-    return [target / challenge_path for target in targets for challenge_path in list_challenges(target)]
+def resolve_targets(targets: Iterable[pathlib.Path], *, modified_since: Optional[str] = None) -> List[pathlib.Path]:
+    return [
+        target / challenge_path
+        for target in targets
+        for challenge_path in list_challenges(target, modified_since=modified_since)
+    ]

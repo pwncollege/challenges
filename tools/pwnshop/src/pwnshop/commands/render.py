@@ -68,7 +68,8 @@ def _print_contents(path: pathlib.Path, contents: str):
     type=click.Path(path_type=pathlib.Path, file_okay=True, dir_okay=True, writable=True, resolve_path=False),
     help="Write rendered output to this path (file or directory). Defaults to stdout.",
 )
-def render_command(targets, output_path):
+@click.option("--modified-since", metavar="REF", help="Only include challenges changed versus REF.")
+def render_command(targets, output_path, modified_since):
     """Render one or more challenges."""
     if output_path and len(targets) != 1:
         raise click.ClickException("--output requires a single target")
@@ -86,7 +87,10 @@ def render_command(targets, output_path):
             output_path.write_text(rendered_contents)
             console.print(f"[green]Wrote[/] {output_path}")
             return
-        if not (challenge_paths := lib.resolve_targets([target])):
+        if not (challenge_paths := lib.resolve_targets([target], modified_since=modified_since)):
+            if modified_since:
+                console.print(f"[yellow]No challenges found since {modified_since}[/]")
+                return
             raise click.ClickException("No challenges found in provided targets.")
         if len(challenge_paths) != 1:
             raise click.ClickException("--output requires a single challenge target")
@@ -107,8 +111,11 @@ def render_command(targets, output_path):
         console.rule(str(file_target))
         _print_contents(file_target, rendered_contents)
 
-    challenge_paths = lib.resolve_targets(directory_targets)
+    challenge_paths = lib.resolve_targets(directory_targets, modified_since=modified_since)
     if not challenge_paths and directory_targets:
+        if modified_since:
+            console.print(f"[yellow]No challenges found since {modified_since}[/]")
+            return
         raise click.ClickException("No challenges found in provided targets.")
     for challenge_path in challenge_paths:
         try:
