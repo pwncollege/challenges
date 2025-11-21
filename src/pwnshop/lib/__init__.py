@@ -167,19 +167,30 @@ def discover_challenges(modified_since=None):
         key=lambda path: len(path.parts),
         reverse=True,
     )
+    candidate_dirs = [
+        challenge_dir.parent.relative_to(challenges_directory)
+        for challenge_dir in challenges_directory.glob("**/challenge")
+    ]
+    ancestors = {
+        parent.as_posix()
+        for path in candidate_dirs
+        for parent in path.parents
+    }
+    challenge_dirs = sorted(
+        [path for path in candidate_dirs if path.as_posix() not in ancestors],
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
     grouped = defaultdict(list)
     relative_lookup = {}
-    for challenge_dir in challenges_directory.glob("**/challenge"):
-        relative_path = challenge_dir.parent.relative_to(challenges_directory)
-        if not relative_path.parts:
-            continue
-        relative = relative_path.as_posix()
+    for challenge_dir in challenge_dirs:
+        relative = challenge_dir.as_posix()
         group = "default"
         challenge_name = relative
         for candidate in group_directories:
-            if not relative_path.is_relative_to(candidate):
+            if not challenge_dir.is_relative_to(candidate):
                 continue
-            remainder = relative_path.relative_to(candidate)
+            remainder = challenge_dir.relative_to(candidate)
             if remainder.parts:
                 group = candidate.as_posix()
                 challenge_name = remainder.as_posix()
