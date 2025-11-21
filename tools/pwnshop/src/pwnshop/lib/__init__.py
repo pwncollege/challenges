@@ -111,13 +111,10 @@ def run_challenge(challenge_image, *, volumes=None):
 def build_challenge(challenge_path):
     rendered_directory = render_challenge(challenge_path)
     try:
-        image_id = (
-            subprocess.check_output(
-                ["docker", "build", "-q", str(rendered_directory / "challenge")],
-                text=True,
-            )
-            .strip()
-        )
+        image_id = subprocess.check_output(
+            ["docker", "build", "-q", str(rendered_directory / "challenge")],
+            text=True,
+        ).strip()
         return image_id
     except subprocess.CalledProcessError as error:
         raise RuntimeError(f"Failed to build challenge {challenge_path}") from error
@@ -128,10 +125,7 @@ def build_challenge(challenge_path):
 def discover_challenges(directory, modified_since=None):
     directory = pathlib.Path(directory)
     group_directories = sorted(
-        [
-            attr_file.parent.relative_to(directory)
-            for attr_file in directory.rglob(".gitattributes")
-        ],
+        [attr_file.parent.relative_to(directory) for attr_file in directory.rglob(".gitattributes")],
         key=lambda path: len(path.parts),
         reverse=True,
     )

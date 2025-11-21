@@ -30,17 +30,12 @@ def list_command(modified_since, output_format, directory):
         matrix = {
             "group": list(group_challenges.keys()),
             "include": [
-                {"group": group, "challenges": "\n".join(challenges)}
-                for group, challenges in group_challenges.items()
+                {"group": group, "challenges": "\n".join(challenges)} for group, challenges in group_challenges.items()
             ],
         }
         click.echo(json.dumps(matrix, separators=(",", ":")))
         return
-    rows = [
-        (group, challenge)
-        for group, challenges in group_challenges.items()
-        for challenge in challenges
-    ]
+    rows = [(group, challenge) for group, challenges in group_challenges.items() for challenge in challenges]
     group_width = max(len("GROUP"), *(len(group) for group, _ in rows)) if rows else len("GROUP")
     path_width = max(len("PATH"), *(len(path) for _, path in rows)) if rows else len("PATH")
     fmt = f"{{:<{group_width}}}  {{:<{path_width}}}"
