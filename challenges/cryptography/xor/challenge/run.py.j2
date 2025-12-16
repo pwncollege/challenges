@@ -1,0 +1,7 @@
+{% extends "common/crypto_xor.py.j2" %}
+
+{% block setup %}
+  {{ super() }}
+  {% set chal.mode = "xor" %}
+  {% set chal.doc_hint = "XOR is self-inverse: c = p ^ k and p = c ^ k. Review bitwise XOR here: https://en.wikipedia.org/wiki/Exclusive_or" %}
+{% endblock %}

@@ -1,0 +1,140 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+{% set chal = namespace() %}
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from Crypto.Random import get_random_bytes
+from base64 import b64encode
+import sys
+
+{% if chal.interface == "http" %}
+import tempfile
+import sqlite3
+import flask
+import os
+{% endif %}
+
+flag = open("/flag", "rb").read().strip()
+key = get_random_bytes(16)
+cipher = AES.new(key=key, mode=AES.MODE_ECB)
+
+
+def encrypt(pt):
+    {% if chal.padding_mode == "pad_if_needed" %}
+    pt = pad(pt, cipher.block_size) if len(pt) % cipher.block_size else pt
+    {% else %}
+    pt = pad(pt, cipher.block_size)
+    {% endif %}
+    return cipher.encrypt(pt)
+
+
+{% if chal.interface == "cli" %}
+
+{% if chal.loop_model == "bounded" %}
+for n in range(31337):
+{% else %}
+while True:
+{% endif %}
+    print("")
+    print("Choose an action?")
+    print("1. Encrypt chosen plaintext.")
+    print("2. {{ chal.action_label }}")
+    try:
+        choice = int(input("Choice? "))
+    except:
+        break
+
+    {% if chal.input_mode == "chosen_or_slice" %}
+    if choice == 1:
+        pt = input("Data? ").strip().encode()
+    elif choice == 2:
+        index = int(input("Index? "))
+        length = int(input("Length? "))
+        pt = flag[index:index+length]
+    else:
+        break
+
+    {% elif chal.input_mode == "prefix_flag" %}
+    if choice == 1:
+        pt = input("Data? ").strip().encode()
+    elif choice == 2:
+        pt = input("Data? ").strip().encode() + flag
+    else:
+        break
+
+    {% elif chal.input_mode == "suffix_flag" %}
+    if choice == 1:
+        pt = input("Data? ").strip().encode()
+    elif choice == 2:
+        length = int(input("Length? "))
+        pt = flag[-length:]
+    else:
+        break
+
+    {% elif chal.input_mode == "hex_prefix" %}
+    pt = bytes.fromhex(input("Data? ").strip()) + flag
+
+    {% endif %}
+
+    ct = encrypt(pt)
+
+    {% if chal.output_mode == "hex" %}
+    print(f"Result: {ct.hex()}")
+    {% elif chal.output_mode == "raw_hex" %}
+    print(f"Ciphertext: {ct.hex()}")
+    {% elif chal.output_mode == "split_blocks" %}
+    print(f"Result: {ct.hex()}")
+    if n == 0:
+        print("I'm here to help!")
+        print("For the first 10, I will split them into blocks for you!")
+        print("After this, you'll have to split them yourself.")
+    if n < 10:
+        print(f"# of blocks: {len(ct)//16}.")
+        for i,b in enumerate(range(0, len(ct), 16), start=1):
+            print(f"Block {i}: {ct[b:b+16].hex()}")
+    {% endif %}
+
+{% else %}
+
+app = flask.Flask(__name__)
+
+class TemporaryDB:
+    def __init__(self):
+        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
+
+    def execute(self, sql, parameters=()):
+        connection = sqlite3.connect(self.db_file.name)
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        result = cursor.execute(sql, parameters)
+        connection.commit()
+        return result
+
+db = TemporaryDB()
+db.execute("""CREATE TABLE secrets AS SELECT ? AS flag""", [flag])
+
+@app.route("/", methods=["GET"])
+def challenge_get():
+    query = flask.request.args.get("query") or "'A'"
+    try:
+        sql = f"SELECT {query} FROM secrets"
+        pt = db.execute(sql).fetchone()[0]
+    except:
+        pt = "A"
+
+    ct = encrypt(pt.encode())
+
+    {% if chal.output_mode == "b64" %}
+    out = b64encode(ct).decode()
+    {% else %}
+    out = ct.hex()
+    {% endif %}
+
+    return f"<pre>{out}</pre>"
+
+app.secret_key = os.urandom(8)
+app.config["SERVER_NAME"] = "challenge.localhost:80"
+app.run("challenge.localhost", 80)
+
+{% endif %}

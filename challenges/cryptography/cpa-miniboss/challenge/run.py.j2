@@ -1,0 +1,6 @@
+{% extends "common/crypto_cpa_ecb.py.j2" %}
+{% set chal.interface = "cli" %}
+{% set chal.input_mode = "hex_prefix" %}
+{% set chal.padding_mode = "pad_always" %}
+{% set chal.output_mode = "raw_hex" %}
+{% set chal.loop_model = "while" %}

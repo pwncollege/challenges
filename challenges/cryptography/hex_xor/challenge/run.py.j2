@@ -1,0 +1,7 @@
+{% extends "common/crypto_xor.py.j2" %}
+
+{% block setup %}
+  {{ super() }}
+  {% set chal.mode = "xorhex" %}
+  {% set chal.doc_hint = "Refresh yourself on hexadecimal from the 'Dealing with Data' module: https://pwn.college/fundamentals/data-dealings" %}
+{% endblock %}

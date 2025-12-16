@@ -1,0 +1,7 @@
+{% extends "common/crypto_xor.py.j2" %}
+
+{% block setup %}
+  {{ super() }}
+  {% set chal.mode = "xorascii" %}
+  {% set chal.doc_hint = "This challenge uses XOR on single ASCII characters. Recall that key = p ^ c and p = c ^ key." %}
+{% endblock %}
