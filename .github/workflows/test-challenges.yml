@@ -59,12 +59,9 @@ jobs:
         MODIFIED_SINCE: ${{ steps.modified-since.outputs.ref }}
       run: |
         set -euo pipefail
-        challenges="$(./pwnshop list ./challenges --modified-since="$MODIFIED_SINCE")"
-
         matrix_entries="$(
-          printf '%s\n' "$challenges" \
+          ./pwnshop list ./challenges --modified-since="$MODIFIED_SINCE" \
             | cut -d/ -f1 \
-            | grep -v '^$' \
             | sort -u \
             | while read -r dir; do printf '{"directory":"challenges/%s"}\n' "$dir"; done \
             | paste -sd, -
