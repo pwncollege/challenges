@@ -19,9 +19,7 @@ def list_command(modified_since, targets):
     """List challenges."""
     root_targets = targets or (pathlib.Path("."),)
     challenges = {
-        challenge
-        for target in root_targets
-        for challenge in lib.list_challenges(target, modified_since=modified_since)
+        challenge for target in root_targets for challenge in lib.list_challenges(target, modified_since=modified_since)
     }
     for challenge in sorted(challenges):
         console.print(str(challenge), highlight=False)
