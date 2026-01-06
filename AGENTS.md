@@ -10,7 +10,7 @@ This is the pwn.college challenge monorepo containing cybersecurity CTF challeng
 
 ### Challenge CLI
 
-All workflows run through the `./pwnshop` CLI (implemented with Click/Rich in `src/pwnshop/commands` and backed by shared helpers in `src/pwnshop/lib`). The older `./build` script has been retired; never call it or duplicate its behavior.
+All workflows run through the `./pwnshop` CLI (implemented with Click/Rich in `tools/pwnshop/src/pwnshop/commands` and backed by shared helpers in `tools/pwnshop/src/pwnshop/lib`). The older `./build` script has been retired; never call it or duplicate its behavior.
 
 Each subcommand accepts either a direct path or a challenge slug (e.g., `web-security/path-traversal-1`). Slugs must contain the module and challenge, and the CLI searches `./challenges` for that exact path.
 

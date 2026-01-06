@@ -34,7 +34,7 @@ git crypt unlock
 
 All developer workflows now run through the `./pwnshop` command. The legacy `./build` helper has been removed, so every rendered, build, run, or test action should use the new CLI instead.
 
-The CLI is implemented with Click and Rich (`src/pwnshop/commands/*.py`) on top of the core helper library in `src/pwnshop/lib/__init__.py`. Keeping formatting/terminal logic in the commands and reusable challenge logic in `src/pwnshop/lib` makes it easy to add or modify commands without duplicating functionality.
+The CLI is implemented with Click and Rich (`tools/pwnshop/src/pwnshop/commands/*.py`) on top of the core helper library in `tools/pwnshop/src/pwnshop/lib/__init__.py`. Keeping formatting/terminal logic in the commands and reusable challenge logic in `tools/pwnshop/src/pwnshop/lib` makes it easy to add or modify commands without duplicating functionality.
 
 All CLI subcommands accept either a direct filesystem path or a challenge slug. Slugs must include the module (e.g., `web-security/path-traversal-1`); the tool searches under `./challenges` for that module/challenge pair and errors if nothing matches.
 
