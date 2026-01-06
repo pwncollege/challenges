@@ -142,7 +142,11 @@ def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = Non
         return challenges
 
     relative_lookup = {path.as_posix(): path for path in challenge_dirs}
-    diff_output = subprocess.check_output(["git", "diff", "--name-only", modified_since], cwd=directory, text=True)
+    diff_output = subprocess.check_output(
+        ["git", "diff", "--name-only", "--relative", modified_since],
+        cwd=directory,
+        text=True,
+    )
     affected = set()
     for line in diff_output.splitlines():
         relative_line = line.strip()
