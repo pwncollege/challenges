@@ -6,7 +6,14 @@ import shutil
 import subprocess
 import click
 from rich.console import Console
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from .. import lib
 console = Console()
 
@@ -14,7 +21,18 @@ console = Console()
 @click.command("test")
 @click.option("--modified-since", metavar="REF", help="Only include challenges changed versus REF.")
 @click.option("--jobs", "-j", metavar="N", type=click.IntRange(1, None), help="Parallel challenges (default: cores).")
-@click.argument("targets", nargs=-1, required=True, type=click.Path(path_type=pathlib.Path, exists=True, dir_okay=True, file_okay=False, resolve_path=False))
+@click.argument(
+    "targets",
+    nargs=-1,
+    required=True,
+    type=click.Path(
+        path_type=pathlib.Path,
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=False,
+    ),
+)
 def test_command(targets, modified_since, jobs):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
@@ -26,8 +44,7 @@ def test_command(targets, modified_since, jobs):
     failed: dict[pathlib.Path, list] = {}
     passed_count = failed_count = total_tests = failed_tests = 0
 
-    def test_challenge(args):
-        index, challenge_path = args
+    def test_challenge(challenge_path):
         challenge_path = pathlib.Path(challenge_path)
         rendered = None
         try:
@@ -35,7 +52,7 @@ def test_command(targets, modified_since, jobs):
             image_id = lib.build_challenge(challenge_path)
             tests = sorted(rendered.rglob("test*/test_*"))
             if not tests:
-                return index, {"path": challenge_path, "tests": []}
+                return {"path": challenge_path, "tests": []}
             results = []
             for test in tests:
                 with lib.run_challenge(image_id, volumes=[test]) as (container, _):
@@ -46,9 +63,9 @@ def test_command(targets, modified_since, jobs):
                         text=True,
                     )
                 results.append((test.relative_to(rendered), run.returncode == 0, run.stdout or ""))
-            return index, {"path": challenge_path, "tests": results}
+            return {"path": challenge_path, "tests": results}
         except (FileNotFoundError, RuntimeError) as error:
-            return index, {"path": challenge_path, "error": str(error)}
+            return {"path": challenge_path, "error": str(error)}
         finally:
             if rendered:
                 shutil.rmtree(rendered, ignore_errors=True)
@@ -65,7 +82,7 @@ def test_command(targets, modified_since, jobs):
         task = progress.add_task("Testing challenges", total=len(challenge_paths))
         pool = multiprocessing.pool.ThreadPool(processes=jobs)
         completed = 0
-        for _, result in pool.imap_unordered(test_challenge, enumerate(challenge_paths)):
+        for result in pool.imap_unordered(test_challenge, challenge_paths):
             challenge = result["path"]
             error = result.get("error")
             tests = result.get("tests") or []
