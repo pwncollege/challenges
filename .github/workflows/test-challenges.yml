@@ -64,6 +64,7 @@ jobs:
         matrix_entries="$(
           printf '%s\n' "$challenges" \
             | cut -d/ -f1 \
+            | grep -v '^$' \
             | sort -u \
             | while read -r dir; do printf '{"directory":"challenges/%s"}\n' "$dir"; done \
             | paste -sd, -
