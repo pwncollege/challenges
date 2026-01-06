@@ -1,0 +1,177 @@
+import base64
+import contextlib
+import os
+import pathlib
+import random
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from typing import Iterable, Iterator, List, Optional, Sequence
+
+import black
+import jinja2
+import pyastyle
+
+CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
+
+
+def render(template: pathlib.Path) -> str:
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(template.parents))
+    rendered = env.get_template(template.name).render(
+        random=random.Random(CHALLENGE_SEED), trim_blocks=True, lstrip_blocks=True
+    )
+    try:
+        if ".py" in template.suffixes or "python" in rendered.splitlines()[0]:
+            return black.format_str(rendered, mode=black.FileMode(line_length=120))
+        if ".c" in template.suffixes:
+            return re.sub("\n{2,}", "\n\n", pyastyle.format(rendered, "--style=allman"))
+    except black.parsing.InvalidInput as error:
+        print(f"WARNING: template {template} does not format properly: {error}", file=sys.stderr)
+    return rendered
+
+
+def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
+    rendered_directory = pathlib.Path(tempfile.mkdtemp(prefix="pwncollege-"))
+    shutil.copytree(template_directory, rendered_directory, dirs_exist_ok=True)
+    for path in (path.relative_to(template_directory) for path in template_directory.rglob("*.j2")):
+        destination = (rendered_directory / path).with_suffix("")
+        destination.write_text(render(template_directory / path))
+        destination.chmod((template_directory / path).stat().st_mode)
+        (rendered_directory / path).unlink()
+    return rendered_directory
+
+
+@contextlib.contextmanager
+def run_challenge(
+    challenge_image: str, *, volumes: Optional[Sequence[pathlib.Path]] = None
+) -> Iterator[tuple[str, str]]:
+    flag = "pwn.college{" + base64.b64encode(os.urandom(40)).decode() + "}"
+    env_options = []
+    for key, value in {"FLAG": flag, "SEED": str(CHALLENGE_SEED)}.items():
+        env_options.extend(["--env", f"{key}={value}"])
+    container = (
+        subprocess.check_output(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--interactive",
+                "--detach",
+                "--init",
+                "--user=0:0",
+                "--device=/dev/kvm",
+                "--cap-add=SYS_PTRACE",
+                *env_options,
+                *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
+                challenge_image,
+                "/bin/sh",
+                "-c",
+                "read forever",
+            ]
+        )
+        .decode()
+        .strip()
+    )
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "--interactive",
+            "--user=0:0",
+            container,
+            "/bin/sh",
+            "-c",
+            "cat >/flag && chown 0:0 /flag && chmod 0400 /flag",
+        ],
+        input=f"{flag}\n",
+        text=True,
+        check=True,
+    )
+    subprocess.check_call(
+        [
+            "docker",
+            "exec",
+            "--user=0:0",
+            container,
+            "/bin/sh",
+            "-c",
+            "[ ! -e /challenge/.init ] || /challenge/.init",
+        ]
+    )
+    try:
+        yield container, flag
+    finally:
+        subprocess.run(
+            ["docker", "kill", container],
+            stdout=subprocess.DEVNULL,
+            check=True,
+        )
+
+
+def build_challenge(challenge_path: pathlib.Path) -> str:
+    rendered_directory = render_challenge(challenge_path)
+    try:
+        image_id = subprocess.check_output(
+            ["docker", "build", "-q", str(rendered_directory / "challenge")],
+            text=True,
+        ).strip()
+        return image_id
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"Failed to build challenge {challenge_path}") from error
+    finally:
+        shutil.rmtree(rendered_directory, ignore_errors=True)
+
+
+def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = None) -> List[pathlib.Path]:
+    directory = pathlib.Path(directory)
+    candidate_dirs = [
+        challenge_dir.parent.relative_to(directory)
+        for challenge_dir in directory.glob("**/challenge")
+        if challenge_dir.is_dir()
+    ]
+    ancestors = {parent.as_posix() for path in candidate_dirs for parent in path.parents if parent.as_posix() != "."}
+    challenge_dirs = sorted(
+        [path for path in candidate_dirs if path.as_posix() not in ancestors],
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
+    challenges = list(challenge_dirs)
+    if not modified_since:
+        return challenges
+
+    relative_lookup = {path.as_posix(): path for path in challenge_dirs}
+    diff_output = subprocess.check_output(["git", "diff", "--name-only", modified_since], cwd=directory, text=True)
+    affected = set()
+    for line in diff_output.splitlines():
+        relative_line = line.strip()
+        if not relative_line:
+            continue
+        path = pathlib.PurePosixPath(relative_line)
+        relative_path = path
+        candidate = relative_path
+        while True:
+            candidate_key = candidate.as_posix()
+            if candidate_key in relative_lookup:
+                affected.add(candidate_key)
+                break
+            if len(candidate.parts) <= 1:
+                break
+            candidate = candidate.parent
+        parts = relative_path.parts
+        if len(parts) > 1 and "common" in parts[1:]:
+            common_index = parts.index("common", 1)
+            ancestor = pathlib.PurePosixPath(*parts[:common_index]).as_posix()
+            for key in relative_lookup:
+                if key.startswith(ancestor + "/"):
+                    affected.add(key)
+    return sorted((relative_lookup[item] for item in affected), key=lambda path: len(path.parts), reverse=True)
+
+
+def resolve_targets(targets: Iterable[pathlib.Path], *, modified_since: Optional[str] = None) -> List[pathlib.Path]:
+    return [
+        target / challenge_path
+        for target in targets
+        for challenge_path in list_challenges(target, modified_since=modified_since)
+    ]

@@ -1,22 +1,7 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.9"
-# dependencies = [
-#   "black",
-#   "jinja2",
-#   "pyastyle",
-#   "click",
-#   "rich",
-# ]
-# ///
+#!/bin/sh
+set -eu
 
-import pathlib
-import sys
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+UV_PROJECT="$SCRIPT_DIR/tools/pwnshop"
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(REPO_ROOT / "src"))
-
-from pwnshop import cli
-
-if __name__ == "__main__":
-    cli()
+exec uv run --project "$UV_PROJECT" --with-editable "$UV_PROJECT" pwnshop "$@"

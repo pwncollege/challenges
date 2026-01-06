@@ -16,74 +16,74 @@ on:
     - cron: '0 2 * * *'  # Daily at 2 AM UTC
 
 jobs:
-  detect-changes:
+  detect-challenges:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.changed-challenges.outputs.matrix }}
-      has-changes: ${{ steps.changed-challenges.outputs.has-changes }}
+      matrix: ${{ steps.challenge-matrix.outputs.matrix }}
+      modified-since: ${{ steps.modified-since.outputs.ref }}
 
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Fetch all history for proper diff
+        fetch-depth: 0
 
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
-        cache-dependency-glob: "{pwnshop,src/pwnshop/**}"
+        cache-dependency-glob: tools/pwnshop/**
 
-    - name: Get challenges to test
-      id: changed-challenges
+    - name: Determine modified-since ref
+      id: modified-since
       run: |
         set -euo pipefail
-
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
-          echo "Collecting all challenges (triggered by ${{ github.event_name }})"
-          TABLE=$(./pwnshop list --format table)
-          MATRIX=$(./pwnshop list --format matrix)
-        else
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            REF="${{ github.event.pull_request.base.sha }}"
-          else
-            REF="${{ github.event.before }}"
-          fi
-
-          if [ -z "$REF" ] || [ "$REF" = "0000000000000000000000000000000000000000" ]; then
-            REF=$(git hash-object -t tree /dev/null)
-          fi
-
-          echo "Collecting challenges modified since $REF"
-          TABLE=$(./pwnshop list --modified-since "$REF" --format table)
-          MATRIX=$(./pwnshop list --modified-since "$REF" --format matrix)
+          echo "ref=" >> "$GITHUB_OUTPUT"
+          exit 0
         fi
 
-        echo "Challenges to test:"
-        echo "$TABLE"
-
-        if [ "$MATRIX" = '{"group":[],"include":[]}' ]; then
-          echo "No challenges to test"
-          echo "has-changes=false" >> "$GITHUB_OUTPUT"
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          ref="${{ github.event.pull_request.base.sha }}"
         else
-          echo "has-changes=true" >> "$GITHUB_OUTPUT"
+          ref="${{ github.event.before }}"
         fi
 
-        echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+        if [ "$ref" = "0000000000000000000000000000000000000000" ]; then
+          ref=""
+        fi
+
+        echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+    - name: Build challenge matrix
+      id: challenge-matrix
+      env:
+        MODIFIED_SINCE: ${{ steps.modified-since.outputs.ref }}
+      run: |
+        set -euo pipefail
+        matrix_entries="$(
+          ./pwnshop list ./challenges --modified-since="$MODIFIED_SINCE" \
+            | cut -d/ -f1 \
+            | sort -u \
+            | while read -r dir; do printf '{"directory":"challenges/%s"}\n' "$dir"; done \
+            | paste -sd, -
+        )"
+        echo "matrix={\"include\":[${matrix_entries}]}" >> "$GITHUB_OUTPUT"
 
   test-challenges:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.has-changes == 'true'
+    needs: detect-challenges
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # Continue testing other challenges even if one fails
-      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.detect-challenges.outputs.matrix) }}
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
-        cache-dependency-glob: build
+        cache-dependency-glob: tools/pwnshop/**
 
     - name: Set up Docker storage
       run: |
@@ -108,134 +108,14 @@ jobs:
         # Find and remove directories containing encrypted files using git-crypt status (these cannot be tested currently)
         git crypt status -e | sed -e "s/ *encrypted: //" | xargs dirname | xargs rm -rf
 
-    - name: Test challenges in group
+    - name: Test challenges in directory
       env:
-        GROUP_CHALLENGES: ${{ matrix.challenges }}
-        GROUP_NAME: ${{ matrix.group }}
+        CHALLENGE_DIR: ${{ matrix.directory }}
+        MODIFIED_SINCE: ${{ needs.detect-challenges.outputs.modified-since }}
       run: |
-        python3 - <<'PY'
-        import asyncio
-        import os
-        import sys
-
-        challenges = os.environ["GROUP_CHALLENGES"].splitlines()
-        group = os.environ["GROUP_NAME"]
-        concurrency = (os.cpu_count() or 1) * 2
-        bar_width = 20
-
-        print(f"::group::Test summary for {group}")
-        print(f"Group: {group}")
-        print(f"Total challenges: {len(challenges)}")
-        print("Challenges in this group:")
-        for challenge in challenges:
-            print(f"- {challenge}")
-        print("::endgroup::")
-
-        async def run_tests(index: int, challenge: str):
-            try:
-                process = await asyncio.create_subprocess_exec(
-                    "./pwnshop",
-                    "test",
-                    f"{group}/{challenge}",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                )
-                stdout_data, _ = await process.communicate()
-                output = stdout_data.decode(errors="replace")
-                status = process.returncode
-            except Exception as exception:
-                output = f"Failed to run tests for {challenge}: {exception}\n"
-                status = 1
-            return index, challenge, status, output
-
-        async def orchestrate():
-            task_queue = asyncio.Queue()
-            result_queue = asyncio.Queue()
-            passed = []
-            failed = []
-            next_index = 1
-            pending = {}
-
-            for index, challenge in enumerate(challenges, start=1):
-                await task_queue.put((index, challenge))
-
-            for _ in range(concurrency):
-                await task_queue.put((None, None))
-
-            async def worker():
-                while True:
-                    index, challenge = await task_queue.get()
-                    if index is None or challenge is None:
-                        task_queue.task_done()
-                        break
-                    result = await run_tests(index, challenge)
-                    await result_queue.put(result)
-                    task_queue.task_done()
-
-            async def logger():
-                nonlocal next_index
-                processed = 0
-                while processed < len(challenges):
-                    index, challenge, status, output = await result_queue.get()
-                    pending[index] = (challenge, status, output)
-                    while next_index in pending:
-                        challenge, status, output = pending.pop(next_index)
-                        status_symbol = "✓" if status == 0 else "✗"
-                        status_text = "passed" if status == 0 else "failed"
-                        filled = (next_index * bar_width) // len(challenges)
-                        bar = "#" * filled + "." * (bar_width - filled)
-                        print(f"{status_symbol} [{bar}] [{next_index}/{len(challenges)}] {challenge}: {status_text}")
-
-                        if status == 0:
-                            passed.append(challenge)
-                        else:
-                            failed.append(challenge)
-                            if output:
-                                print(output, end="" if output.endswith("\n") else "\n")
-                            print(f"::error::✗ {challenge} {status_text}")
-
-                        print("::endgroup::")
-                        sys.stdout.flush()
-                        next_index += 1
-                    processed += 1
-                    result_queue.task_done()
-
-            workers = [asyncio.create_task(worker()) for _ in range(concurrency)]
-            logger_task = asyncio.create_task(logger())
-
-            await task_queue.join()
-            await asyncio.gather(*workers)
-            await result_queue.join()
-            await logger_task
-
-            return passed, failed
-
-        passed, failed = asyncio.run(orchestrate())
-
-        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-        if summary_path:
-            with open(summary_path, "a", encoding="utf-8") as summary:
-                summary.write(f"### Results for group `{group}`\n\n")
-                summary.write(f"- Total challenges: {len(challenges)}\n")
-                summary.write(f"- Passed: {len(passed)}\n")
-                summary.write(f"- Failed: {len(failed)}\n\n")
-
-                summary.write("<details><summary>Passed challenges</summary>\n\n")
-                if not passed:
-                    summary.write("*(none)*\n")
-                else:
-                    for challenge in passed:
-                        summary.write(f"- `{challenge}`\n")
-                summary.write("\n</details>\n\n")
-
-                summary.write("<details><summary>Failed challenges</summary>\n\n")
-                if not failed:
-                    summary.write("*(none)*\n")
-                else:
-                    for challenge in failed:
-                        summary.write(f"- `{challenge}`\n")
-                summary.write("\n</details>\n\n")
-
-        if failed:
-            sys.exit(1)
-        PY
+        set -euo pipefail
+        JOBS=$(( $(nproc) * 2 ))
+        echo "::group::Testing challenges in ${CHALLENGE_DIR}"
+        ./pwnshop list "$CHALLENGE_DIR" --modified-since="$MODIFIED_SINCE"
+        echo "::endgroup::"
+        ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGE_DIR"
