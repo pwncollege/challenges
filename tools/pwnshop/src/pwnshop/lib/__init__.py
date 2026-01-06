@@ -124,16 +124,6 @@ def build_challenge(challenge_path: pathlib.Path) -> str:
         shutil.rmtree(rendered_directory, ignore_errors=True)
 
 
-def list_groups(directory: pathlib.Path) -> List[str]:
-    directory = pathlib.Path(directory)
-    groups = sorted(
-        [attr_file.parent.relative_to(directory) for attr_file in directory.rglob(".gitattributes")],
-        key=lambda path: len(path.parts),
-        reverse=True,
-    )
-    return [group.as_posix() for group in groups]
-
-
 def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = None) -> List[pathlib.Path]:
     directory = pathlib.Path(directory)
     candidate_dirs = [
