@@ -119,3 +119,13 @@ jobs:
         ./pwnshop list "$CHALLENGE_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"
         ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGE_DIR"
+
+    - name: Report docker storage
+      if: always()
+      run: |
+        echo "::group::Disk usage (df -h)"
+        df -h
+        echo "::endgroup::"
+        echo "::group::Docker system usage"
+        docker system df -v
+        echo "::endgroup::"
