@@ -21,7 +21,6 @@ jobs:
     outputs:
       matrix: ${{ steps.challenge-matrix.outputs.matrix }}
       modified-since: ${{ steps.modified-since.outputs.ref }}
-      has-challenges: ${{ steps.challenge-matrix.outputs.has-challenges }}
 
     steps:
     - uses: actions/checkout@v4
@@ -68,16 +67,14 @@ jobs:
             | paste -sd, -
         )"
         if [ -z "$matrix_entries" ]; then
-          echo "matrix={\"include\":[{\"directory\":\"\"}]}" >> "$GITHUB_OUTPUT"
-          echo "has-challenges=false" >> "$GITHUB_OUTPUT"
+          echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
         else
           echo "matrix={\"include\":[${matrix_entries}]}" >> "$GITHUB_OUTPUT"
-          echo "has-challenges=true" >> "$GITHUB_OUTPUT"
         fi
 
   test-challenges:
     needs: detect-challenges
-    if: needs.detect-challenges.outputs.has-challenges == 'true'
+    if: ${{ fromJson(needs.detect-challenges.outputs.matrix).include }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # Continue testing other challenges even if one fails
