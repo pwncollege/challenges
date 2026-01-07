@@ -110,17 +110,19 @@ jobs:
         # Find and remove directories containing encrypted files using git-crypt status (these cannot be tested currently)
         git crypt status -e | sed -e "s/ *encrypted: //" | xargs dirname | xargs rm -rf
 
-    - name: Test challenges in directory
+    - name: Test challenges
       env:
         CHALLENGE_DIR: ${{ matrix.challenges }}
         MODIFIED_SINCE: ${{ needs.detect-challenges.outputs.modified-since }}
       run: |
         set -euo pipefail
         JOBS=$(( $(nproc) * 2 ))
-        echo "::group::Testing challenges in ${CHALLENGE_DIR}"
+        echo "::group::Challenges to be tested"
         ./pwnshop list "$CHALLENGE_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"
+        echo "::group::Testing challenges"
         ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGE_DIR"
+        echo "::endgroup::"
 
     - name: Report docker storage
       if: always()
@@ -129,5 +131,6 @@ jobs:
         df -h
         echo "::endgroup::"
         echo "::group::Docker system usage"
+        docker system df
         docker system df -v
         echo "::endgroup::"
