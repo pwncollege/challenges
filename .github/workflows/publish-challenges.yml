@@ -16,6 +16,10 @@ jobs:
       challenges: ${{ steps.determine-modified-challenges.outputs.challenges }}
       modified_since_ref: ${{ steps.determine-modified-challenges.outputs.modified_since_ref }}
     steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
     - name: Determine modified challenges
       id: determine-modified-challenges
       uses: ./.github/actions/determine-modified-challenges
@@ -30,6 +34,10 @@ jobs:
       matrix:
         challenges: ${{ fromJson(needs.determine-modified-challenges.outputs.challenges) }}
     steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
     - name: Login to registry
       if: false
       uses: docker/login-action@v3
