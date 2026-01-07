@@ -1,0 +1,16 @@
+name: Setup docker storage
+description: Move Docker storage to /mnt for more space.
+runs:
+  using: composite
+  steps:
+    - name: Set up Docker storage
+      shell: bash
+      run: |
+        echo "::group::Disk usage"
+        df -h
+        echo "::endgroup::"
+        sudo systemctl stop docker
+        sudo rm -rf /var/lib/docker
+        sudo mkdir -p /mnt/docker
+        sudo ln -s /mnt/docker /var/lib/docker
+        sudo systemctl start docker

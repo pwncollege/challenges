@@ -1,14 +1,12 @@
-name: Test Challenges
+name: Publish Challenges
 
 on:
-  pull_request:
+  push:
     branches: [ main ]
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * *'
 
 concurrency:
-  group: test-challenges-${{ github.ref }}
+  group: publish-challenges-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -17,14 +15,13 @@ jobs:
     outputs:
       challenges: ${{ steps.determine-modified-challenges.outputs.challenges }}
       modified_since_ref: ${{ steps.determine-modified-challenges.outputs.modified_since_ref }}
-
     steps:
     - name: Determine modified challenges
       id: determine-modified-challenges
       uses: ./.github/actions/determine-modified-challenges
 
 
-  test-challenges:
+  publish:
     needs: determine-modified-challenges
     if: ${{ needs.determine-modified-challenges.outputs.challenges != '[]' }}
     runs-on: ubuntu-latest
@@ -32,8 +29,15 @@ jobs:
       fail-fast: false
       matrix:
         challenges: ${{ fromJson(needs.determine-modified-challenges.outputs.challenges) }}
-
     steps:
+    - name: Login to registry
+      if: false
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ secrets.REGISTRY_HOST }}
+        username: ${{ secrets.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+
     - name: Set up Docker storage
       uses: ./.github/actions/setup-docker-storage
 
@@ -44,7 +48,24 @@ jobs:
       uses: ./.github/actions/test-challenges
       with:
         challenges: ${{ matrix.challenges }}
-        modified_since_ref: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+        modified_since_ref: ""
+
+    - name: Publish challenges
+      env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+        REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
+        GIT_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+        while IFS= read -r challenge; do
+          image_id="$(./pwnshop build "$CHALLENGES_DIR/$challenge")"
+          challenge_slug="${CHALLENGES_DIR#challenges/}/$challenge"
+          repo="$REGISTRY_HOST/$challenge_slug"
+          docker tag "$image_id" "$repo:$GIT_SHA"
+          # docker push "$repo:$GIT_SHA"
+          docker tag "$image_id" "$repo:latest"
+          # docker push "$repo:latest"
+        done < <(./pwnshop list "$CHALLENGES_DIR")
 
     - name: Report docker storage
       if: always()
