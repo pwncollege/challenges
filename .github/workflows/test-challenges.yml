@@ -63,22 +63,23 @@ jobs:
           ./pwnshop list ./challenges --modified-since="$MODIFIED_SINCE" \
             | cut -d/ -f1 \
             | sort -u \
-            | while read -r dir; do printf '{"directory":"challenges/%s"}\n' "$dir"; done \
+            | while read -r dir; do printf '"challenges/%s"\n' "$dir"; done \
             | paste -sd, -
         )"
         if [ -z "$matrix_entries" ]; then
-          echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+          echo "matrix=[]" >> "$GITHUB_OUTPUT"
         else
-          echo "matrix={\"include\":[${matrix_entries}]}" >> "$GITHUB_OUTPUT"
+          echo "matrix=[${matrix_entries}]" >> "$GITHUB_OUTPUT"
         fi
 
   test-challenges:
     needs: detect-challenges
-    if: ${{ fromJson(needs.detect-challenges.outputs.matrix).include }}
+    if: ${{ needs.detect-challenges.outputs.matrix != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # Continue testing other challenges even if one fails
-      matrix: ${{ fromJson(needs.detect-challenges.outputs.matrix) }}
+      matrix:
+        challenges: ${{ fromJson(needs.detect-challenges.outputs.matrix) }}
 
     steps:
     - uses: actions/checkout@v4
@@ -115,7 +116,7 @@ jobs:
 
     - name: Test challenges in directory
       env:
-        CHALLENGE_DIR: ${{ matrix.directory }}
+        CHALLENGE_DIR: ${{ matrix.challenges }}
         MODIFIED_SINCE: ${{ needs.detect-challenges.outputs.modified-since }}
       run: |
         set -euo pipefail
