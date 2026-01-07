@@ -34,8 +34,17 @@ def render(template: pathlib.Path) -> str:
 
 def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
     rendered_directory = pathlib.Path(tempfile.mkdtemp(prefix="pwncollege-"))
-    shutil.copytree(template_directory, rendered_directory, dirs_exist_ok=True)
-    for path in (path.relative_to(template_directory) for path in template_directory.rglob("*.j2")):
+
+    def ignore_git_crypt(current, names):
+        return {
+            name
+            for name in names
+            if (path := pathlib.Path(current) / name).is_file()
+            and path.open("rb").read(16).startswith(b"\x00GITCRYPT\x00")
+        }
+
+    shutil.copytree(template_directory, rendered_directory, dirs_exist_ok=True, ignore=ignore_git_crypt)
+    for path in (path.relative_to(rendered_directory) for path in rendered_directory.rglob("*.j2")):
         destination = (rendered_directory / path).with_suffix("")
         destination.write_text(render(template_directory / path))
         destination.chmod((template_directory / path).stat().st_mode)
