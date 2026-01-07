@@ -20,8 +20,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
 
     - name: Determine modified challenges
       id: determine-modified-challenges
@@ -39,8 +37,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
 
     - name: Set up Docker storage
       uses: ./.github/actions/setup-docker-storage
