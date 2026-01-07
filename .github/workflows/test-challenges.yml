@@ -87,7 +87,7 @@ jobs:
 
     - name: Set up Docker storage
       run: |
-        echo "::group::Current disk usage"
+        echo "::group::Disk usage"
         df -h
         echo "::endgroup::"
         sudo systemctl stop docker
@@ -123,7 +123,7 @@ jobs:
     - name: Report docker storage
       if: always()
       run: |
-        echo "::group::Disk usage (df -h)"
+        echo "::group::Disk usage"
         df -h
         echo "::endgroup::"
         echo "::group::Docker system usage"
