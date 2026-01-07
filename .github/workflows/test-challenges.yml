@@ -66,11 +66,7 @@ jobs:
             | while read -r dir; do printf '"challenges/%s"\n' "$dir"; done \
             | paste -sd, -
         )"
-        if [ -z "$matrix_entries" ]; then
-          echo "matrix=[]" >> "$GITHUB_OUTPUT"
-        else
-          echo "matrix=[${matrix_entries}]" >> "$GITHUB_OUTPUT"
-        fi
+        echo "matrix=[${matrix_entries}]" >> "$GITHUB_OUTPUT"
 
   test-challenges:
     needs: detect-challenges
