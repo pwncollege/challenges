@@ -28,4 +28,4 @@ def build_command(targets, modified_since):
             image_id = lib.build_challenge(challenge_path)
         except RuntimeError as error:
             raise click.ClickException(str(error)) from error
-        console.print(f"[green]Built[/] {image_id}")
+        click.echo(image_id)

@@ -1,0 +1,15 @@
+name: Report docker storage
+description: Emit disk and Docker storage usage.
+runs:
+  using: composite
+  steps:
+    - name: Report docker storage
+      shell: bash
+      run: |
+        echo "::group::Disk usage"
+        df -h
+        echo "::endgroup::"
+        echo "::group::Docker system usage"
+        docker system df
+        docker system df -v
+        echo "::endgroup::"
