@@ -16,9 +16,6 @@ runs:
       with:
         fetch-depth: 0
 
-    - uses: actions/checkout@v4
-      if: ${{ inputs.modified_since_ref == '' }}
-
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
