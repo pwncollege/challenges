@@ -63,17 +63,19 @@ jobs:
           ./pwnshop list ./challenges --modified-since="$MODIFIED_SINCE" \
             | cut -d/ -f1 \
             | sort -u \
-            | while read -r dir; do printf '{"directory":"challenges/%s"}\n' "$dir"; done \
+            | while read -r dir; do printf '"challenges/%s"\n' "$dir"; done \
             | paste -sd, -
         )"
-        echo "matrix={\"include\":[${matrix_entries}]}" >> "$GITHUB_OUTPUT"
+        echo "matrix=[${matrix_entries}]" >> "$GITHUB_OUTPUT"
 
   test-challenges:
     needs: detect-challenges
+    if: ${{ needs.detect-challenges.outputs.matrix != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # Continue testing other challenges even if one fails
-      matrix: ${{ fromJson(needs.detect-challenges.outputs.matrix) }}
+      matrix:
+        challenges: ${{ fromJson(needs.detect-challenges.outputs.matrix) }}
 
     steps:
     - uses: actions/checkout@v4
@@ -87,7 +89,7 @@ jobs:
 
     - name: Set up Docker storage
       run: |
-        echo "::group::Current disk usage"
+        echo "::group::Disk usage"
         df -h
         echo "::endgroup::"
         sudo systemctl stop docker
@@ -110,7 +112,7 @@ jobs:
 
     - name: Test challenges in directory
       env:
-        CHALLENGE_DIR: ${{ matrix.directory }}
+        CHALLENGE_DIR: ${{ matrix.challenges }}
         MODIFIED_SINCE: ${{ needs.detect-challenges.outputs.modified-since }}
       run: |
         set -euo pipefail
@@ -119,3 +121,13 @@ jobs:
         ./pwnshop list "$CHALLENGE_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"
         ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGE_DIR"
+
+    - name: Report docker storage
+      if: always()
+      run: |
+        echo "::group::Disk usage"
+        df -h
+        echo "::endgroup::"
+        echo "::group::Docker system usage"
+        docker system df -v
+        echo "::endgroup::"
