@@ -10,7 +10,11 @@ runs:
         df -h
         echo "::endgroup::"
         sudo systemctl stop docker
-        sudo rm -rf /var/lib/docker
-        sudo mkdir -p /mnt/docker
-        sudo ln -s /mnt/docker /var/lib/docker
+        sudo systemctl stop containerd
+        sudo sh -c 'echo "{\"features\":{\"containerd-snapshotter\":true}}" > /etc/docker/daemon.json'
+        for service in docker containerd; do
+          sudo rm -rf "/var/lib/$service"
+          sudo mkdir -p "/mnt/$service"
+          sudo ln -s "/mnt/$service" "/var/lib/$service"
+        done
         sudo systemctl start docker
