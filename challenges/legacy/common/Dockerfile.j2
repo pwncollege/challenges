@@ -6,35 +6,15 @@ FROM "${CHALLENGE_IMAGE}"
 # https://github.com/pwncollege/official-dojos
 WORKDIR /opt/dojos
 
-# Getting Started
-ADD https://github.com/pwncollege/welcome-dojo.git ./welcome-dojo
-ADD https://github.com/pwncollege/linux-luminarium.git ./linux-luminarium
-ADD https://github.com/pwncollege/computing-101.git ./computing-101
-ADD https://github.com/pwncollege/fundamentals-dojo.git ./fundamentals-dojo
+{% set dojo_repo = challenge_path.split("/")[0] %}
+ADD https://github.com/pwncollege/{{ dojo_repo }}.git ./{{ dojo_repo }}
 
-# Core Material
-ADD https://github.com/pwncollege/intro-to-cybersecurity-dojo.git ./intro-to-cybersecurity-dojo
-ADD https://github.com/pwncollege/program-security-dojo.git ./program-security-dojo
-ADD https://github.com/pwncollege/system-security-dojo.git ./system-security-dojo
-ADD https://github.com/pwncollege/software-exploitation-dojo.git ./software-exploitation-dojo
-
-# Official Community dojos
-# ADD https://github.com/pwncollege/xnu-dojo.git ./xnu-dojo
-# ADD https://github.com/pwncollege/injection-dojo.git ./injection-dojo
-ADD https://github.com/pwncollege/arm-dojo.git ./arm-dojo
-# ADD https://github.com/prathamgupta36/cryptomania.git ./cryptomania
-# ADD https://github.com/pwncollege/windows-dojo.git ./windows-dojo
-# ADD https://github.com/robwaz/demo-dojo.git ./demo-dojo
-
-# Archives
-ADD https://github.com/pwncollege/archive-dojo.git ./archive-dojo
-# ADD https://github.com/pwncollege/ctf-archive.git ./ctf-archive
-
-# Software Exploitation Dojo - Kernel Exploitation files
+{% if dojo_repo == "software-exploitation-dojo" %}
 ADD https://www.dropbox.com/scl/fi/zymtq9sit5qeko0l81ph2/vmlinux3?rlkey=eh89lpb19dhhuxfw7ifvckut1&dl=1 ./software-exploitation-dojo/kernel-exploitation/files/3/vmlinux
 ADD https://www.dropbox.com/scl/fi/cfln31ihejxyco1xb4j2o/vmlinux2?rlkey=h2tt3yuo5xrw56hquam98y8gh&dl=1 ./software-exploitation-dojo/kernel-exploitation/files/2/vmlinux
 ADD https://www.dropbox.com/scl/fi/uhhjp8yf65p81p31rql1e/vmlinux1?rlkey=jybroi9nsya54ffrevmnk89hg&dl=1 ./software-exploitation-dojo/kernel-exploitation/files/1/vmlinux
 ADD https://www.dropbox.com/scl/fi/hkwgmkajzw2rzas068g66/vmlinux0?rlkey=q5kkd5br7ize6n1002ghpprz3&dl=1 ./software-exploitation-dojo/kernel-exploitation/files/0/vmlinux
+{% endif %}
 
 WORKDIR /
 
@@ -49,7 +29,17 @@ fi
 
 rm /challenge/.init
 
-find "$CHALLENGE_PATH/" -mindepth 1 -maxdepth 1 ! -name '_*' -exec cp -aL {} /challenge \;
+threshold=$((10 * 1024 * 1024))  # 10 MiB
+
+find -L "$CHALLENGE_PATH" \
+    -mindepth 1 -maxdepth 1 ! -name '_*' \
+    -size -$((threshold + 1))c \
+    -exec cp -aL {} /challenge \;
+
+find -L "$CHALLENGE_PATH" \
+    -mindepth 1 -maxdepth 1 ! -name '_*' \
+    -type f -size +${threshold}c \
+    -exec ln -sf {} /challenge/ \;
 
 instance=$(shopt -s nullglob; set -- "$CHALLENGE_PATH"/_*/; printf '%s' "${1:-}")
 if [ -n "$instance" ]; then
