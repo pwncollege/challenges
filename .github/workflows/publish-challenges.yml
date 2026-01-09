@@ -57,19 +57,37 @@ jobs:
     - name: Publish challenges
       env:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
-        REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
-        GIT_SHA: ${{ github.sha }}
       run: |
         set -euo pipefail
+        containerd_blobs_dir="/var/lib/containerd/io.containerd.content.v1.content/blobs/sha256"
+        publish_blobs_dir="/mnt/publish/blobs"
+        publish_manifests_dir="/mnt/publish/manifets"
+        sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
         while IFS= read -r challenge; do
           image_id="$(./pwnshop build "$CHALLENGES_DIR/$challenge")"
+          image_id="${image_id#sha256:}"
           challenge_slug="${CHALLENGES_DIR#challenges/}/$challenge"
-          repo="$REGISTRY_HOST/$challenge_slug"
-          docker tag "$image_id" "$repo:$GIT_SHA"
-          # docker push "$repo:$GIT_SHA"
-          docker tag "$image_id" "$repo:latest"
-          # docker push "$repo:latest"
+          stack=("$image_id")
+          while ((${#stack[@]})); do
+            digest="${stack[-1]}"
+            unset 'stack[-1]'
+            sudo ln "$containerd_blobs_dir/$digest" "$publish_blobs_dir/$digest" 2>/dev/null || true
+            mapfile -t -O "${#stack[@]}" stack < <(
+              sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string") | sub("^sha256:";"")' \
+                "$containerd_blobs_dir/$digest" 2>/dev/null
+            )
+          done
+          manifest_dir="$publish_manifests_dir/$challenge_slug"
+          sudo mkdir -p "$manifest_dir"
+          sudo ln -sfn "$publish_blobs_dir/$image_id" "$manifest_dir/latest"
+
         done < <(./pwnshop list "$CHALLENGES_DIR")
+        echo "::group::Publish manifests"
+        find "$publish_manifests_dir" -type l -print0 | sort -z | xargs -0 -I{} sh -c 'printf "%s -> %s\n" "{}" "$(readlink "{}")"'
+        echo "::endgroup::"
+        echo "::group::Publish blob storage"
+        du -sh "$publish_blobs_dir"
+        echo "::endgroup::"
 
     - name: Report docker storage
       if: always()
