@@ -58,6 +58,15 @@ runs:
             .toString()
             .trim();
           const challenges = Array.from(
-            new Set(output.split("\n").map((line) => line.trim().split("/")[0]).filter(Boolean)),
+            new Set(
+              output
+                .split("\n")
+                .map((line) => {
+                  const parts = line.trim().split("/");
+                  if (parts[0] === "legacy") return `legacy/${parts[1]}`;
+                  return parts[0];
+                })
+                .filter(Boolean),
+            ),
           ).sort();
           core.setOutput("challenges", JSON.stringify(challenges));
