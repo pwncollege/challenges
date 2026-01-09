@@ -47,7 +47,7 @@ if [ -n "$instance" ]; then
 fi
 
 chown -R 0:0 /challenge
-chmod -R 4755 /challenge
+chmod -RL 4755 /challenge
 
 # Some legacy challenges expect this to exist (e.g. legacy/linux-luminarium/processes/ps)
 mkdir -p /run/dojo/var/root
