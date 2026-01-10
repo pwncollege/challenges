@@ -1,8 +1,8 @@
-name = "pwncollege-registry"
+name = "challenges-registry"
 main = "src/index.js"
 compatibility_date = "2025-02-01"
 workers_dev = false
-routes = [{ pattern = "challenges.pwn.college/v2/*", custom_domain = true }]
+routes = [{ pattern = "challenges.pwn.college", custom_domain = true }]
 
 [[r2_buckets]]
 binding = "REGISTRY_BUCKET"
