@@ -85,12 +85,12 @@ jobs:
             | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
         )
 
-        # echo "::group::rclone blobs"
-        # rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --ignore-existing --stats 10s --stats-one-line
-        # echo "::endgroup::"
-        # echo "::group::rclone manifests"
-        # rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests" --stats 10s --stats-one-line
-        # echo "::endgroup::"
+        echo "::group::rclone blobs"
+        rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --ignore-existing --stats 10s --stats-one-line
+        echo "::endgroup::"
+        echo "::group::rclone manifests"
+        rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests" --stats 10s --stats-one-line
+        echo "::endgroup::"
 
     - name: Report docker storage
       if: always()
