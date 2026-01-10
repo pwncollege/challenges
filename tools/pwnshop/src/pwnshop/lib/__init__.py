@@ -122,8 +122,16 @@ def run_challenge(
 def build_challenge(challenge_path: pathlib.Path) -> str:
     rendered_directory = render_challenge(challenge_path)
     try:
+        label = challenge_path.as_posix().removeprefix("challenges/")
         image_id = subprocess.check_output(
-            ["docker", "build", "-q", str(rendered_directory / "challenge")],
+            [
+                "docker",
+                "build",
+                "-q",
+                "--label",
+                f"pwncollege.challenge={label}",
+                str(rendered_directory / "challenge"),
+            ],
             text=True,
         ).strip()
         return image_id

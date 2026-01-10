@@ -73,9 +73,9 @@ jobs:
         publish_manifests_dir="/mnt/publish/manifests"
         sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
         while IFS= read -r challenge; do
+          challenge_slug="${CHALLENGES_DIR#challenges/}/$challenge"
           image_id="$(./pwnshop build "$CHALLENGES_DIR/$challenge")"
           image_id="${image_id#sha256:}"
-          challenge_slug="${CHALLENGES_DIR#challenges/}/$challenge"
           stack=("$image_id")
           while ((${#stack[@]})); do
             digest="${stack[-1]}"
