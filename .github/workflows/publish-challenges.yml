@@ -72,7 +72,7 @@ jobs:
           while ((${#stack[@]})); do
             digest="${stack[-1]}"
             unset 'stack[-1]'
-            sudo ln "$containerd_blobs_dir/$digest" "$publish_blobs_dir/$digest" 2>/dev/null || true
+            sudo ln "$containerd_blobs_dir/$digest" "$publish_blobs_dir/$digest" 2>/dev/null || continue
             mapfile -t -O "${#stack[@]}" stack < <(
               sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string") | sub("^sha256:";"")' \
                 "$containerd_blobs_dir/$digest" 2>/dev/null
