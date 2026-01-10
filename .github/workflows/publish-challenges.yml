@@ -72,10 +72,10 @@ jobs:
         publish_blobs_dir="/mnt/publish/blobs"
         publish_manifests_dir="/mnt/publish/manifests"
         sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
-        while IFS= read -r challenge; do
-          challenge_slug="${CHALLENGES_DIR#challenges/}/$challenge"
-          image_id="$(./pwnshop build "$CHALLENGES_DIR/$challenge")"
+        while IFS= read -r line; do
+          image_id="${line%% *}"
           image_id="${image_id#sha256:}"
+          challenge_slug="${line#* }"
           stack=("$image_id")
           while ((${#stack[@]})); do
             digest="${stack[-1]}"
@@ -88,7 +88,10 @@ jobs:
           done
           sudo mkdir -p "$publish_manifests_dir/$challenge_slug"
           printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
-        done < <(./pwnshop list "$CHALLENGES_DIR")
+        done < <(
+          docker image ls --filter "label=pwncollege.challenge" --no-trunc --quiet \
+            | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
+        )
 
         echo "::group::rclone blobs"
         rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --ignore-existing --stats 10s --stats-one-line
