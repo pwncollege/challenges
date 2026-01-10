@@ -34,14 +34,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Login to registry
-      if: false
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ secrets.REGISTRY_HOST }}
-        username: ${{ secrets.REGISTRY_USER }}
-        password: ${{ secrets.REGISTRY_PASSWORD }}
-
     - name: Set up Docker storage
       uses: ./.github/actions/setup-docker-storage
 
@@ -54,22 +46,50 @@ jobs:
         challenges: ${{ matrix.challenges }}
         modified_since_ref: ""
 
+    - name: Install rclone
+      run: sudo apt-get update && sudo apt-get install -y rclone
+
     - name: Publish challenges
       env:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
-        REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
-        GIT_SHA: ${{ github.sha }}
+        R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        RCLONE_CONFIG_R2_TYPE: s3
+        RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+        RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+        RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
         set -euo pipefail
-        while IFS= read -r challenge; do
-          image_id="$(./pwnshop build "$CHALLENGES_DIR/$challenge")"
-          challenge_slug="${CHALLENGES_DIR#challenges/}/$challenge"
-          repo="$REGISTRY_HOST/$challenge_slug"
-          docker tag "$image_id" "$repo:$GIT_SHA"
-          # docker push "$repo:$GIT_SHA"
-          docker tag "$image_id" "$repo:latest"
-          # docker push "$repo:latest"
-        done < <(./pwnshop list "$CHALLENGES_DIR")
+        containerd_blobs_dir="/var/lib/containerd/io.containerd.content.v1.content/blobs/sha256"
+        publish_blobs_dir="/mnt/publish/blobs"
+        publish_manifests_dir="/mnt/publish/manifests"
+        sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
+        while IFS= read -r line; do
+          image_id="${line%% *}"
+          challenge_slug="${line#* }"
+          stack=("$image_id")
+          while ((${#stack[@]})); do
+            digest="${stack[-1]#sha256:}"
+            unset 'stack[-1]'
+            sudo ln "$containerd_blobs_dir/$digest" "$publish_blobs_dir/$digest" 2>/dev/null || continue
+            mapfile -t -O "${#stack[@]}" stack < <(
+              sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string")' \
+                "$containerd_blobs_dir/$digest" 2>/dev/null
+            )
+          done
+          sudo mkdir -p "$publish_manifests_dir/$challenge_slug"
+          printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
+        done < <(
+          docker image ls --filter "label=pwncollege.challenge" --no-trunc --quiet \
+            | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
+        )
+
+        echo "::group::rclone blobs"
+        rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --ignore-existing --stats 10s --stats-one-line
+        echo "::endgroup::"
+        echo "::group::rclone manifests"
+        rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests" --stats 10s --stats-one-line
+        echo "::endgroup::"
 
     - name: Report docker storage
       if: always()
