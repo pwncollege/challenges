@@ -8,7 +8,7 @@ dangerous:
       - any-glob-to-any-file:
           - '.github/**'
           - '.git-crypt/**'
-          - 'ci/**'
+          - 'tools/maintainers/ci/**'
           - 'maintainers.yml'
           - '.gitattributes'
           - '**/.gitattributes'
