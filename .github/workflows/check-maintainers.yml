@@ -16,7 +16,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          cache-dependency-glob: ci/check-maintainers
+          cache-dependency-glob: tools/maintainers/check-maintainers
 
       - name: Check Maintainers
-        run: ci/check-maintainers ./maintainers.yml
+        run: tools/maintainers/check-maintainers ./maintainers.yml
