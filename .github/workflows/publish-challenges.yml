@@ -54,14 +54,23 @@ jobs:
         challenges: ${{ matrix.challenges }}
         modified_since_ref: ""
 
+    - name: Install rclone
+      run: sudo apt-get update && sudo apt-get install -y rclone
+
     - name: Publish challenges
       env:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+        R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        RCLONE_CONFIG_R2_TYPE: s3
+        RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+        RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+        RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
         set -euo pipefail
         containerd_blobs_dir="/var/lib/containerd/io.containerd.content.v1.content/blobs/sha256"
         publish_blobs_dir="/mnt/publish/blobs"
-        publish_manifests_dir="/mnt/publish/manifets"
+        publish_manifests_dir="/mnt/publish/manifests"
         sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
         while IFS= read -r challenge; do
           image_id="$(./pwnshop build "$CHALLENGES_DIR/$challenge")"
@@ -77,17 +86,12 @@ jobs:
                 "$containerd_blobs_dir/$digest" 2>/dev/null
             )
           done
-          manifest_dir="$publish_manifests_dir/$challenge_slug"
-          sudo mkdir -p "$manifest_dir"
-          sudo ln -sfn "$publish_blobs_dir/$image_id" "$manifest_dir/latest"
-
+          sudo mkdir -p "$publish_manifests_dir/$challenge_slug"
+          printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
         done < <(./pwnshop list "$CHALLENGES_DIR")
-        echo "::group::Publish manifests"
-        find "$publish_manifests_dir" -type l -print0 | sort -z | xargs -0 -I{} sh -c 'printf "%s -> %s\n" "{}" "$(readlink "{}")"'
-        echo "::endgroup::"
-        echo "::group::Publish blob storage"
-        du -sh "$publish_blobs_dir"
-        echo "::endgroup::"
+
+        rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --ignore-existing
+        rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests"
 
     - name: Report docker storage
       if: always()
