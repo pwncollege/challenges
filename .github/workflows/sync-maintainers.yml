@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths:
       - "maintainers.yml"
-      - "tools/maintainers/ci/sync-maintainers"
+      - "tools/maintainers/sync-maintainers"
       - ".github/workflows/sync-maintainers.yml"
 
 permissions:
@@ -21,7 +21,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          cache-dependency-glob: tools/maintainers/ci/sync-maintainers
+          cache-dependency-glob: tools/maintainers/sync-maintainers
 
       - name: Install git crypt
         run: sudo apt-get update && sudo apt-get install -y git-crypt
@@ -44,7 +44,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          ./tools/maintainers/ci/sync-maintainers | tee /tmp/sync-maintainers.log
+          ./tools/maintainers/sync-maintainers | tee /tmp/sync-maintainers.log
 
           if ! git diff --cached --quiet; then
             {
