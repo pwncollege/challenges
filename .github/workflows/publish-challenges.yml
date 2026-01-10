@@ -52,7 +52,7 @@ jobs:
     - name: Publish challenges
       env:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
-        R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        R2_BUCKET_NAME: challenges-registry
         RCLONE_CONFIG_R2_TYPE: s3
         RCLONE_CONFIG_R2_PROVIDER: Cloudflare
         RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
@@ -60,7 +60,7 @@ jobs:
         RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
         set -euo pipefail
-        containerd_blobs_dir="/var/lib/containerd/io.containerd.content.v1.content/blobs/sha256"
+        containerd_blobs_dir="/var/lib/containerd/io.containerd.content.v1.content/blobs"
         publish_blobs_dir="/mnt/publish/blobs"
         publish_manifests_dir="/mnt/publish/manifests"
         sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
@@ -69,12 +69,14 @@ jobs:
           challenge_slug="${line#* }"
           stack=("$image_id")
           while ((${#stack[@]})); do
-            digest="${stack[-1]#sha256:}"
+            digest="${stack[-1]}"
+            digest_path="${digest//:/\/}"
             unset 'stack[-1]'
-            sudo ln "$containerd_blobs_dir/$digest" "$publish_blobs_dir/$digest" 2>/dev/null || continue
+            sudo mkdir -p "$publish_blobs_dir/${digest_path%%/*}"
+            sudo ln "$containerd_blobs_dir/$digest_path" "$publish_blobs_dir/$digest_path" 2>/dev/null || continue
             mapfile -t -O "${#stack[@]}" stack < <(
               sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string")' \
-                "$containerd_blobs_dir/$digest" 2>/dev/null
+                "$containerd_blobs_dir/$digest_path" 2>/dev/null
             )
           done
           sudo mkdir -p "$publish_manifests_dir/$challenge_slug"

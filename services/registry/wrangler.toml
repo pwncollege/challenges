@@ -1,0 +1,7 @@
+name = "pwncollege-registry"
+main = "src/index.js"
+compatibility_date = "2025-02-01"
+
+[[r2_buckets]]
+binding = "REGISTRY_BUCKET"
+bucket_name = "challenges-registry"
