@@ -90,8 +90,12 @@ jobs:
           printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
         done < <(./pwnshop list "$CHALLENGES_DIR")
 
-        rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --ignore-existing
-        rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests"
+        echo "::group::rclone blobs"
+        rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --ignore-existing --stats 10s --stats-one-line
+        echo "::endgroup::"
+        echo "::group::rclone manifests"
+        rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests" --stats 10s --stats-one-line
+        echo "::endgroup::"
 
     - name: Report docker storage
       if: always()
