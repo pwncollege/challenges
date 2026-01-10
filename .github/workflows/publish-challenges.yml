@@ -66,15 +66,14 @@ jobs:
         sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
         while IFS= read -r line; do
           image_id="${line%% *}"
-          image_id="${image_id#sha256:}"
           challenge_slug="${line#* }"
           stack=("$image_id")
           while ((${#stack[@]})); do
-            digest="${stack[-1]}"
+            digest="${stack[-1]#sha256:}"
             unset 'stack[-1]'
             sudo ln "$containerd_blobs_dir/$digest" "$publish_blobs_dir/$digest" 2>/dev/null || continue
             mapfile -t -O "${#stack[@]}" stack < <(
-              sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string") | sub("^sha256:";"")' \
+              sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string")' \
                 "$containerd_blobs_dir/$digest" 2>/dev/null
             )
           done
