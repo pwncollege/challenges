@@ -50,13 +50,10 @@ export default {
           return new Response("Not found", { status: 404 });
         }
 
-        const blobKey = `blobs/${ref.replace(":", "/")}`;
-        const signedUrl = await env.REGISTRY_BUCKET.createSignedUrl(blobKey, {
-          method: request.method,
-          expiresIn: 3600,
-        });
-
-        return Response.redirect(signedUrl, 307);
+        return Response.redirect(
+          new URL(`blobs/${ref.replace(":", "/")}`, `https://${env.R2_DOMAIN}`).toString(),
+          307
+        );
       }
 
       default:
