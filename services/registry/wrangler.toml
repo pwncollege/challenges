@@ -4,6 +4,9 @@ compatibility_date = "2025-02-01"
 workers_dev = false
 routes = [{ pattern = "challenges.pwn.college", custom_domain = true }]
 
+[vars]
+R2_DOMAIN = "cdn.challenges.pwn.college"
+
 [[r2_buckets]]
 binding = "REGISTRY_BUCKET"
 bucket_name = "challenges-registry"
