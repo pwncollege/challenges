@@ -1,0 +1,7 @@
+{% extends "common/crypto_cpa_ecb.py.j2" %}
+{% set chal.interface = "cli" %}
+{% set chal.input_mode = "chosen_or_slice" %}
+{% set chal.padding_mode = "pad_always" %}
+{% set chal.output_mode = "hex" %}
+{% set chal.loop_model = "while" %}
+{% set chal.action_label = "Encrypt part of the flag." %}

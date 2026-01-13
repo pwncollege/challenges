@@ -1,0 +1,113 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+{% import "common/random_names.j2" as names with context %}
+{% set chal = namespace() %}
+{{ names.generate_names(chal, random) }}
+
+{% block setup %}
+{% endblock %}
+
+import random
+import sys
+import string
+from Crypto.Util.strxor import strxor
+
+def run_xor_basic():
+    key = random.randrange(1, 256)
+    plain_secret = random.randrange(0, 256)
+    cipher_secret = plain_secret ^ key
+
+    print(f"The key: {key}")
+    print(f"Encrypted secret: {cipher_secret}")
+    if int(input("Decrypted secret? ")) == plain_secret:
+        print("CORRECT! Your flag:")
+        print(open("/flag").read())
+    else:
+        print("INCORRECT!")
+        sys.exit(1)
+
+def run_xor_hex():
+    for n in range(10):
+        print(f"Challenge number {n}...")
+
+        key = random.randrange(1, 256)
+        plain_secret = random.randrange(0, 256)
+        cipher_secret = plain_secret ^ key
+
+        print(f"The key: {key:#04x}")
+        print(f"Encrypted secret: {cipher_secret:#04x}")
+        answer = int(input("Decrypted secret? "), 16)
+        print(f"You entered: {answer:#04x}, decimal {answer}.")
+        if answer != plain_secret:
+            print("INCORRECT!")
+            sys.exit(1)
+
+        print("Correct! Moving on.")
+
+    print("CORRECT! Your flag:")
+    print(open("/flag").read())
+
+def run_xor_str():
+    valid_keys = "!#$%&()"
+    valid_chars = ''.join(
+        c for c in string.ascii_letters
+        if all(chr(ord(k) ^ ord(c)) in string.ascii_letters for k in valid_keys)
+    )
+
+    print(valid_keys, valid_chars)
+
+    for n in range(1, 10):
+        print(f"Challenge number {n}...")
+
+        key_str = ''.join(random.sample(valid_keys * 10, 10))
+        pt_str = ''.join(random.sample(valid_chars * 10, 10))
+        ct_str = strxor(pt_str.encode(), key_str.encode()).decode()
+
+        print(f"- Encrypted String: {ct_str}")
+        print(f"- XOR Key String: {key_str}")
+        answer = input("- Decrypted String? ").strip()
+        if answer != pt_str:
+            print("Incorrect!")
+            sys.exit(1)
+
+        print("Correct! Moving on.")
+
+    print("You have mastered XORing ASCII! Your flag:")
+    print(open("/flag").read())
+
+def run_xor_ascii():
+    if not sys.stdin.isatty():
+        print("You must interact with me directly. No scripting this!")
+        sys.exit(1)
+
+    for n in range(1, 10):
+        print(f"Challenge number {n}...")
+
+        pt_chr, ct_chr = random.sample(
+            string.digits + string.ascii_letters + string.punctuation,
+            2
+        )
+        key = ord(pt_chr) ^ ord(ct_chr)
+
+        print(f"- Encrypted Character: {ct_chr}")
+        print(f"- XOR Key: {key:#04x}")
+        answer = input("- Decrypted Character? ").strip()
+        if answer != pt_chr:
+            print("Incorrect!")
+            sys.exit(1)
+
+        print("Correct! Moving on.")
+
+    print("You have mastered XORing ASCII! Your flag:")
+    print(open("/flag").read())
+
+{% block xor_logic %}
+if chal.mode == "xor":
+    run_xor_basic()
+elif chal.mode == "xorhex":
+    run_xor_hex()
+elif chal.mode == "xorstr":
+    run_xor_str()
+elif chal.mode == "xorascii":
+    run_xor_ascii()
+{% endblock %}
