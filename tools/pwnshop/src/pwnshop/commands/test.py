@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 import multiprocessing.pool
 import os
@@ -16,6 +17,7 @@ from rich.progress import (
 )
 from .. import lib
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
@@ -53,9 +55,13 @@ def test_command(targets, modified_since, jobs):
             image_id = lib.build_challenge(challenge_path)
             tests = sorted(rendered.rglob("test*/test_*"))
             if not tests:
+                logger.warning("no tests found for %s", challenge_path)
                 return {"path": challenge_path, "tests": []}
+            logger.info("running %d test(s) for %s", len(tests), challenge_path)
             results = []
             for test in tests:
+                test_name = test.relative_to(rendered)
+                logger.debug("running test %s in %s", test_name, challenge_path)
                 with lib.run_challenge(image_id, volumes=[test]) as (container, _):
                     run = subprocess.run(
                         ["docker", "exec", "--user=1000:1000", container, f"{test}"],
@@ -63,9 +69,12 @@ def test_command(targets, modified_since, jobs):
                         stderr=subprocess.STDOUT,
                         text=True,
                     )
-                results.append((test.relative_to(rendered), run.returncode == 0, run.stdout or ""))
+                passed = run.returncode == 0
+                logger.debug("test %s %s (rc=%d)", test_name, "PASSED" if passed else "FAILED", run.returncode)
+                results.append((test_name, passed, run.stdout or ""))
             return {"path": challenge_path, "tests": results}
         except (FileNotFoundError, RuntimeError) as error:
+            logger.error("test setup failed for %s: %s", challenge_path, error)
             return {"path": challenge_path, "error": str(error)}
         finally:
             if rendered:

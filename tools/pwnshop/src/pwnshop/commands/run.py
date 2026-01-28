@@ -1,9 +1,12 @@
+import logging
 import pathlib
 import subprocess
 
 import click
 
 from .. import lib
+
+logger = logging.getLogger(__name__)
 
 
 @click.command("run")
@@ -34,5 +37,6 @@ def run_command(challenge_path, user, volumes, command):
     except RuntimeError as error:
         raise click.ClickException(str(error)) from error
     resolved_volumes = [path.resolve() for path in volumes]
+    logger.info("running %s as uid=%d, command=%s", challenge_path, user, list(command))
     with lib.run_challenge(image_id, volumes=resolved_volumes) as (container, flag):
         subprocess.run(["docker", "exec", f"--user={user}", "-it", container, *command])
