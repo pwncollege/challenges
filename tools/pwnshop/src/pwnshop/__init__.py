@@ -18,7 +18,9 @@ VERBOSITY_LEVELS = [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG]
 def cli(verbose):
     """Challenge management CLI."""
     level = VERBOSITY_LEVELS[min(verbose, len(VERBOSITY_LEVELS) - 1)]
-    logging.basicConfig(format="%(message)s", level=level, handlers=[RichHandler(console=console, rich_tracebacks=True)])
+    logging.basicConfig(
+        format="%(message)s", level=level, handlers=[RichHandler(console=console, rich_tracebacks=True)]
+    )
 
 
 cli.add_command(render_command)
