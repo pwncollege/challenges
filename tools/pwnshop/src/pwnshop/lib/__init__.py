@@ -219,7 +219,6 @@ def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = Non
 
 
 def resolve_targets(targets: Iterable[pathlib.Path], *, modified_since: Optional[str] = None) -> List[pathlib.Path]:
-    logger.debug("resolving targets: %s", list(targets))
     return [
         target / challenge_path
         for target in targets
