@@ -19,12 +19,81 @@ logger = logging.getLogger(__name__)
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
 
+class _NoSelfExtendLoader(jinja2.FileSystemLoader):
+    """FileSystemLoader that prevents templates from extending/including themselves.
+
+    When search paths overlap (e.g. parent directories containing identically-named
+    subdirectories), ``computing-101/common/Dockerfile.j2`` extending
+    ``common/Dockerfile.j2`` can resolve back to itself.  This loader cooperates
+    with :class:`_NoSelfExtendEnv` (which overrides ``join_path``) to give each
+    extends/include reference a unique name encoding which physical file to skip.
+    """
+
+    def __init__(self, searchpath, **kwargs):
+        super().__init__(searchpath, **kwargs)
+        self._name_to_realpath = {}
+        self._skip_registry = {}
+        self._counter = 0
+
+    def get_source(self, environment, template):
+        if template in self._skip_registry:
+            skip_realpath, actual_name = self._skip_registry[template]
+        else:
+            skip_realpath, actual_name = None, template
+
+        for searchpath in self.searchpath:
+            filename = os.path.join(os.fspath(searchpath), *actual_name.split("/"))
+            if not os.path.isfile(filename):
+                continue
+            realpath = os.path.realpath(filename)
+            if realpath == skip_realpath:
+                continue
+
+            self._name_to_realpath[template] = realpath
+            with open(filename, encoding=self.encoding) as f:
+                contents = f.read()
+            mtime = os.path.getmtime(filename)
+
+            def uptodate(fn=filename, mt=mtime):
+                try:
+                    return os.path.getmtime(fn) == mt
+                except OSError:
+                    return False
+
+            return contents, filename, uptodate
+
+        raise jinja2.TemplateNotFound(actual_name)
+
+    def make_skip_name(self, template, parent_name):
+        """Return a unique template name that skips the physical file *parent_name* resolved to."""
+        realpath = self._name_to_realpath.get(parent_name)
+        if not realpath:
+            return template
+        self._counter += 1
+        unique = f"\x00skip{self._counter}\x00{template}"
+        self._skip_registry[unique] = (realpath, template)
+        return unique
+
+
+class _NoSelfExtendEnv(jinja2.Environment):
+    """Jinja2 environment that prevents circular template inheritance from overlapping search paths."""
+
+    def join_path(self, template, parent):
+        if isinstance(self.loader, _NoSelfExtendLoader):
+            return self.loader.make_skip_name(template, parent)
+        return template
+
+
 def render(template: pathlib.Path) -> str:
     logger.debug("rendering template %s (seed=%d)", template, CHALLENGE_SEED)
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader(template.parents))
-    rendered = env.get_template(template.name).render(
-        random=random.Random(CHALLENGE_SEED), trim_blocks=True, lstrip_blocks=True
-    )
+    env = _NoSelfExtendEnv(loader=_NoSelfExtendLoader(template.parents))
+    try:
+        rendered = env.get_template(template.name).render(
+            random=random.Random(CHALLENGE_SEED), trim_blocks=True, lstrip_blocks=True
+        )
+    except jinja2.TemplateNotFound as e:
+        logger.error("template %s: could not find referenced template %r", template, str(e))
+        raise RuntimeError(f"Template {template}: could not find {e!r}") from e
     try:
         if ".py" in template.suffixes or "python" in rendered.splitlines()[0]:
             logger.debug("formatting %s as python with black", template)
