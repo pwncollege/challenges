@@ -6,7 +6,6 @@ import pathlib
 import shutil
 import subprocess
 import click
-from rich.console import Console
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -16,9 +15,9 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from .. import lib
+from ..console import console
 
 logger = logging.getLogger(__name__)
-console = Console()
 
 
 @click.command("test")

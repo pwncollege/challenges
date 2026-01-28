@@ -2,12 +2,11 @@ import logging
 import pathlib
 
 import click
-from rich.console import Console
 
 from .. import lib
+from ..console import console
 
 logger = logging.getLogger(__name__)
-console = Console()
 
 
 @click.command("build")

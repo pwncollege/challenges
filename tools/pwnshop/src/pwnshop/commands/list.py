@@ -1,11 +1,9 @@
 import pathlib
 
 import click
-from rich.console import Console
 
 from .. import lib
-
-console = Console()
+from ..console import console
 
 
 @click.command("list")
