@@ -10,7 +10,7 @@ import capstone
 import tempfile
 import socket
 import time
-import rich
+import rich.console
 import sys
 
 cs = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
@@ -63,11 +63,15 @@ def dramatic_command(command, stdin=None, actual_command=None):
 
 def build_input(elf_path, input_file=None):
     raw_path = tempfile.mktemp(prefix="check-raw-")
-    cmd = ["builder", "-i", "--output-raw", raw_path, "--output-elf", elf_path]
+    user_raw_path = tempfile.mktemp(prefix="check-user-raw-")
+    cmd = ["builder", "-i", "--output-raw", raw_path, "--output-user-raw", user_raw_path, "--output-elf", elf_path]
     if not getattr(chal, "allow_asm", False):
         cmd += ["--reject-asm"]
     if not getattr(chal, "allow_elf", True):
         cmd += ["--reject-elf"]
+    num_instructions = getattr(chal, "num_instructions", None)
+    if num_instructions is not None:
+        cmd += ["--max-instructions", str(num_instructions)]
     if hasattr(chal, "assembly_prefix"):
         cmd += ["--prefix", chal.assembly_prefix]
     if hasattr(chal, "assembly_suffix"):
@@ -83,8 +87,10 @@ def build_input(elf_path, input_file=None):
 
     #pylint:disable=consider-using-with
     raw_binary = open(raw_path, "rb").read()
+    user_raw_binary = open(user_raw_path, "rb").read()
     os.unlink(raw_path)
-    return raw_binary
+    os.unlink(user_raw_path)
+    return raw_binary, user_raw_binary
 
 console = rich.console.Console(highlight=False)
 err_console = rich.console.Console(stderr=True, highlight=False)
@@ -107,24 +113,20 @@ def do_check(stage_id, stage_description, *args, **kwargs):
 def main():
     elf_filename = getattr(chal, 'final_filename', "/tmp/your-program")
     input_file = sys.argv[1] if len(sys.argv) == 2 else None
-    raw_binary = build_input(elf_filename, input_file)
+    raw_binary, user_raw_binary = build_input(elf_filename, input_file)
 
     disas = list(cs.disasm(raw_binary, 0))
     if not disas:
         print("Your binary failed to disassemble.")
         return
 
-    num_instructions = getattr(chal, "num_instructions", None)
-    if num_instructions is not None and len(disas) != num_instructions:
-        print(
-            f"This challenge expects {num_instructions} "
-            f"instruction{'s' if num_instructions != 1 else ''}, "
-            f"but you provided {len(disas)}."
-        )
+    user_disas = list(cs.disasm(user_raw_binary, 0))
+    if not user_disas:
+        print("Your binary failed to disassemble.")
         return
 
     do_check("check_raw_binary", "Checking the binary code", raw_binary)
-    do_check("check_disassembly", "Checking the assembly code", disas)
+    do_check("check_disassembly", "Checking the assembly code", user_disas)
     do_check("check_runtime", "Checking runtime behavior", elf_filename)
 
     if getattr(chal, "give_flag", False):

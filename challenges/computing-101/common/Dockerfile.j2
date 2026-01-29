@@ -1,3 +1,7 @@
 {%- extends "common/Dockerfile.j2" -%}
 {%- block additional_packages %}python3-rich python3-capstone python3-magic binutils strace gdb{% endblock -%}
-{%- block after_setup %}RUN [ ! -f /challenge/check ] || chmod 4755 /challenge/check{% endblock -%}
+{%- block after_setup %}
+RUN [ ! -f /challenge/check ] || chmod 4755 /challenge/check
+RUN [ ! -f /challenge/bin/builder ] || chmod 755 /challenge/bin/builder
+RUN [ ! -f /challenge/submit-number ] || chmod 4755 /challenge/submit-number
+{% endblock -%}
