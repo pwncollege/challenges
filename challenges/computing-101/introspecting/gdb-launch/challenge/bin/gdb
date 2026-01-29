@@ -1,0 +1,21 @@
+#!/bin/bash -e
+
+if [ "$#" -eq 0 ]
+then
+	fold -s <<<"You called gdb without any arguments. Please provide it the filename!"
+	exit 1
+fi
+
+if [ "$#" -ne 1 ]
+then
+	fold -s <<<"You are trying to pass multiple options to gdb. Let's keep it simple for this level: just debug the /challenge/debug-me file!"
+	exit 1
+fi
+
+if [ "$(realpath "$1")" != "/challenge/debug-me" ]
+then
+	fold -s <<<"It looks like you are trying to debug a file other than /challenge/debug-me. Make sure to debug the right file!"
+	exit 1
+fi
+
+exec /usr/bin/gdb -x /challenge/.gdb "$@"

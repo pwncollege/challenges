@@ -1,0 +1,16 @@
+name: Hello Hackers
+resources:
+  - name: "System Calls"
+    type: lecture
+    video: vspq0u2tvhU
+    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+    slides: 1vEuZ1PW8Wvm88INmWbjoKY8srEKSkv2g4o-V42BsN9Y
+challenges:
+- id: write
+  name: "Writing Output"
+- id: write-exit
+  name: "Chaining Syscalls"
+- id: hello-hackers
+  name: "Writing Strings"
+- id: read
+  name: "Reading Data"

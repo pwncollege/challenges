@@ -1,0 +1,25 @@
+#!/usr/bin/exec-suid --real -- /bin/bash -p
+
+if [ "$UID" -ne 0 ]
+then
+	fold -s <<< "WARNING: I appear to be running as a non-root user. This might be due to you invoking me using strace! Trace /challenge/trace-me, not $0! Please run me directly, without strace or gdb."
+fi
+
+read NUM </challenge/.correct
+
+if [ -z "$1" ]
+then
+	fold -s <<< "You must run $0 with the secret value you retrieved from the challenge."
+	echo ""
+	echo "Usage: $0 [SECRET_VALUE]"
+	exit 1
+fi
+
+if [ "$NUM" != "$1" ]
+then
+	fold -s <<< "Incorrect... Make sure to get the secret value from the /challenge/trace-me file."
+	exit 1
+fi
+
+fold -s <<< "CORRECT! Here is your flag:"
+cat /flag

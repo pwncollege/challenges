@@ -1,0 +1,26 @@
+#!/usr/bin/exec-suid --real -- /bin/bash -p
+
+if [ "$UID" -ne 0 ]
+then
+	fold -s <<< "WARNING: I appear to be running as a non-root user. This might be due to you invoking me using strace! Trace /challenge/trace-me, not $0! Please run me directly, without strace."
+fi
+
+IFS="()" read -a TRACE < <(strace /challenge/trace-me 2>&1 | grep alarm)
+NUM=${TRACE[1]}
+
+if [ -z "$1" ]
+then
+	fold -s <<< "You must run $0 with the alarm value you retrieved from stracing /challenge/trace-me as the first argument:"
+	echo ""
+	echo "Usage: $0 [ALARM_VALUE]"
+	exit 1
+fi
+
+if [ "$NUM" != "$1" ]
+then
+	fold -s <<< "Incorrect... Make sure to retrieve the value passed as a parameter to 'alarm' (e.g., 'alarm(VALUE)')!"
+	exit 1
+fi
+
+fold -s <<< "CORRECT! Here is your flag:"
+cat /flag || fold -s <<< "... I failed to read the flag. This may be because you are running me via 'strace'."

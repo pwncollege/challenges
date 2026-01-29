@@ -1,0 +1,8 @@
+name: Software Introspection
+challenges:
+- id: strace
+  name: "Tracing Syscalls"
+- id: gdb-launch
+  name: "Starting GDB"
+- id: gdb-starti
+  name: "Starting Programs in GDB"

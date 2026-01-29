@@ -1,0 +1,29 @@
+name: Computer Memory
+resources:
+  - name: "(review) Computer Architecture"
+    type: lecture
+    video: o_kSgUPJk4c
+    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+    slides: 1sVyPL92gbzg_it9aIeC-CjXtF2tpvAmZTKjWc-SlU0c
+  - name: "Memory"
+    type: lecture
+    video: HahXfnOsSUU
+    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+    slides: 1lbPbd-jLj7VS7M-ntGhpv4_8WqSfqzLBNWG68_BIRL0
+challenges:
+- id: mem-load
+  name: "Loading From Memory"
+- id: mem-load-2
+  name: "More Loading Practice"
+- id: mem-dereference
+  name: "Dereferencing Pointers"
+- id: mem-dereference-self
+  name: "Dereferencing Yourself"
+- id: mem-offsets
+  name: "Dereferencing with Offsets"
+- id: mem-stored-addr
+  name: "Stored Addresses"
+- id: mem-double-deref
+  name: "Double Dereference"
+- id: mem-triple-deref
+  name: "Triple Dereference"
