@@ -4,27 +4,19 @@ import os
 os.environ["PATH"] = "/challenge/bin:/bin:/usr/bin:/usr/local/bin"
 os.environ["TERM"] = "xterm-256color"
 
-import pwnlib.context
 import pwnlib.tubes.process
-import pwnlib.asm
-import pwnlib.elf
-import contextlib
 import subprocess
 import capstone
 import tempfile
 import socket
-import magic
 import time
+import rich
 import sys
 
-pwnlib.context.context.arch = "amd64"
 cs = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
 
 sys.path.append(os.path.dirname(__file__)+"/.py")
 import chal #pylint:disable=import-error,wrong-import-position
-
-if os.geteuid() == 0:
-    os.seteuid(65534)
 
 class ChallengeFailed(Exception):
     pass
@@ -69,110 +61,33 @@ def dramatic_command(command, stdin=None, actual_command=None):
     slow_pause()
     return exit_code
 
-@contextlib.contextmanager
-def disable_fd(fd):
-    bkup = os.dup(fd)
-    os.close(fd)
-    yield
-    os.dup2(bkup, fd)
-    os.close(bkup)
-
-def _assemble(asm):
-    with disable_fd(2):
-        return pwnlib.asm.asm(asm)
-
-def assemble(asm):
+def build_input(elf_path, input_file=None):
+    raw_path = tempfile.mktemp(prefix="check-raw-")
+    cmd = ["builder", "-i", "--output-raw", raw_path, "--output-elf", elf_path]
     if not getattr(chal, "allow_asm", False):
-        raise ChallengeFailedPrint(
-            "This challenge requires you to assemble the code yourself. "
-            "Please do that."
-        )
+        cmd += ["--reject-asm"]
+    if not getattr(chal, "allow_elf", True):
+        cmd += ["--reject-elf"]
+    if hasattr(chal, "assembly_prefix"):
+        cmd += ["--prefix", chal.assembly_prefix]
+    if hasattr(chal, "assembly_suffix"):
+        cmd += ["--suffix", chal.assembly_suffix]
+    if input_file:
+        cmd.append(input_file)
+    result = subprocess.run(cmd, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        error = result.stderr.decode("utf-8", errors="replace").strip()
+        if error:
+            raise ChallengeFailedPrint(error)
+        sys.exit(1)
 
-    try:
-        x86 = _assemble(asm)
-    except pwnlib.exception.PwnlibException as e:
-        errors = e.message.split("\n")
-        if (
-            errors[0].startswith("There was an error running") and
-            "Assembler messages" in errors[3]
-        ):
-            msg = "\n".join(
-                "- "+line.split(" ", 1)[-1]
-                for line in errors[4:]
-                if line
-            )
-            raise ChallengeFailedPrint(
-                f"Your assembly did not assemble cleanly. The errors:\n{msg}"
-            ) from e
+    #pylint:disable=consider-using-with
+    raw_binary = open(raw_path, "rb").read()
+    os.unlink(raw_path)
+    return raw_binary
 
-        raise ChallengeFailedPrint(
-            "Your assembly resulted in unexpected assembly errors:\n" +
-            e.message
-        ) from e
-
-    return x86
-
-def get_raw_binary(content):
-    m = magic.from_buffer(content)
-    if m == "ELF 64-bit relocatable":
-        raise ChallengeFailedPrint(
-            "You provided an ELF object file, rather than an actual\n"
-            "ELF executable. The object file is an intermediate result\n"
-            "of the compilation/assembly process. Please 'link' it into an\n"
-            "executable by using:\n"
-            "\n"
-            "hacker@dojo:~$ ld final.elf your-object-file.o"
-            "\n"
-            "This will create a 'final.elf' file that you can pass to this program!"
-        )
-    if (
-        "ELF 64-bit LSB shared object" in m or
-        "ELF 64-bit LSB pie executable" in m or
-        "ELF 64-bit LSB executable" in m
-    ):
-        if not getattr(chal, "allow_elf", True):
-            raise ChallengeFailedPrint(
-                "This challenge requires you to provide raw binary code, "
-                "but you provided an ELF. Please extract your .text segment "
-                "using 'objcopy'!"
-            )
-        tmpelf = tempfile.mktemp()
-        with open(tmpelf, "wb") as o:
-            o.write(content)
-        text = pwnlib.elf.ELF(tmpelf).get_section_by_name(".text")
-        if not text:
-            raise ChallengeFailedPrint(
-                "The ELF you provided is missing the .text section!"
-            )
-        rawbin = text.data()
-        if not rawbin:
-            raise ChallengeFailedPrint(
-                "The .text section of the ELF you provided is empty!"
-            )
-        return rawbin
-    elif "text" in m:
-        return assemble(content.decode('latin1')+"\n")
-    else: #assuming this is binary code
-        return content
-
-@contextlib.contextmanager
-def output_color(color, stream=sys.stdout):
-    CODES = {
-        'HEADER': '\033[95m',
-        'OKBLUE': '\033[94m',
-        'OKCYAN': '\033[96m',
-        'OKGREEN': '\033[92m',
-        'WARNING': '\033[93m',
-        'FAIL': '\033[91m',
-        'ENDC': '\033[0m',
-        'BOLD': '\033[1m',
-        'UNDERLINE': '\033[4m',
-    }
-    print(CODES[color.upper()], end="", flush=True, file=stream)
-    try:
-        yield
-    finally:
-        print(CODES['ENDC'], end="", flush=True, file=stream)
+console = rich.console.Console(highlight=False)
+err_console = rich.console.Console(stderr=True, highlight=False)
 
 def do_check(stage_id, stage_description, *args, **kwargs):
     try:
@@ -180,43 +95,19 @@ def do_check(stage_id, stage_description, *args, **kwargs):
             return None
 
         print("")
-        with output_color("header"):
-            print(getattr(chal, stage_id+"_prologue", f"{stage_description}...").format(**chal.__dict__))
+        console.print(getattr(chal, stage_id+"_prologue", f"{stage_description}...").format(**chal.__dict__), style="bold magenta")
         r = getattr(chal, stage_id)(*args, **kwargs)
-        with output_color("okgreen"):
-            print(getattr(chal, stage_id+"_success", "... YES! Great job!").format(**chal.__dict__))
+        console.print(getattr(chal, stage_id+"_success", "... YES! Great job!").format(**chal.__dict__), style="bold green")
         return r
     except (ChallengeFailed, AssertionError) as _e:
-        with output_color("fail"):
-            print(getattr(chal, stage_id+"_failure", "... oops, we found an issue! Details below:\n").format(**chal.__dict__))
-            print(_e)
+        console.print(getattr(chal, stage_id+"_failure", "... oops, we found an issue! Details below:\n").format(**chal.__dict__), style="bold red")
+        console.print(str(_e), style="bold red")
         raise
 
 def main():
-    if len(sys.argv) == 2:
-        filename = sys.argv[1]
-        try:
-            #pylint:disable=consider-using-with,unspecified-encoding
-            content = open(filename, "rb").read()
-        except FileNotFoundError:
-            print(f"File {filename} not found.")
-            return
-        except PermissionError:
-            print(f"Permission denied when opening {filename}.")
-            return
-    elif not os.isatty(0):
-        content = sys.stdin.buffer.read()
-    else:
-        if chal.allow_asm:
-            print("Please input your assembly. Press Ctrl+D when done!")
-        else:
-            print(f"Please run this program as `{sys.argv[0]} your-program.elf`!")
-            sys.exit(1)
-        content = b""
-        while line := sys.stdin.buffer.readline():
-            content += line
-
-    raw_binary = get_raw_binary(content)
+    elf_filename = getattr(chal, 'final_filename', "/tmp/your-program")
+    input_file = sys.argv[1] if len(sys.argv) == 2 else None
+    raw_binary = build_input(elf_filename, input_file)
 
     disas = list(cs.disasm(raw_binary, 0))
     if not disas:
@@ -232,25 +123,8 @@ def main():
         )
         return
 
-    if hasattr(chal, "assembly_prefix"):
-        binary_prefix = _assemble(chal.assembly_prefix)
-        raw_binary = binary_prefix + raw_binary
-    if hasattr(chal, "assembly_suffix"):
-        binary_suffix = _assemble(chal.assembly_suffix)
-        raw_binary = raw_binary + binary_suffix
-
     do_check("check_raw_binary", "Checking the binary code", raw_binary)
     do_check("check_disassembly", "Checking the assembly code", disas)
-
-    elf_filename = getattr(chal, 'final_filename', "/tmp/your-program")
-    os.rename(
-        pwnlib.asm.make_elf(raw_binary, extract=False),
-        elf_filename
-    )
-
-    if os.geteuid() == 65534:
-        os.seteuid(0)
-
     do_check("check_runtime", "Checking runtime behavior", elf_filename)
 
     if getattr(chal, "give_flag", False):
@@ -266,8 +140,7 @@ if __name__ == '__main__':
     except (ChallengeFailedPrint) as _e:
         print("Check failed:")
         print()
-        with output_color("FAIL"):
-            print(_e)
+        console.print(str(_e), style="bold red")
     except (ChallengeFailed, AssertionError):
         # we assume we already printed
         pass
