@@ -36,3 +36,24 @@
     spm8LYwBAOA8FQ9wXepXIKVk6bMHSTTuW/Fcwr4wxv+IxMAdgOYF
     =auuL
     -----END PGP PUBLIC KEY BLOCK-----
+
+
+- name: yan
+  email: yans@yancomm.net
+  github: zardus
+  groups: ["*"]
+  key: |
+    -----BEGIN PGP PUBLIC KEY BLOCK-----
+
+    mDMEaXuiXRYJKwYBBAHaRw8BAQdAWQtZqwW/OMc9N8rh5Jx3eLoOGucwTtsyelAK
+    ar0roL+0JllhbiBTaG9zaGl0YWlzaHZpbGkgPHlhbnNAeWFuY29tbS5uZXQ+iJkE
+    ExYKAEEWIQRT0y32uDfFcvi0YQyPjc0JZaSU3gUCaXuiXQIbAwUJBaOagAULCQgH
+    AgIiAgYVCgkICwIEFgIDAQIeBwIXgAAKCRCPjc0JZaSU3iQlAQCjpDK9w1RIBiVy
+    ydpWu5IV1lg3olaqbEDxvq+ELlUNUAEA9NCimqrK4Zmwz1WmX6cXH/L83ic5hA8u
+    G8kG0sm7KQu4OARpe6JdEgorBgEEAZdVAQUBAQdAha2GXFmWvs07o1eHLp8pNL/o
+    DltwifGNF7LQQEbXpgYDAQgHiH4EGBYKACYWIQRT0y32uDfFcvi0YQyPjc0JZaSU
+    3gUCaXuiXQIbDAUJBaOagAAKCRCPjc0JZaSU3hwDAP9jed0cbvvCNHuva6Ud8oKY
+    S8t7gid8G+yw893L8mprTAEA7YyOm2wv+dzJRaM/YTBT+WBNTrNgsSa2hjecu0iY
+    vws=
+    =0G9e
+    -----END PGP PUBLIC KEY BLOCK-----
