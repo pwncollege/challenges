@@ -1,11 +1,12 @@
+import logging
 import pathlib
 
 import click
-from rich.console import Console
 
 from .. import lib
+from ..console import console
 
-console = Console()
+logger = logging.getLogger(__name__)
 
 
 @click.command("build")
@@ -23,6 +24,7 @@ def build_command(targets, modified_since):
             console.print(f"[yellow]No challenges found since {modified_since}[/]")
             return
         raise click.ClickException("No challenges found in provided targets.")
+    logger.info("building %d challenge(s)", len(challenge_paths))
     for challenge_path in challenge_paths:
         try:
             image_id = lib.build_challenge(challenge_path)

@@ -2,12 +2,10 @@ import pathlib
 import shutil
 
 import click
-from rich.console import Console
 from rich.syntax import Syntax
 
 from .. import lib
-
-console = Console()
+from ..console import console
 
 
 def _print_contents(path: pathlib.Path, contents: str):
