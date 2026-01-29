@@ -1,0 +1,24 @@
+name: Check Encryption
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  check-encryption:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install git-crypt
+      run: sudo apt-get install -y git-crypt
+
+    - name: Ensure tests_private files are encrypted
+      run: |
+        unencrypted=$(git crypt status | grep tests_private | grep "^not" || true)
+        if [ -n "$unencrypted" ]; then
+          echo "::error::Unencrypted tests_private files detected:"
+          echo "$unencrypted"
+          exit 1
+        fi
