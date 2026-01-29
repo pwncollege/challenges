@@ -1,0 +1,10 @@
+name: Computing 101
+type: welcome
+id: computing-101
+award:
+  emoji: "\U0001F4BB"
+modules:
+- id: your-first-program
+- id: introspecting
+- id: memory
+- id: hello-hackers

@@ -1,0 +1,33 @@
+name: Your First Program
+resources:
+  - name: "Computer Architecture"
+    type: lecture
+    video: o_kSgUPJk4c
+    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+    slides: 1sVyPL92gbzg_it9aIeC-CjXtF2tpvAmZTKjWc-SlU0c
+  - name: "Assembly"
+    type: lecture
+    video: TdTOH1GfrWg
+    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+    slides: 1sBB34ZUVjT3MDjYvGiZU3z6CTLGvO1hHEdHliPUJ0iw
+  - name: "Data"
+    type: lecture
+    video: 21MvbpgssU8
+    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+    slides: 1SeyZbM_qCDz4t03KDZ8Q0qi1GzsSSSJAkO-KeVlAL7w
+  - name: "Registers"
+    type: lecture
+    video: IWbIZerH930
+    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+    slides: 1U8Rsz7FNTmy-3wGtPB-YCyanIIbox1J90adze9-1cfo
+challenges:
+- id: rax
+  name: "Your First Register"
+- id: exit
+  name: "Your First Syscall"
+- id: exit-code
+  name: "Exit Codes"
+- id: building
+  name: "Building Executables"
+- id: movreg
+  name: "Moving Between Registers"
