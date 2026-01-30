@@ -7,7 +7,7 @@ stepi
 set logging off
 printf "\n\n"
 printf "You successfully started GDB!\n"
-printf "Here is the secret number: %d\n", $rsi
+printf "Here is the secret number: %d\n", $rdi
 printf "Submit that with /challenge/submit-number. Goodbye!\n"
 set logging on
 stop
