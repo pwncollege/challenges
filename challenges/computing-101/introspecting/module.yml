@@ -8,3 +8,5 @@ challenges:
   name: "Starting GDB"
 - id: gdb-starti
   name: "Starting Programs in GDB"
+- id: gdb-disassemble
+  name: "Disassembling in GDB"
