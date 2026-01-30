@@ -1,0 +1,254 @@
+#!/usr/bin/python3 -I
+
+import os
+os.environ["PATH"] = "/challenge/bin:/bin:/usr/bin:/usr/local/bin"
+
+import pwnlib.context
+import pwnlib.asm
+import pwnlib.elf
+import contextlib
+import argparse
+import tempfile
+import capstone
+import magic
+import sys
+
+pwnlib.context.context.arch = "amd64"
+cs = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
+
+
+class BuilderError(Exception):
+    pass
+
+
+@contextlib.contextmanager
+def disable_fd(fd):
+    bkup = os.dup(fd)
+    os.close(fd)
+    yield
+    os.dup2(bkup, fd)
+    os.close(bkup)
+
+
+def _assemble(asm):
+    with disable_fd(2):
+        return pwnlib.asm.asm(asm)
+
+
+def detect_format(content):
+    m = magic.from_buffer(content)
+    if "text" in m:
+        return "asm"
+    if m == "ELF 64-bit relocatable":
+        raise BuilderError(
+            "You provided an ELF object file, rather than an actual\n"
+            "ELF executable. The object file is an intermediate result\n"
+            "of the compilation/assembly process. Please 'link' it into an\n"
+            "executable by using:\n"
+            "\n"
+            "hacker@dojo:~$ ld final.elf your-object-file.o\n"
+            "\n"
+            "This will create a 'final.elf' file that you can pass to this program!"
+        )
+    if (
+        "ELF 64-bit LSB shared object" in m or
+        "ELF 64-bit LSB pie executable" in m or
+        "ELF 64-bit LSB executable" in m
+    ):
+        return "elf"
+    return "raw"
+
+
+def to_raw(content, fmt):
+    if fmt == "asm":
+        try:
+            return _assemble(content.decode("latin1") + "\n")
+        except pwnlib.exception.PwnlibException as e:
+            raise BuilderError(f"Assembly failed:\n{e.message}") from e
+    if fmt == "elf":
+        tmpelf = tempfile.mktemp()
+        with open(tmpelf, "wb") as o:
+            o.write(content)
+        text = pwnlib.elf.ELF(tmpelf).get_section_by_name(".text")
+        os.unlink(tmpelf)
+        if not text:
+            raise BuilderError("The ELF you provided is missing the .text section!")
+        rawbin = text.data()
+        if not rawbin:
+            raise BuilderError("The .text section of the ELF you provided is empty!")
+        return rawbin
+    return content
+
+
+def raw_to_asm(raw):
+    disas = list(cs.disasm(raw, 0))
+    if not disas:
+        raise BuilderError("The binary failed to disassemble.")
+    return "\n".join(f"{insn.mnemonic} {insn.op_str}".rstrip() for insn in disas) + "\n"
+
+
+def raw_to_elf(raw):
+    return pwnlib.asm.make_elf(raw, extract=False)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build/convert between assembly, raw shellcode, and ELF formats."
+    )
+
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument("--only-asm", action="store_true", help="Only accept assembly text input")
+    input_group.add_argument("--only-raw", action="store_true", help="Only accept raw shellcode input")
+    input_group.add_argument("--only-elf", action="store_true", help="Only accept ELF input")
+
+    parser.add_argument("--reject-asm", action="store_true", help="Reject assembly text input")
+    parser.add_argument("--reject-elf", action="store_true", help="Reject ELF input")
+
+    parser.add_argument("--privileged", action="store_true", help="Do not drop privileges")
+    parser.add_argument("--perms", metavar="MODE", default="4755", help="ELF output permissions (default: 4755)")
+
+    parser.add_argument("-i", "--interactive", action="store_true", help="Show user-facing input prompts on a tty")
+
+    parser.add_argument("--prefix", metavar="ASM", help="Assembly to prepend to the raw binary")
+    parser.add_argument("--suffix", metavar="ASM", help="Assembly to append to the raw binary")
+    parser.add_argument("--max-instructions", metavar="N", type=int, help="Maximum number of instructions allowed (checked before prefix/suffix)")
+
+    parser.add_argument("--output-asm", metavar="PATH", help="Write disassembled output to PATH")
+    parser.add_argument("--output-raw", metavar="PATH", help="Write raw shellcode to PATH")
+    parser.add_argument("--output-user-raw", metavar="PATH", help="Write user's raw shellcode (before prefix/suffix) to PATH")
+    parser.add_argument("--output-elf", metavar="PATH", help="Write ELF executable to PATH")
+
+    parser.add_argument("input", nargs="?", help="Input file (reads stdin if omitted)")
+
+    args = parser.parse_args()
+
+    # --- drop privileges ---
+    if not args.privileged and os.geteuid() == 0:
+        os.seteuid(65534)
+
+    # --- read input ---
+    if args.input:
+        try:
+            with open(args.input, "rb") as f:
+                content = f.read()
+        except FileNotFoundError:
+            print(f"File {args.input} not found.", file=sys.stderr)
+            sys.exit(1)
+        except PermissionError:
+            print(f"Permission denied when opening {args.input}.", file=sys.stderr)
+            sys.exit(1)
+    elif not os.isatty(0):
+        content = sys.stdin.buffer.read()
+    elif args.interactive:
+        if args.reject_asm or args.only_raw or args.only_elf:
+            print(f"Please run this program as `{sys.argv[0]} your-program.elf`!")
+            sys.exit(1)
+        print("Please input your assembly. Press Ctrl+D when done!")
+        content = b""
+        while line := sys.stdin.buffer.readline():
+            content += line
+    else:
+        print("No input provided.", file=sys.stderr)
+        sys.exit(1)
+
+    if not content:
+        print("No input provided.", file=sys.stderr)
+        sys.exit(1)
+
+    # --- detect and validate format ---
+    fmt = detect_format(content)
+
+    if args.reject_asm and fmt == "asm":
+        raise BuilderError(
+            "This challenge requires you to assemble the code yourself. "
+            "Please do that."
+        )
+    if args.reject_elf and fmt == "elf":
+        raise BuilderError(
+            "This challenge requires you to provide raw binary code, "
+            "but you provided an ELF. Please extract your .text segment "
+            "using 'objcopy'!"
+        )
+
+    format_names = {"asm": "assembly text", "raw": "raw shellcode", "elf": "ELF"}
+    if args.only_asm and fmt != "asm":
+        print(
+            f"This challenge requires assembly text input, but you provided {format_names[fmt]}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if args.only_raw and fmt != "raw":
+        print(
+            f"This challenge requires raw shellcode input, but you provided {format_names[fmt]}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if args.only_elf and fmt != "elf":
+        print(
+            f"This challenge requires ELF input, but you provided {format_names[fmt]}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # --- convert to raw binary (common intermediate) ---
+    raw = to_raw(content, fmt)
+
+    # --- check instruction count before prefix/suffix ---
+    if args.max_instructions is not None:
+        user_disas = list(cs.disasm(raw, 0))
+        if not user_disas:
+            print("The binary failed to disassemble.", file=sys.stderr)
+            sys.exit(1)
+        if len(user_disas) != args.max_instructions:
+            n = args.max_instructions
+            raise BuilderError(
+                f"This challenge expects {n} "
+                f"instruction{'s' if n != 1 else ''}, "
+                f"but you provided {len(user_disas)}."
+            )
+
+    # --- save user raw before prefix/suffix ---
+    if args.output_user_raw:
+        with open(args.output_user_raw, "wb") as f:
+            f.write(raw)
+
+    # --- apply prefix/suffix ---
+    if args.prefix:
+        raw = _assemble(args.prefix) + raw
+    if args.suffix:
+        raw = raw + _assemble(args.suffix)
+
+    disas = list(cs.disasm(raw, 0))
+    if not disas:
+        print("The binary failed to disassemble.", file=sys.stderr)
+        sys.exit(1)
+
+    # --- produce outputs ---
+    if args.output_asm:
+        asm_text = raw_to_asm(raw)
+        with open(args.output_asm, "w") as f:
+            f.write(asm_text)
+
+    if args.output_raw:
+        with open(args.output_raw, "wb") as f:
+            f.write(raw)
+
+    if args.output_elf:
+        elf_tmp = raw_to_elf(raw)
+        with open(elf_tmp, "rb") as src:
+            elf_data = src.read()
+        os.unlink(elf_tmp)
+        with open(args.output_elf, "wb") as f:
+            f.write(elf_data)
+        os.chmod(args.output_elf, int(args.perms, 8))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BuilderError as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        raise
