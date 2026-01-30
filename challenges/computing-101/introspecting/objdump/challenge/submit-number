@@ -1,0 +1,28 @@
+#!/usr/bin/exec-suid --real -- /bin/bash -p
+
+if [ "$UID" -ne 0 ]
+then
+	fold -s <<< "WARNING: I appear to be running as a non-root user. Please run me directly."
+fi
+
+HEX=$(objdump -d /challenge/disassemble-me | grep -oP '\$0x[0-9a-f]+(?=,%rdi)' | head -1)
+NUM=$((${HEX#\$}))
+
+if [ -z "$1" ]
+then
+	fold -s <<< "You must run $0 with the number you retrieved from objdump's disassembly of /challenge/disassemble-me as the first argument:"
+	echo ""
+	echo "Usage: $0 [NUMBER]"
+	exit 1
+fi
+
+INPUT=$(($1))
+
+if [ "$NUM" != "$INPUT" ]
+then
+	fold -s <<< "Incorrect... Make sure to retrieve the value being loaded into the argument register (look for the 'mov' instruction targeting '%rdi'). Remember, objdump displays numbers in hexadecimal!"
+	exit 1
+fi
+
+fold -s <<< "CORRECT! Here is your flag:"
+cat /flag || fold -s <<< "... I failed to read the flag."

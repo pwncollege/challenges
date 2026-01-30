@@ -1,5 +1,7 @@
 name: Software Introspection
 challenges:
+- id: objdump
+  name: "Disassembling Programs"
 - id: strace
   name: "Tracing Syscalls"
 - id: gdb-launch
