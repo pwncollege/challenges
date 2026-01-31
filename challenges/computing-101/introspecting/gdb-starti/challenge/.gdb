@@ -2,6 +2,7 @@ set disassembly-flavor intel
 set logging redirect on
 set logging file /dev/null
 set logging on
+set confirm off
 set height 0
 
 define hook-stop
@@ -13,7 +14,5 @@ define hook-stop
   printf "HACKER: submit that with /challenge/submit-number. Good luck!\n"
   printf "\n(gdb) disassemble\n"
   disas
-  printf "\nHACKER: And now we'll quit GDB!\n\n(gdb) stop\n"
-  printf "(gdb) quit\n"
-  quit
+  printf "\nHACKER: You can now quit GDB by typing 'quit' (or just 'q').\n"
 end

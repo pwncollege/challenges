@@ -6,7 +6,13 @@ challenges:
   name: "Tracing Syscalls"
 - id: gdb-launch
   name: "Starting GDB"
+- id: gdb-quit
+  name: "Quitting GDB"
 - id: gdb-starti
   name: "Starting Programs in GDB"
 - id: gdb-disassemble
   name: "Disassembling in GDB"
+- id: gdb-stepi
+  name: "Stepping Through Instructions"
+- id: gdb-print
+  name: "Reading Register Values"
