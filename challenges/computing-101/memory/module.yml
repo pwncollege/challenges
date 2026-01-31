@@ -17,4 +17,6 @@ challenges:
   name: "More Loading Practice"
 - id: mem-dereference
   name: "Dereferencing Pointers"
+- id: mem-stack
+  name: "The Stack"
 - id: mem-dereference-self
