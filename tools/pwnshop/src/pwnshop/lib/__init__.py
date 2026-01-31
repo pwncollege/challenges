@@ -140,7 +140,11 @@ def run_challenge(
 ) -> Iterator[tuple[str, str]]:
     flag = "pwn.college{" + base64.b64encode(os.urandom(40)).decode() + "}"
     env_options = []
-    for key, value in {"FLAG": flag, "SEED": str(CHALLENGE_SEED)}.items():
+    for key, value in {
+        "FLAG": flag,
+        "SEED": str(CHALLENGE_SEED),
+        "PATH": "/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    }.items():
         env_options.extend(["--env", f"{key}={value}"])
     logger.info("starting container for image %s", challenge_image)
     if volumes:
