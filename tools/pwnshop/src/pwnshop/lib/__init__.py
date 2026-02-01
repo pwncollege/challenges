@@ -138,7 +138,7 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
 def run_challenge(
     challenge_image: str, *, volumes: Optional[Sequence[pathlib.Path]] = None
 ) -> Iterator[tuple[str, str]]:
-    flag = "pwn.college{" + base64.b64encode(os.urandom(40)).decode() + "}"
+    flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
     env_options = []
     for key, value in {
         "FLAG": flag,

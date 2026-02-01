@@ -31,20 +31,20 @@ For example, if your program is run as `/tmp/your-program Hi`:
    │                                 │
    │   Address   │ Contents          │
    │ +──────────────────────────+    │
-   │ │ 1234000   │ "/tmp/..."   │◀───┘
+   │ │ 1234000   │ "/tmp/..."   │◀───┘ the program name
    │ +──────────────────────────+
    │ │ ...       │ ...          │
    │ +──────────────────────────+
-   └▸│ 1234560   │ "Hi"         │
+   └▸│ 1234560   │ "Hi"         │ the first argument!
      +──────────────────────────+
 ```
 
 To get the actual argument data, you need to dereference twice: once to get the pointer from the stack, and once to follow it to the data.
 
 ```assembly
-mov rdi, [rsp+16]   # load the argv[1] pointer (e.g., 1234000) from the stack
+mov rdi, [rsp+16]   # load the first argument pointer (e.g., 1234000) from the stack
 mov rdi, [rdi]      # follow the pointer to read the actual data (e.g., "Hi")
 ```
 
 In this challenge, your program will be invoked with an argument.
-Read the value of `argv[1]` and exit with it!
+Read the value of the first argument and exit with it!
