@@ -8,5 +8,4 @@ modules:
 - id: memory
 - id: the-stack
 - id: introspecting
-- id: advanced-memory
 - id: hello-hackers
