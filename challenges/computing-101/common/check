@@ -38,18 +38,19 @@ def slow_print(what):
         slow_pause()
     print("")
 
+display_filename = None
+
 def dramatic_command(command, stdin=None, actual_command=None):
+    if actual_command is None:
+        actual_command = command
+    if display_filename:
+        command = command.replace(display_filename[1], display_filename[0])
     print_prompt()
     slow_print(command)
     if not stdin:
-        exit_code = os.WEXITSTATUS(
-            os.system(command if actual_command is None else actual_command)
-        )
+        exit_code = os.WEXITSTATUS(os.system(actual_command))
     else:
-        p = pwnlib.tubes.process.process(
-            command if actual_command is None else actual_command,
-            shell=True
-        )
+        p = pwnlib.tubes.process.process(actual_command, shell=True)
         slow_pause()
         slow_print(stdin.decode())
         time.sleep(0.05)
@@ -115,8 +116,11 @@ def main():
     if os.geteuid() == 0:
         os.seteuid(65534)
 
+    global display_filename
     elf_filename = getattr(chal, 'final_filename', "/tmp/your-program")
     input_file = sys.argv[1] if len(sys.argv) == 2 else None
+    if input_file and input_file != elf_filename:
+        display_filename = (input_file, elf_filename)
     raw_binary, user_raw_binary = build_input(elf_filename, input_file)
 
     disas = list(cs.disasm(raw_binary, 0))
