@@ -23,3 +23,5 @@ challenges:
   name: "Dereferencing with Offsets"
 - id: mem-stored-addr
   name: "Stored Addresses"
+- id: mem-double-deref
+  name: "Double Dereference"
