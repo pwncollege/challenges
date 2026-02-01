@@ -17,6 +17,12 @@ challenges:
   name: "More Loading Practice"
 - id: mem-dereference
   name: "Dereferencing Pointers"
+- id: mem-dereference-self
+  name: "Dereferencing Yourself"
+- id: mem-offsets
+  name: "Dereferencing with Offsets"
 - id: mem-stack
   name: "The Stack"
+- id: mem-pop
+  name: "Popping From the Stack"
 - id: mem-dereference-self
