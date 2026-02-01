@@ -1,5 +1,5 @@
 Why is the stack called a *stack*?
-So far, we've just used it as a region of memory that we read from with `mov rdi, [rsp]`.
+So far, we've just used it as a region of memory that we read from with `mov`, like any other memory dereference.
 But the stack is meant to be used as, well, a stack of data: you `pop` values off the top!
 
 The `pop` instruction is purpose-built for this.

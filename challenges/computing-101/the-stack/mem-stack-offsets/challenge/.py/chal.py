@@ -1,7 +1,6 @@
 import __main__ as checker
 import random
 
-allow_asm = True
 give_flag = True
 num_instructions = 3
 

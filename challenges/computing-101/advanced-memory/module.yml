@@ -11,8 +11,6 @@ resources:
     playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
     slides: 1lbPbd-jLj7VS7M-ntGhpv4_8WqSfqzLBNWG68_BIRL0
 challenges:
-- id: mem-pop
-  name: "Popping From the Stack"
 - id: mem-double-deref
   name: "Double Dereference"
 - id: mem-triple-deref

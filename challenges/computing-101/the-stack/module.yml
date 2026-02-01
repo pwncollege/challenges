@@ -11,3 +11,5 @@ challenges:
   name: "Stack Offsets"
 - id: mem-argv1
   name: "Program Arguments on the Stack"
+- id: mem-pop
+  name: "Popping From the Stack"
