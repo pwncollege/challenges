@@ -32,10 +32,10 @@ In the kinda-C syntax that we learned from `strace`, this would be:
 write(file_descriptor, memory_address, number_of_characters_to_write)
 ```
 
-For a more concrete example, if you wanted to write 10 characters from memory address `1337000` to standard output (file descriptor 1), this would be:
+For a more concrete example, if you wanted to write 10 characters starting from some memory address to standard output (file descriptor 1), this would be:
 
 ```c
-write(1, 1337000, 10);
+write(1, memory_address, 10);
 ```
 
 Wow, that's simple!
@@ -54,8 +54,25 @@ Now, how do we actually specify these parameters?
 And, of course, the `write` syscall index into `rax` itself: `1`.
 Other than the `rdi` vs `rdx` confusion, this is really easy!
 
-Now, you know how to point a register at a memory address (from the [Memory](../memory) module!), and you know how to set the system call number, and how to set the rest of the registers.
-So, this should be cake!
+Now, you know how to set the system call number and how to set the rest of the registers.
+But where in memory is the data you need to write?
 
-Similar to before, we wrote a single secret character value into memory at address `1337000`.
-Call `write` to that single character (for now! We'll do multiple-character writes later) value onto standard out, and we'll give you the flag!
+In this challenge, your program is invoked with a command-line argument, something like:
+
+```text
+/tmp/your-program H
+```
+
+Recall that when a program is run with arguments, the stack stores _pointers_ to each argument.
+These are _addresses_ stored in memory: `[rsp+16]` doesn't contain the argument text directly --- it contains the _address_ where that text lives.
+
+So, to get the memory address of the first argument, you simply load the pointer from the stack, as you've done before!
+
+```asm
+mov rsi, [rsp+16]
+```
+
+This puts the memory address of the first argument's text into `rsi` --- exactly what `write` needs as its second parameter!
+
+Your program will be invoked with a single character as its first argument.
+Call `write` to write that single character (for now! We'll do multiple-character writes later) to standard output, and we'll give you the flag!

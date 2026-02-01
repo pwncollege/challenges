@@ -1,4 +1,4 @@
-name: Hello Hackers
+name: Output and Input
 resources:
   - name: "System Calls"
     type: lecture
