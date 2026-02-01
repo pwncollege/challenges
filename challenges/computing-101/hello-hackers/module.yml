@@ -14,3 +14,5 @@ challenges:
   name: "Writing Strings"
 - id: read
   name: "Reading Data"
+- id: open-read-write
+  name: "Opening Files"
