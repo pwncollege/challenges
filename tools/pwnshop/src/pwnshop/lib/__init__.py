@@ -138,9 +138,13 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
 def run_challenge(
     challenge_image: str, *, volumes: Optional[Sequence[pathlib.Path]] = None
 ) -> Iterator[tuple[str, str]]:
-    flag = "pwn.college{" + base64.b64encode(os.urandom(40)).decode() + "}"
+    flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
     env_options = []
-    for key, value in {"FLAG": flag, "SEED": str(CHALLENGE_SEED)}.items():
+    for key, value in {
+        "FLAG": flag,
+        "SEED": str(CHALLENGE_SEED),
+        "PATH": "/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    }.items():
         env_options.extend(["--env", f"{key}={value}"])
     logger.info("starting container for image %s", challenge_image)
     if volumes:

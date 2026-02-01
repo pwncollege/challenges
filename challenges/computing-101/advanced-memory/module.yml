@@ -1,0 +1,15 @@
+name: Advanced Memory Operations
+resources:
+  - name: "(review) Computer Architecture"
+    type: lecture
+    video: o_kSgUPJk4c
+    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+    slides: 1sVyPL92gbzg_it9aIeC-CjXtF2tpvAmZTKjWc-SlU0c
+  - name: "Memory"
+    type: lecture
+    video: HahXfnOsSUU
+    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+    slides: 1lbPbd-jLj7VS7M-ntGhpv4_8WqSfqzLBNWG68_BIRL0
+challenges:
+- id: mem-triple-deref
+  name: "Triple Dereference"

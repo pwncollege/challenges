@@ -1,0 +1,18 @@
+#!/bin/bash
+
+NUM=$RANDOM
+echo $NUM > /challenge/.correct
+chmod 600 /challenge/.correct
+
+ASM=$(mktemp).o
+as -o $ASM <<< ".intel_syntax noprefix; main: mov rdi, $NUM; mov rdi, 0; mov rax, 60; syscall"
+ld -o /challenge/debug-me $ASM 2>/tmp/.init.log
+rm $ASM
+
+# Generate GDB-style censored disassembly with arrow at each instruction position
+HEX=$(printf '0x%x' $NUM)
+DISAS=$(/usr/bin/gdb -batch -ex 'set disassembly-flavor intel' -ex starti -ex disassemble /challenge/debug-me 2>/dev/null | sed -n '/^Dump/,/^End/p')
+CLEAN=$(echo "$DISAS" | sed "s/${HEX}/CENSORED/" | sed 's/^=> /   /')
+for i in 0 1 2 3; do
+  echo "$CLEAN" | sed "$((i + 2))s/^   /=> /" > /challenge/.censored-disas-$i
+done

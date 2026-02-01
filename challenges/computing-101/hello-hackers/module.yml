@@ -1,4 +1,4 @@
-name: Hello Hackers
+name: Output and Input
 resources:
   - name: "System Calls"
     type: lecture
@@ -14,3 +14,7 @@ challenges:
   name: "Writing Strings"
 - id: read
   name: "Reading Data"
+- id: open-read-write
+  name: "Opening Files"
+- id: open-read-write-hardcode
+  name: "Hardcoding the Filename"
