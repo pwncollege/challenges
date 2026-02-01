@@ -20,3 +20,5 @@ challenges:
   name: "Popping Stack Values"
 - id: gdb-examine
   name: "Examining Memory"
+- id: gdb-examine-argv1
+  name: "Examining Stack Pointers"
