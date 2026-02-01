@@ -9,5 +9,5 @@ challenges:
   name: "The Stack"
 - id: mem-stack-offsets
   name: "Stack Offsets"
-- id: mem-stack-stored-addr
-  name: "Stack Stored Addresses"
+- id: mem-argv1
+  name: "Program Arguments on the Stack"
