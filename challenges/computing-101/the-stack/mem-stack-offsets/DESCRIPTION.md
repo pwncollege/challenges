@@ -18,7 +18,8 @@ In general, `[rsp+N]` reads memory at the address `rsp+N`:
 ```
 
 You'll notice these offsets go in multiples of 8.
-That's because each value on the stack is 8 bytes (64 bits) wide, so consecutive values are 8 bytes apart.
+That's because many values on the stack, such as numbers or memory addresses, tend to be 8 bytes (64 bits) wide, so consecutive values are 8 bytes apart.
+But this is mostly convention: in reality, the stack, like any other region of memory, is a contiguous region of individual bytes, though for now we'll treat the stack as a bunch of 8-byte/64-bit values.
 
 In this challenge, we've stashed a secret value on the stack at an offset of 128 bytes from `rsp`.
 Read the value at `[rsp+128]` and use it as the exit code!
