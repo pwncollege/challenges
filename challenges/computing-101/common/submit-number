@@ -19,8 +19,13 @@ INPUT=$(($1))
 
 if [ "$NUM" != "$INPUT" ]
 then
-	fold -s <<< "Incorrect!"
-	exit 1
+	# Also try interpreting the input as naked hex (e.g., "d7" -> "0xd7")
+	HEX_INPUT=$(printf '%d' "0x$1" 2>/dev/null) || HEX_INPUT=""
+	if [ "$NUM" != "$HEX_INPUT" ]
+	then
+		fold -s <<< "Incorrect!"
+		exit 1
+	fi
 fi
 
 fold -s <<< "CORRECT! Here is your flag:"
