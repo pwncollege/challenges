@@ -18,3 +18,5 @@ challenges:
   name: "Reading Register Values"
 - id: gdb-pop
   name: "Popping Stack Values"
+- id: gdb-examine
+  name: "Examining Memory"
