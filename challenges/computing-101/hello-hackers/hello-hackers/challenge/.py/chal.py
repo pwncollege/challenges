@@ -1,8 +1,9 @@
 import __main__ as checker
-import subprocess
+import tempfile
 import time
+import os
 
-give_flag = True
+give_flag = False
 num_instructions = 8
 
 FLAG_SIZE = 64
@@ -13,6 +14,12 @@ except FileNotFoundError:
 	_flag = "pwn.college{test_placeholder_00000000000000}"
 
 _flag_padded = (_flag + "\n").ljust(FLAG_SIZE, "\r")[:FLAG_SIZE]
+_flag_masked = "pwn.college{" + "*" * (len(_flag) - len("pwn.college{}")) + "}"
+
+# Write padded flag to a temp file so the shell can pass it as argv[1]
+_flag_arg_file = tempfile.mktemp(prefix='check_flag_')
+with open(_flag_arg_file, 'wb') as f:
+	f.write(_flag_padded.encode())
 
 check_disassembly_prologue = "Checking that your assembly writes the first argument to stdout and exits..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -57,30 +64,26 @@ def check_disassembly(disas):
 def check_runtime(filename):
 	try:
 		print("")
-		checker.print_prompt()
-		checker.slow_print(f"{filename} <the flag>")
-
-		result = subprocess.run(
-			[filename, _flag_padded],
-			capture_output=True,
-			timeout=5
+		returncode = checker.dramatic_command(
+			f"{filename} {_flag_masked}",
+			actual_command=f"bash -c 'exec {filename} \"$(cat {_flag_arg_file})\" 2> >(tee /tmp/stderr 2>&1) > >(tee /tmp/stdout)'"
 		)
-
 		time.sleep(0.1)
-		actual = result.stdout
+
+		actual = open("/tmp/stdout", "rb").read()
 		assert _flag.encode() in actual, (
-			f"Your program should write the flag to stdout, but it wrote {actual!r}!"
+			f"Your program should write the flag to stdout!"
 		)
 
-		if result.returncode < 0:
-			assert False, f"Your program was killed by signal {-result.returncode}! Make sure to cleanly exit."
-		checker.dramatic_command("echo $?", actual_command=f"echo {result.returncode}")
-		assert result.returncode == 42, (
-			f"Your program should exit with code 42, but it exited with {result.returncode}!"
+		checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")
+		assert returncode == 42, (
+			f"Your program should exit with code 42, but it exited with {returncode}!"
 		)
-	except subprocess.TimeoutExpired:
-		assert False, "Your program took too long to run! Make sure it exits."
 	finally:
+		try:
+			os.unlink(_flag_arg_file)
+		except OSError:
+			pass
 		checker.dramatic_command("")
 		print("")
 

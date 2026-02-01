@@ -1,7 +1,9 @@
 import __main__ as checker
+import tempfile
 import time
+import os
 
-give_flag = True
+give_flag = False
 num_instructions = 13
 
 FLAG_SIZE = 64
@@ -12,7 +14,12 @@ except FileNotFoundError:
 	_flag = "pwn.college{test_placeholder_00000000000000}"
 
 _flag_padded = (_flag + "\n").ljust(FLAG_SIZE, "\r")[:FLAG_SIZE]
-_stdin = _flag_padded.encode()
+_flag_masked = "pwn.college{" + "*" * (len(_flag) - len("pwn.college{}")) + "}"
+
+# Write padded flag to a temp file so the shell can pipe it as stdin
+_flag_stdin_file = tempfile.mktemp(prefix='check_flag_')
+with open(_flag_stdin_file, 'wb') as f:
+	f.write(_flag_padded.encode())
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -62,15 +69,14 @@ def check_runtime(filename):
 	try:
 		print("")
 		returncode = checker.dramatic_command(
-			filename,
-			stdin=_stdin,
-			actual_command=f"bash -c 'exec {filename} 2> >(tee /tmp/stderr 2>&1) > >(tee /tmp/stdout)'"
+			f"echo {_flag_masked} | {filename}",
+			actual_command=f"bash -c 'cat {_flag_stdin_file} | {filename} 2> >(tee /tmp/stderr 2>&1) > >(tee /tmp/stdout)'"
 		)
 		time.sleep(0.1)
 
 		actual_bytes = open("/tmp/stdout", "rb").read()
-		assert actual_bytes == _stdin, (
-			f"The value you wrote to stdout ({actual_bytes!r}) does not match the flag data ({_stdin!r})!"
+		assert actual_bytes == _flag_padded.encode(), (
+			f"Your program should echo the flag to stdout!"
 		)
 
 		checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")
@@ -78,6 +84,10 @@ def check_runtime(filename):
 			f"Your program should exit with code 42, but it exited with {returncode}!"
 		)
 	finally:
+		try:
+			os.unlink(_flag_stdin_file)
+		except OSError:
+			pass
 		checker.dramatic_command("")
 		print("")
 
