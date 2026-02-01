@@ -6,6 +6,7 @@ award:
 modules:
 - id: your-first-program
 - id: memory
+- id: the-stack
 - id: introspecting
 - id: advanced-memory
 - id: hello-hackers
