@@ -1,0 +1,14 @@
+#!/bin/bash
+
+NUM=$((RANDOM % 246 + 5))
+echo $NUM > /challenge/.correct
+chmod 600 /challenge/.correct
+
+ASM=$(mktemp).o
+as -o $ASM <<< ".intel_syntax noprefix; main: pop rdi; mov rdi, 0; mov rax, 60; syscall"
+ld -o /challenge/debug-me $ASM 2>/tmp/.init.log
+rm $ASM
+
+# Inject the right number of arguments so that argc == NUM when the user runs starti
+ARGS=$(python3 -c "print(' '.join(['a']*($NUM-1)))")
+echo "set args $ARGS" >> /challenge/.gdb

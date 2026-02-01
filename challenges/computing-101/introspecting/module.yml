@@ -16,3 +16,5 @@ challenges:
   name: "Stepping Through Instructions"
 - id: gdb-print
   name: "Reading Register Values"
+- id: gdb-pop
+  name: "Popping Stack Values"
