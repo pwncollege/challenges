@@ -16,3 +16,5 @@ challenges:
   name: "Reading Data"
 - id: open-read-write
   name: "Opening Files"
+- id: open-read-write-hardcode
+  name: "Hardcoding the Filename"
