@@ -18,22 +18,22 @@ Primary commands:
 
 ```bash
 # Test a challenge end-to-end
-./pwnshop test MODULE_ID/CHALLENGE_ID
+./pwnshop test challenges/MODULE_ID/CHALLENGE_ID
 
 # Example: Test path-traversal-1
-./pwnshop test web-security/path-traversal-1
+./pwnshop test challenges/web-security/path-traversal-1
 
 # Render a single template file for debugging
-./pwnshop render MODULE_ID/CHALLENGE_ID/path/to/file.j2 --output /tmp/rendered-file
+./pwnshop render challenges/MODULE_ID/CHALLENGE_ID/path/to/file.j2 --output /tmp/rendered-file
 
 # Build a challenge image without tests
-./pwnshop build MODULE_ID/CHALLENGE_ID
+./pwnshop build challenges/MODULE_ID/CHALLENGE_ID
 
 # List challenges grouped by key, optionally filtered by git history
 ./pwnshop list --modified-since origin/main
 
 # Drop into an interactive shell (use --user/--volume, or append a command)
-./pwnshop run --user 0 --volume /tmp/debug web-security/path-traversal-1 /bin/ls -la /challenge
+./pwnshop run --user 0 --volume /tmp/debug challenges/web-security/path-traversal-1 /bin/ls -la /challenge
 ```
 
 DO NOT run these scripts without ./pwnshop: the dependencies are not installed in the host, and some of these challenges do permanent damage to their environment.
@@ -41,10 +41,10 @@ DO NOT run these scripts without ./pwnshop: the dependencies are not installed i
 ## Architecture
 
 ### Directory Structure
-- `MODULE_ID/CHALLENGE_ID/challenge/`: Challenge source code and artifacts. IF YOU PROVIDE A DOCKERFILE, PUT IT HERE
-- `MODULE_ID/CHALLENGE_ID/tests_public/`: Unencrypted functionality tests
-- `MODULE_ID/CHALLENGE_ID/tests_private/`: Encrypted exploitation tests
-- `MODULE_ID/common/`: Shared Jinja2 templates for the module
+- `challenges/MODULE_ID/CHALLENGE_ID/challenge/`: Challenge source code and artifacts. IF YOU PROVIDE A DOCKERFILE, PUT IT HERE
+- `challenges/MODULE_ID/CHALLENGE_ID/tests_public/`: Unencrypted functionality tests
+- `challenges/MODULE_ID/CHALLENGE_ID/tests_private/`: Encrypted exploitation tests
+- `challenges/MODULE_ID/common/`: Shared Jinja2 templates for the module
 
 ### Templating System
 - Files ending in `.j2` are Jinja2 templates rendered during build
@@ -82,11 +82,11 @@ DO NOT run these scripts without ./pwnshop: the dependencies are not installed i
 
 ## Challenge Development Workflow
 
-1. Create challenge directory: `MODULE_ID/CHALLENGE_ID/`
-2. Create or extend common templates in `MODULE_ID/common/` if needed
+1. Create challenge directory: `challenges/MODULE_ID/CHALLENGE_ID/`
+2. Create or extend common templates in `challenges/MODULE_ID/common/` if needed
 3. Add challenge files to `challenge/` directory (binaries, scripts, configs, etc.)
 4. If using templates, extend the appropriate common template and set variables in `{% block setup %}`
-5. Make executable files and templates executable: `chmod +x MODULE_ID/CHALLENGE_ID/**/*.j2`
+5. Make executable files and templates executable: `chmod +x challenges/MODULE_ID/CHALLENGE_ID/**/*.j2`
 6. Write `tests_public/test_*.py.j2` for functionality verification
 7. Write `tests_private/test_*.py.j2` for exploitation verification
 8. Test with: `./pwnshop test MODULE_ID/CHALLENGE_ID`

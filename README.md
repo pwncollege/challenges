@@ -163,6 +163,14 @@ The process of porting is:
 9. Test thoroughly: `./pwnshop test $MODULE_ID/$CHALLENGE_ID`
 10. Once testcases pass, double-check the template (both rendered and at rest) against the legacy challenge to ensure that the challenge has been ported without any functionality change.
 
+# Adding a new key
+
+To add a new module, you will need a new key.
+The process:
+
+1. Init the key: `git-crypt init -k my-module`
+2. Give root@pwn.college access to the key. You might need to trust the key (`echo "A6C1BD8AA19BE7CC1B05DD6E1E180F029DD5460F:6:" | gpg --import-ownertrust`) first. Then, do `git-crypt add-gpg-user -k my-module root@pwn.college`.
+3. Make the .gitattributes file for your module: `echo '**/tests_private/** filter=git-crypt-my-module diff=git-crypt-my-module > challenges/my-module/.gitattributes`
 
 # In the meantime, some musings:
 
