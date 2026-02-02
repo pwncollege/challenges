@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# Generate a random sub value (10–40) and a random alphanumeric character
+SUB_VAL=$((RANDOM % 31 + 10))
+CHARSET="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+CHAR="${CHARSET:$((RANDOM % 62)):1}"
+CHAR_VAL=$(printf '%d' "'$CHAR")
+TARGET=$((CHAR_VAL - SUB_VAL))
+
+# Write assembly source
+SRC=$(mktemp --suffix=.s)
+cat > "$SRC" << EOF
+.intel_syntax noprefix
+.global _start
+_start:
+  mov rax, [rsp+16]
+  sub BYTE PTR [rax], $SUB_VAL
+  cmp BYTE PTR [rax], $TARGET
+  jne fail
+  mov BYTE PTR [rsp], '/'
+  mov BYTE PTR [rsp+1], 'f'
+  mov BYTE PTR [rsp+2], 'l'
+  mov BYTE PTR [rsp+3], 'a'
+  mov BYTE PTR [rsp+4], 'g'
+  mov BYTE PTR [rsp+5], 0
+  mov rdi, rsp
+  mov rsi, 0
+  mov rax, 2
+  syscall
+  mov rdi, rax
+  mov rsi, rsp
+  mov rdx, 64
+  mov rax, 0
+  syscall
+  mov rdx, rax
+  mov rdi, 1
+  mov rax, 1
+  syscall
+  mov rax, 60
+  syscall
+fail:
+  mov rax, 60
+  syscall
+EOF
+
+# Assemble, link, and set SUID
+OBJ=$(mktemp --suffix=.o)
+as -o "$OBJ" "$SRC" 2>/tmp/.init.log
+ld -o /challenge/reverse-me "$OBJ" 2>>/tmp/.init.log
+chmod 4755 /challenge/reverse-me
+rm -f "$SRC" "$OBJ"

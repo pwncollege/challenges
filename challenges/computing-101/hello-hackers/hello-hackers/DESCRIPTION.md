@@ -1,7 +1,7 @@
 Okay, we have one thing left for this run of challenges.
 You've written out a single byte, and now we'll practice writing out multiple bytes.
-I've stored a 14-character secret string at memory location `1337000`.
-Can you write it out?
+In this level, the flag itself is passed as the first argument to your program!
+Can you write all 64 characters of it to stdout?
 
 ----
 **Hint:**

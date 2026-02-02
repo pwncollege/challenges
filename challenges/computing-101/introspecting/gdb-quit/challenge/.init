@@ -1,0 +1,12 @@
+#!/bin/bash
+
+NUM=$RANDOM
+echo $NUM > /challenge/.correct
+chmod 600 /challenge/.correct
+echo $NUM > /challenge/.quit-key
+chmod 644 /challenge/.quit-key
+
+ASM=$(mktemp).o
+as -o $ASM <<< ".intel_syntax noprefix; mov rdi, $NUM; mov rdi, 0; mov rax, 60; syscall"
+ld -o /challenge/debug-me $ASM 2>/tmp/.init.log
+rm $ASM

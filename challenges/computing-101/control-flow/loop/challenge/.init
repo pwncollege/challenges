@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Generate a random 6-character alphanumeric password
+CHARSET="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+PASSWORD=""
+for i in $(seq 1 6); do
+    PASSWORD="${PASSWORD}${CHARSET:$((RANDOM % 62)):1}"
+done
+
+# Build assembly: write password to the stack, then loop-compare against argv[1]
+SRC=$(mktemp --suffix=.s)
+
+# Write the header and argv[1] load
+cat > "$SRC" << 'HEADER'
+.intel_syntax noprefix
+.global _start
+_start:
+  mov rdi, [rsp+16]
+HEADER
+
+# Write each password character to the stack
+for i in $(seq 0 $((${#PASSWORD} - 1))); do
+    CHAR="${PASSWORD:$i:1}"
+    if [ $i -eq 0 ]; then
+        echo "  mov BYTE PTR [rsp], '$CHAR'" >> "$SRC"
+    else
+        echo "  mov BYTE PTR [rsp+$i], '$CHAR'" >> "$SRC"
+    fi
+done
+# Null terminator
+echo "  mov BYTE PTR [rsp+${#PASSWORD}], 0" >> "$SRC"
+
+# Write the loop and success/fail blocks
+cat >> "$SRC" << 'FOOTER'
+  lea rsi, [rsp]
+loop:
+  mov al, [rsi]
+  cmp al, [rdi]
+  jne fail
+  cmp al, 0
+  je success
+  inc rdi
+  inc rsi
+  jmp loop
+success:
+  mov BYTE PTR [rsp], '/'
+  mov BYTE PTR [rsp+1], 'f'
+  mov BYTE PTR [rsp+2], 'l'
+  mov BYTE PTR [rsp+3], 'a'
+  mov BYTE PTR [rsp+4], 'g'
+  mov BYTE PTR [rsp+5], 0
+  mov rdi, rsp
+  mov rsi, 0
+  mov rax, 2
+  syscall
+  mov rdi, rax
+  mov rsi, rsp
+  mov rdx, 64
+  mov rax, 0
+  syscall
+  mov rdx, rax
+  mov rdi, 1
+  mov rax, 1
+  syscall
+  mov rax, 60
+  syscall
+fail:
+  mov rax, 60
+  syscall
+FOOTER
+
+# Assemble, link, and set SUID
+OBJ=$(mktemp --suffix=.o)
+as -o "$OBJ" "$SRC" 2>/tmp/.init.log
+ld -o /challenge/reverse-me "$OBJ" 2>>/tmp/.init.log
+chmod 4755 /challenge/reverse-me
+rm -f "$SRC" "$OBJ"

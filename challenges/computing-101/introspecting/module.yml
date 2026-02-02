@@ -1,8 +1,91 @@
 name: Software Introspection
+resources:
+- name: "Data"
+  type: lecture
+  video: 21MvbpgssU8
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1SeyZbM_qCDz4t03KDZ8Q0qi1GzsSSSJAkO-KeVlAL7w
+- type: markdown
+  name: Bytes as Hex and Binary
+  content: |
+    As you know, bytes are what is actually stored in your computer's memory.
+    As you might also know, computers think in binary: just a bunch of ones and zeroes.
+    For historical reasons, we express these ones and zeroes ("bits") in groups of 8, and each group of 8 (a "byte").
+    This number is purely arbitrary: early computers (pre-1960s or so) didn't have this grouping at all, or had other arbitrary groupings.
+    It is very feasible for there to be an alternate universe in which a byte is 16, 32, or really any numbers of bits (though for math reasons, it'll likely remain a power-of-2).
+
+    A single binary digit (bit) can represent two values (`0` and `1`), two bits can represent four values (`00`, `01`, `10`, and `11`), three bits can represent eight values (`000`, `001`, `010`, `011`, `100`, `101`, `110`, `111`), and four bits can represent sixteen values.
+    Comparatively, a single decimal digit can represent 10 values (from `0` to `9`).
+    Ten values are represented by roughly `log2(10) == 3.3219...` bits, and you get weird situations like binary `1001` being decimal `9`, but binary `1100` (still 4 binary digits) being `12` (_two_ decimal digits!).
+    Another way of expressing this digit desynchronization between decimal and binary is that decimal does not have clean _bit boundaries_.
+
+    The lack of bit boundaries makes reasoning about the relationship between decimal and binary complex.
+    For example, it is hard to spot-translate numbers between decimal and binary in general: we can work out that `97` is `110001`, but it's hard to see that at a glance.
+
+    It's much easier to spot-translate between bases that have more alignment between digits.
+    For example, a single hexadecimal (base 16) digit can represent 16 values (`0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `a`, `b`, `c`, `d`, `e`, `f`): the same number of values that binary can represent in 4 digits!
+    This allows us to have a super simple mapping:
+
+    | Hex | Binary | Decimal |
+    |-----|--------|---------|
+    | `0` | `0000` | `0`     |
+    | `1` | `0001` | `1`     |
+    | `2` | `0010` | `2`     |
+    | `3` | `0011` | `3`     |
+    | `4` | `0100` | `4`     |
+    | `5` | `0101` | `5`     |
+    | `6` | `0110` | `6`     |
+    | `7` | `0111` | `7`     |
+    | `8` | `1000` | `8`     |
+    | `9` | `1001` | `9`     |
+    | `a` | `1010` | `10`    |
+    | `b` | `1011` | `11`    |
+    | `c` | `1100` | `12`    |
+    | `d` | `1101` | `13`    |
+    | `e` | `1110` | `14`    |
+    | `f` | `1111` | `15`    |
+
+    This mapping from a hex digit to 4 bits is something that's easily memorizable (most important: memorize `1`, `2`, `4`, and `8`, and you can quickly derive the rest).
+    Better yet, two hex digits is **8** bits, which is one byte!
+    Unlike decimal, where you'd have to memorize 16 mappings for 4 bits and 256 mappings for 8 bits, with hexadecimal, you only have to memorize 16 mappings for 4 bits and the same amount of mappings for 8 bits, since it's just two hexadecimal digits concatenated!
+    Some examples:
+
+    | Hex  | Binary      | Decimal |
+    |------|-------------|---------|
+    | `00` | `0000 0000` | `0`     |
+    | `0e` | `0000 1110` | `14`    |
+    | `3e` | `0011 1110` | `62`    |
+    | `e3` | `1110 0011` | `227`   |
+    | `ee` | `1110 1110` | `238`   |
+
+    Now you're starting to see the beauty.
+    This gets even more obvious when you expand beyond one byte of input, but we'll let you find that out through future challenges!
+
+    Now, let's talk about notation.
+    How do you differentiate `11` in decimal, `11` in binary (which equals `3` in decimal), and 11 in hex (which equals `17` in decimal)?
+    For numerical constants, we sometimes prepend binary data with `0b`, hexadecimal with `0x`, and keep decimal as is, resulting in `11 == 0b1011 == 0xb`, `3 == 0b11 == 0x3`, and `17 == 0b10001 == 0x11`.
 challenges:
+- id: objdump
+  name: "Disassembling Programs"
 - id: strace
   name: "Tracing Syscalls"
 - id: gdb-launch
   name: "Starting GDB"
+- id: gdb-quit
+  name: "Quitting GDB"
 - id: gdb-starti
   name: "Starting Programs in GDB"
+- id: gdb-disassemble
+  name: "Disassembling in GDB"
+- id: gdb-stepi
+  name: "Stepping Through Instructions"
+- id: gdb-print
+  name: "Reading Register Values"
+- id: gdb-pop
+  name: "Popping Stack Values"
+- id: gdb-examine
+  name: "Examining Memory"
+- id: gdb-examine-argv1
+  name: "Examining Stack Pointers"
+- id: gdb-int3
+  name: "Cooperative Debugging"

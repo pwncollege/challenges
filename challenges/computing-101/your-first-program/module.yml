@@ -10,11 +10,6 @@ resources:
     video: TdTOH1GfrWg
     playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
     slides: 1sBB34ZUVjT3MDjYvGiZU3z6CTLGvO1hHEdHliPUJ0iw
-  - name: "Data"
-    type: lecture
-    video: 21MvbpgssU8
-    playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
-    slides: 1SeyZbM_qCDz4t03KDZ8Q0qi1GzsSSSJAkO-KeVlAL7w
   - name: "Registers"
     type: lecture
     video: IWbIZerH930

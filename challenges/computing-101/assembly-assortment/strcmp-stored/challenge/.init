@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# Generate a random 6-character alphanumeric password
+CHARSET="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+PASSWORD=""
+for i in $(seq 1 6); do
+    PASSWORD="${PASSWORD}${CHARSET:$((RANDOM % 62)):1}"
+done
+
+# Write assembly source
+SRC=$(mktemp --suffix=.s)
+cat > "$SRC" << EOF
+.intel_syntax noprefix
+.global _start
+
+.section .rodata
+password: .asciz "$PASSWORD"
+
+.section .text
+_start:
+  mov rdi, [rsp+16]
+  lea rsi, [rip + password]
+loop:
+  mov al, [rsi]
+  cmp al, [rdi]
+  jne fail
+  cmp al, 0
+  je success
+  inc rdi
+  inc rsi
+  jmp loop
+success:
+  mov BYTE PTR [rsp], '/'
+  mov BYTE PTR [rsp+1], 'f'
+  mov BYTE PTR [rsp+2], 'l'
+  mov BYTE PTR [rsp+3], 'a'
+  mov BYTE PTR [rsp+4], 'g'
+  mov BYTE PTR [rsp+5], 0
+  mov rdi, rsp
+  mov rsi, 0
+  mov rax, 2
+  syscall
+  mov rdi, rax
+  mov rsi, rsp
+  mov rdx, 64
+  mov rax, 0
+  syscall
+  mov rdx, rax
+  mov rdi, 1
+  mov rax, 1
+  syscall
+  mov rax, 60
+  syscall
+fail:
+  mov rax, 60
+  syscall
+EOF
+
+# Assemble, link, and set SUID
+OBJ=$(mktemp --suffix=.o)
+as -o "$OBJ" "$SRC" 2>/tmp/.init.log
+ld -o /challenge/reverse-me "$OBJ" 2>>/tmp/.init.log
+chmod 4755 /challenge/reverse-me
+rm -f "$SRC" "$OBJ"

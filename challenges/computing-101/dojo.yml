@@ -5,6 +5,9 @@ award:
   emoji: "\U0001F4BB"
 modules:
 - id: your-first-program
-- id: introspecting
 - id: memory
+- id: the-stack
+- id: introspecting
 - id: hello-hackers
+- id: control-flow
+- id: assembly-assortment

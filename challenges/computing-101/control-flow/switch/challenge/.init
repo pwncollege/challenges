@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# Pick a random alphanumeric character as the success case
+CHARS="abcdefghijklmnopqrstuvwxyz0123456789"
+CHAR_IDX=$((RANDOM % ${#CHARS}))
+SUCCESS_CHAR="${CHARS:$CHAR_IDX:1}"
+SUCCESS_BYTE=$(printf '%d' "'$SUCCESS_CHAR")
+
+SRC=$(mktemp --suffix=.s)
+
+# Write assembly header
+cat > "$SRC" << 'EOF'
+.intel_syntax noprefix
+.global _start
+
+_start:
+  mov rcx, [rsp+16]
+  xor eax, eax
+  mov al, BYTE PTR [rcx]
+  mov rax, [rax*8 + jump_table]
+  jmp rax
+
+success:
+  mov BYTE PTR [rsp], '/'
+  mov BYTE PTR [rsp+1], 'f'
+  mov BYTE PTR [rsp+2], 'l'
+  mov BYTE PTR [rsp+3], 'a'
+  mov BYTE PTR [rsp+4], 'g'
+  mov BYTE PTR [rsp+5], 0
+  mov rdi, rsp
+  mov rsi, 0
+  mov rax, 2
+  syscall
+  mov rdi, rax
+  mov rsi, rsp
+  mov rdx, 64
+  mov rax, 0
+  syscall
+  mov rdx, rax
+  mov rdi, 1
+  mov rax, 1
+  syscall
+  mov rax, 60
+  syscall
+
+fail:
+  mov rax, 60
+  mov rdi, 1
+  syscall
+
+jump_table:
+EOF
+
+# Append 256 jump table entries: one success, rest fail
+for i in $(seq 0 255); do
+  if [ $i -eq $SUCCESS_BYTE ]; then
+    echo "  .quad success" >> "$SRC"
+  else
+    echo "  .quad fail" >> "$SRC"
+  fi
+done
+
+# Assemble, link, and set SUID
+OBJ=$(mktemp --suffix=.o)
+as -o "$OBJ" "$SRC" 2>/tmp/.init.log
+ld -o /challenge/reverse-me "$OBJ" 2>>/tmp/.init.log
+chmod 4755 /challenge/reverse-me
+rm -f "$SRC" "$OBJ"

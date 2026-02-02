@@ -7,21 +7,21 @@ In `read`'s case, it reads some amount of bytes from the provided file descripto
 The C-style syntax is the same as `write`:
 
 ```c
-read(0, 1337000, 5);
+read(0, some_address, 5);
 ```
 
-This will read `5` bytes from file descriptor `0` (stdin) into memory starting from `1337000`.
+This will read `5` bytes from file descriptor `0` (stdin) into memory starting from `some_address`.
 So, if you type in (or pipe in) `HELLO HACKERS` into stdin, the above `read` call would result in the following memory configuration:
 
 ```text
-  Address │ Contents
-+────────────────────+
-│ 1337000 │ 48       │
-│ 1337001 │ 45       │
-│ 1337002 │ 4c       │
-│ 1337003 │ 4c       │
-│ 1337004 │ 4f       │
-+────────────────────+
+     Address     │ Contents
++───────────────────────────+
+│ some_address   │ 48       │
+│ some_address+1 │ 45       │
+│ some_address+2 │ 4c       │
+│ some_address+3 │ 4c       │
+│ some_address+4 │ 4f       │
++───────────────────────────+
 ```
 
 What are those numbers??
@@ -29,19 +29,25 @@ They are _hexadecimal_ representations of _ASCII_-encoded letters.
 If those words don't make sense, please run through the first half or so of the [Dealing with Data](/fundamentals/data-dealings) module and then come back here!
 
 In this level, we will combine `read` with our previous `write` abilities.
+The flag will be piped into your program's stdin --- 64 bytes of it.
 Your program should:
 
-1. first `read` 8 bytes from stdin to address `1337000`
-2. then `write` those 8 bytes from address `1337000` to stdout
+1. first `read` 64 bytes from stdin to your program's memory
+2. `write` those 64 bytes from that memory location to stdout
 3. finally, exit with the exit code `42`.
 
-Remember: you've already written steps 2 and 3. All you have to do is add step 1!
+But what address should you use?
+You need somewhere that's valid and writable, and you already know about one such place: the stack!
+The `rsp` register points to the top of the stack, and there's plenty of writable space there.
+So you can just use `rsp` as your memory address: `mov rsi, rsp`.
+
 
 ----
-**NOTE:**
-Keep in mind that, in this challenge, you'll be writing 8 characters, whereas in the previous challenge, you wrote 14.
-Don't forget to update your `write()` size (in `rdx`)!
-
 **DEBUGGING:**
 Having trouble?
-Build your program and run it with `strace` to see what's happening at the system call level!
+Recall the Introspection module!
+Build your program and run it with `strace` to see what's happening at the system call level, or run it in `gdb` to inspect the values of registers and memory to see what's unexpected.
+
+**REMEMBER:**
+You've basically already written steps 2 and 3 (though in the previous challenges, you loaded `rsi` from `[rsp+16]` --- here, you'll set it to `rsp` directly with `mov rsi, rsp`!).
+All you have to do is add step 1!
