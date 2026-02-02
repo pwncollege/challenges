@@ -1,0 +1,10 @@
+is_component_build = false
+is_debug = false
+target_cpu = "x64"
+v8_enable_sandbox = false
+v8_enable_backtrace = true
+v8_enable_disassembler = true
+v8_enable_object_print = true
+dcheck_always_on = false
+use_goma = false
+v8_code_pointer_sandboxing = false
