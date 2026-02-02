@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @click.command("test")
 @click.option("--modified-since", metavar="REF", help="Only include challenges changed versus REF.")
 @click.option("--jobs", "-j", metavar="N", type=click.IntRange(1, None), help="Parallel challenges (default: cores).")
+@click.option("--require-tests", is_flag=True, help="Fail if any challenge has no tests.")
 @click.argument(
     "targets",
     nargs=-1,
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
         resolve_path=False,
     ),
 )
-def test_command(targets, modified_since, jobs):
+def test_command(targets, modified_since, jobs, require_tests):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
         if modified_since:
@@ -100,7 +101,12 @@ def test_command(targets, modified_since, jobs):
                 failed.setdefault(challenge, []).append("<build>")
                 failed_count += 1
             elif not tests:
-                passed_count += 1
+                if require_tests:
+                    console.print(f"[red]FAIL[/] {challenge}: no tests found")
+                    failed.setdefault(challenge, []).append("<no tests>")
+                    failed_count += 1
+                else:
+                    passed_count += 1
             else:
                 for test_path, passed, output in tests:
                     total_tests += 1
