@@ -25,7 +25,7 @@ check_runtime_success = getattr(chalconf, "success_message", "Neat! Your program
 
 #pylint:disable=global-statement
 
-allow_asm = True
+allow_asm = False
 give_flag = True
 returncode = None
 

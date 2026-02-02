@@ -1,0 +1,16 @@
+name: Assembly Assortment
+resources:
+- name: "(review) Data"
+  type: lecture
+  video: 21MvbpgssU8
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1SeyZbM_qCDz4t03KDZ8Q0qi1GzsSSSJAkO-KeVlAL7w
+challenges:
+- id: add-reverse
+  name: "Reverse the Calculation"
+- id: sub-reverse
+  name: "Reverse the Reverse"
+- id: xor-reverse
+  name: "Dealing with Bitwise Operations"
+- id: strcmp-stored
+  name: "Loops on Data"

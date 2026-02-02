@@ -141,7 +141,7 @@ def main():
         content = sys.stdin.buffer.read()
     elif args.interactive:
         if args.reject_asm or args.only_raw or args.only_elf:
-            print(f"Please run this program as `{sys.argv[0]} your-program.elf`!")
+            print("Please run this program as `/challenge/check your-program.elf`!")
             sys.exit(1)
         print("Please input your assembly. Press Ctrl+D when done!")
         content = b""

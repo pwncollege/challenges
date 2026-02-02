@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Generate 4 random lowercase letters as the password
+C1=$(printf "\\$(printf '%03o' $((RANDOM % 26 + 97)))")
+C2=$(printf "\\$(printf '%03o' $((RANDOM % 26 + 97)))")
+C3=$(printf "\\$(printf '%03o' $((RANDOM % 26 + 97)))")
+C4=$(printf "\\$(printf '%03o' $((RANDOM % 26 + 97)))")
+
+# Write assembly source
+SRC=$(mktemp --suffix=.s)
+cat > "$SRC" << EOF
+.intel_syntax noprefix
+.global _start
+_start:
+  mov rax, [rsp+16]
+  cmp BYTE PTR [rax], '${C1}'
+  jne fail
+  cmp BYTE PTR [rax+1], '${C2}'
+  jne fail
+  cmp BYTE PTR [rax+2], '${C3}'
+  jne fail
+  cmp BYTE PTR [rax+3], '${C4}'
+  jne fail
+  mov BYTE PTR [rsp], '/'
+  mov BYTE PTR [rsp+1], 'f'
+  mov BYTE PTR [rsp+2], 'l'
+  mov BYTE PTR [rsp+3], 'a'
+  mov BYTE PTR [rsp+4], 'g'
+  mov BYTE PTR [rsp+5], 0
+  mov rdi, rsp
+  mov rsi, 0
+  mov rax, 2
+  syscall
+  mov rdi, rax
+  mov rsi, rsp
+  mov rdx, 64
+  mov rax, 0
+  syscall
+  mov rdx, rax
+  mov rdi, 1
+  mov rax, 1
+  syscall
+  mov rax, 60
+  syscall
+fail:
+  mov rax, 60
+  syscall
+EOF
+
+# Assemble, link, and set SUID
+OBJ=$(mktemp --suffix=.o)
+as -o "$OBJ" "$SRC" 2>/tmp/.init.log
+ld -o /challenge/reverse-me "$OBJ" 2>>/tmp/.init.log
+chmod 4755 /challenge/reverse-me
+rm -f "$SRC" "$OBJ"
