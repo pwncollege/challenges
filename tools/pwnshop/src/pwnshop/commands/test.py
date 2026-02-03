@@ -115,7 +115,7 @@ def test_command(targets, modified_since, jobs, require_tests):
                     failed_tests += 1
                     failed.setdefault(challenge, []).append(test_path)
                     if output:
-                        console.print(output.rstrip("\n"))
+                        console.print(output.rstrip("\n"), markup=False)
                 if challenge in failed:
                     failed_count += 1
                 else:
