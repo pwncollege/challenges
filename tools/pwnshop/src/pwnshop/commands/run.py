@@ -9,7 +9,7 @@ from .. import lib
 logger = logging.getLogger(__name__)
 
 
-@click.command("run")
+@click.command("run", context_settings=dict(allow_interspersed_args=False))
 @click.argument(
     "challenge_path",
     type=click.Path(path_type=pathlib.Path, exists=True, dir_okay=True, file_okay=False, resolve_path=True),

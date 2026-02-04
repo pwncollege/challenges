@@ -208,7 +208,7 @@ def run_challenge(
         subprocess.run(
             ["docker", "kill", container],
             stdout=subprocess.DEVNULL,
-            check=True,
+            stderr=subprocess.DEVNULL,
         )
 
 
