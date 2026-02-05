@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Timeout in seconds for each individual test.",
 )
+@click.option(
+    "--log-failures",
+    metavar="DIR",
+    type=click.Path(path_type=pathlib.Path, file_okay=False, resolve_path=True),
+    help="Write failure output to DIR/challenge/test.log files.",
+)
 @click.argument(
     "targets",
     nargs=-1,
@@ -43,7 +49,7 @@ logger = logging.getLogger(__name__)
         resolve_path=False,
     ),
 )
-def test_command(targets, modified_since, jobs, require_tests, test_timeout):
+def test_command(targets, modified_since, jobs, require_tests, test_timeout, log_failures):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
         if modified_since:
@@ -110,9 +116,14 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout):
             error = result.get("error")
             tests = result.get("tests") or []
             if error:
-                console.print(f"[red]FAIL[/] {challenge}: {error}")
                 failed.setdefault(challenge, []).append("<build>")
                 failed_count += 1
+                if log_failures:
+                    log_file = log_failures / challenge / "_build_error.log"
+                    log_file.parent.mkdir(parents=True, exist_ok=True)
+                    log_file.write_text(error)
+                else:
+                    console.print(f"[red]FAIL[/] {challenge}: {error}")
             elif not tests:
                 if require_tests:
                     console.print(f"[red]FAIL[/] {challenge}: no tests found")
@@ -128,7 +139,12 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout):
                     failed_tests += 1
                     failed.setdefault(challenge, []).append(test_path)
                     if output:
-                        console.print(output.rstrip("\n"), markup=False)
+                        if log_failures:
+                            log_file = log_failures / challenge / f"{test_path}.log"
+                            log_file.parent.mkdir(parents=True, exist_ok=True)
+                            log_file.write_text(output)
+                        else:
+                            console.print(output.rstrip("\n"), markup=False)
                 if challenge in failed:
                     failed_count += 1
                 else:
