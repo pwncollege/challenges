@@ -33,7 +33,9 @@ Primary commands:
 ./pwnshop list --modified-since origin/main
 
 # Drop into an interactive shell (use --user/--volume, or append a command)
+./pwnshop run challenges/web-security/path-traversal-1
 ./pwnshop run --user 0 --volume /tmp/debug challenges/web-security/path-traversal-1 /bin/ls -la /challenge
+./pwnshop run --nix-packages curl,wget challenges/web-security/path-traversal-1 curl
 ```
 
 DO NOT run these scripts without ./pwnshop: the dependencies are not installed in the host, and some of these challenges do permanent damage to their environment.
@@ -89,7 +91,7 @@ DO NOT run these scripts without ./pwnshop: the dependencies are not installed i
 5. Make executable files and templates executable: `chmod +x challenges/MODULE_ID/CHALLENGE_ID/**/*.j2`
 6. Write `tests_public/test_*.py.j2` for functionality verification
 7. Write `tests_private/test_*.py.j2` for exploitation verification
-8. Test with: `./pwnshop test MODULE_ID/CHALLENGE_ID`
+8. Test with: `./pwnshop test challenges/MODULE_ID/CHALLENGE_ID`
 
 ## Example Challenge Template Structures
 
