@@ -136,16 +136,39 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
 
 @contextlib.contextmanager
 def run_challenge(
-    challenge_image: str, *, volumes: Optional[Sequence[pathlib.Path]] = None
+    challenge_image: str,
+    *,
+    volumes: Optional[Sequence[pathlib.Path]] = None,
+    nix_paths: Optional[Sequence[pathlib.Path]] = None,
 ) -> Iterator[tuple[str, str]]:
     flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
+
+    # Build PATH with nix bin directories right after /challenge/bin
+    path_components = ["/challenge/bin"]
+    if nix_paths:
+        for nix_path in nix_paths:
+            bin_path = nix_path / "bin"
+            if bin_path.exists():
+                path_components.append(str(bin_path))
+    path_components.extend(["/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin"])
+    path_value = ":".join(path_components)
+
     env_options = []
     for key, value in {
         "FLAG": flag,
         "SEED": str(CHALLENGE_SEED),
-        "PATH": "/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PATH": path_value,
     }.items():
         env_options.extend(["--env", f"{key}={value}"])
+
+    # Collect volume mounts
+    volume_mounts = [f"--volume={volume}:{volume}:ro" for volume in (volumes or [])]
+
+    # Mount /nix/store if nix packages are requested
+    if nix_paths:
+        volume_mounts.append("--volume=/nix/store:/nix/store:ro")
+        logger.debug("mounting /nix/store for nix packages, PATH includes: %s", [str(p) for p in nix_paths])
+
     logger.info("starting container for image %s", challenge_image)
     if volumes:
         logger.debug("mounting volumes: %s", volumes)
@@ -162,7 +185,7 @@ def run_challenge(
                 "--device=/dev/kvm",
                 "--cap-add=SYS_PTRACE",
                 *env_options,
-                *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
+                *volume_mounts,
                 challenge_image,
                 "/bin/sh",
                 "-c",
