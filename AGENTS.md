@@ -33,7 +33,9 @@ Primary commands:
 ./pwnshop list --modified-since origin/main
 
 # Drop into an interactive shell (use --user/--volume, or append a command)
+./pwnshop run challenges/web-security/path-traversal-1
 ./pwnshop run --user 0 --volume /tmp/debug challenges/web-security/path-traversal-1 /bin/ls -la /challenge
+./pwnshop run --nix-packages curl,wget challenges/web-security/path-traversal-1 curl
 ```
 
 DO NOT run these scripts without ./pwnshop: the dependencies are not installed in the host, and some of these challenges do permanent damage to their environment.
@@ -89,7 +91,7 @@ DO NOT run these scripts without ./pwnshop: the dependencies are not installed i
 5. Make executable files and templates executable: `chmod +x challenges/MODULE_ID/CHALLENGE_ID/**/*.j2`
 6. Write `tests_public/test_*.py.j2` for functionality verification
 7. Write `tests_private/test_*.py.j2` for exploitation verification
-8. Test with: `./pwnshop test MODULE_ID/CHALLENGE_ID`
+8. Test with: `./pwnshop test challenges/MODULE_ID/CHALLENGE_ID`
 
 ## Example Challenge Template Structures
 
@@ -121,21 +123,3 @@ Can be a simple Python/Bash script with or without templating, depending on rand
 - The `challenge` object is available in templates with a seeded `random` attribute for deterministic randomization
 - Use existing common templates where possible (flask.py.j2, cmdi.py.j2, sqli-pw.py.j2, etc.)
 - Study existing challenges (cmdi-*, path-traversal-*) for patterns and conventions
-
-## Porting Legacy Challenges
-
-When porting challenges from the legacy codebase:
-
-1. **Study the original implementation thoroughly** - The legacy code in `legacy/pwncollege-modules/pwncollege_modules/` contains working exploits and test cases. Read and understand the exact exploit before attempting to port.
-
-2. **Preserve the original exploit logic** - Don't try to create "better" or "cleverer" solutions. The original exploit worked for a reason. Reproduce it exactly first, then consider improvements only if explicitly needed.
-
-3. **Use test output for debugging** - Add print statements to tests to see actual server responses. Don't make assumptions about what the server returns - verify it.
-
-4. **Respect established patterns** - Legacy code uses specific patterns for template inheritance, settings namespaces, and test structures. Follow these patterns rather than inventing new ones.
-
-5. **Challenge names indicate vulnerability types** - But don't interpret them too literally. "xss-exfil-cookie" might not mean stealing the cookie string itself, but exploiting cookie-based authentication to exfiltrate data.
-
-6. **Check legacy test assertions carefully** - Pay attention to what the legacy tests actually check for (e.g., `self.flag` vs `flag[-20:]`). The assertions reveal the expected exploit outcome.
-
-7. **When stuck, refer back to legacy** - If something isn't working, compare your implementation line-by-line with the legacy version. Small differences in settings or template variables can break exploits.
