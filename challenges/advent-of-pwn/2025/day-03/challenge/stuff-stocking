@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -eu
+
+GIFT="$(cat /flag)"
+rm /flag
+
+touch /stocking
+
+sleeping_nice() {
+    ps ao ni,comm --no-headers \
+        | awk '$1 > 0' \
+        | grep -q sleep
+}
+
+# Only when children sleep sweetly and nice does Santa begin his flight
+until sleeping_nice; do
+    sleep 0.1
+done
+
+chmod 400 /stocking
+printf "%s" "$GIFT" > /stocking

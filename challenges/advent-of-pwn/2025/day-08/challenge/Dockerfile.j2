@@ -1,0 +1,10 @@
+FROM python:3.13
+
+WORKDIR /challenge
+RUN pip install --no-cache-dir flask==3.0.0
+
+WORKDIR /challenge
+COPY workshop.py init-workshop.sh ./
+COPY templates ./templates
+
+RUN cd /challenge && ln -s ./init-workshop.sh ./.init

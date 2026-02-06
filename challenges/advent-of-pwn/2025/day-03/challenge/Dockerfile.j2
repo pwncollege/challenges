@@ -1,0 +1,10 @@
+FROM ubuntu:24.04
+
+COPY stuff-stocking /challenge/stuff-stocking
+COPY --chmod=755 <<'EOF' /challenge/init-stuff-stocking.sh
+#!/bin/sh
+
+/challenge/stuff-stocking &
+EOF
+
+RUN cd /challenge && ln -s ./init-stuff-stocking.sh ./.init

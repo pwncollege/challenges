@@ -1,0 +1,266 @@
+#!/usr/bin/exec-suid --real -- /bin/bash
+
+set -euo pipefail
+umask 077
+
+cd /challenge
+
+mkdir -p "/challenge/work"
+
+DOS_IMG="/challenge/work/qemu-dos-$$.raw"
+MONITOR_PIPE="/challenge/work/qemu-monitor-$$"
+SNAPSHOT_FILE="/challenge/work/dos-snapshot"
+
+BRIDGE_NAME="br-qemu$$"
+TAP_DOS="tap-dos$$"
+FLAG_NS="nsflag$$"
+VETH_HOST="vfh$$"
+VETH_NS="vfn$$"
+
+FLAG_SERVER_IP="192.168.13.37"
+FLAG_SERVER_PORT=1337
+
+DOS_PID=""
+CAT_PID=""
+FLAG_SERVER_PID=""
+
+if [ -z "${DISPLAY-}" ]; then
+    echo "You must run this script from the desktop environment!"
+    exit 1
+fi
+
+# Type content to QEMU via sendkey commands
+# $1: monitor fifo
+# $2: content to type
+# $3: if set, press Home after every newline (to fight autoindent)
+type_content() {
+    local monitor_fifo="$1"
+    local content="$2"
+    local home_after_newline="$3"
+
+    while IFS= read -r -n1 char; do
+        [ -z "$char" ] && char=$'\n'
+        key=""
+        case "$char" in
+            [a-z]) key="$char" ;;
+            [A-Z]) key="shift-$(echo "$char" | tr '[:upper:]' '[:lower:]')" ;;
+            [0-9]) key="$char" ;;
+            ' ') key="spc" ;;
+            $'\n') key="ret" ;;
+            $'\t') key="tab" ;;
+            '-') key="minus" ;;
+            '=') key="equal" ;;
+            '[') key="bracket_left" ;;
+            ']') key="bracket_right" ;;
+            ';') key="semicolon" ;;
+            "'") key="apostrophe" ;;
+            '`') key="grave_accent" ;;
+            '\\') key="backslash" ;;
+            ',') key="comma" ;;
+            '.') key="dot" ;;
+            '/') key="slash" ;;
+            '!') key="shift-1" ;;
+            '@') key="shift-2" ;;
+            '#') key="shift-3" ;;
+            '$') key="shift-4" ;;
+            '%') key="shift-5" ;;
+            '^') key="shift-6" ;;
+            '&') key="shift-7" ;;
+            '*') key="shift-8" ;;
+            '(') key="shift-9" ;;
+            ')') key="shift-0" ;;
+            '_') key="shift-minus" ;;
+            '+') key="shift-equal" ;;
+            '{') key="shift-bracket_left" ;;
+            '}') key="shift-bracket_right" ;;
+            ':') key="shift-semicolon" ;;
+            '"') key="shift-apostrophe" ;;
+            '~') key="shift-grave_accent" ;;
+            '|') key="shift-backslash" ;;
+            '<') key="shift-comma" ;;
+            '>') key="shift-dot" ;;
+            '?') key="shift-slash" ;;
+            *) continue ;;  # Skip unsupported characters
+        esac
+        if [ -n "$key" ]; then
+            echo "sendkey $key" > "$monitor_fifo"
+            sleep 0.05
+            # Press Home after newline if requested
+            if [ -n "$home_after_newline" ] && [ "$key" = "ret" ]; then
+                echo "sendkey home" > "$monitor_fifo"
+                sleep 0.005
+            fi
+        fi
+    done <<< "$content"
+}
+
+monitor_menu() {
+    local monitor_fifo="$1"
+
+    local term_height term_width
+    term_height=$(tput lines 2>/dev/null || echo 24)
+    term_width=$(tput cols 2>/dev/null || echo 80)
+    local menu_height=$((term_height * 80 / 100))
+    local menu_width=$((term_width * 80 / 100))
+    [ $menu_height -lt 15 ] && menu_height=15
+    [ $menu_height -gt 40 ] && menu_height=40
+    [ $menu_width -lt 50 ] && menu_width=50
+    [ $menu_width -gt 100 ] && menu_width=100
+    local list_height=$((menu_height - 8))
+
+    while true; do
+        choice=$(whiptail --title "QEMU Floppy/System Control" --menu "Select an action:" $menu_height $menu_width $list_height \
+            "load"      "Load floppy disk" \
+            "paste"     "Paste clipboard contents" \
+            "paste-home" "Paste clipboard (Home after newline)" \
+            "eject"     "Eject floppy" \
+            "snapshot"  "Snapshot disk" \
+            "reboot"    "Reboot system" \
+            "quit"      "Quit" \
+            3>&1 1>&2 2>&3) || choice="quit"
+
+        case "$choice" in
+            load)
+                # Build list of floppy images
+                mapfile -t disks < <(find "/challenge/disks" -type f 2>/dev/null | sort)
+
+                if [ ${#disks[@]} -eq 0 ]; then
+                    whiptail --title "Error" --msgbox "No floppy images found in disks/" $((menu_height / 2)) $((menu_width / 2))
+                    continue
+                fi
+
+                # Build menu items for whiptail
+                menu_items=()
+                for i in "${!disks[@]}"; do
+                    rel_path="${disks[$i]#/challenge/disks/}"
+                    menu_items+=("$i" "$rel_path")
+                done
+
+                disk_choice=$(whiptail --title "Select Floppy Disk" --menu "Available images:" $menu_height $menu_width $list_height \
+                    "${menu_items[@]}" \
+                    3>&1 1>&2 2>&3) || continue
+
+                selected="${disks[$disk_choice]}"
+                echo "change floppy0 $selected" > "$monitor_fifo"
+                whiptail --title "Success" --msgbox "Loaded: ${selected#/challenge/}" $((menu_height / 2)) $menu_width
+                ;;
+            paste|paste-home)
+                # Get clipboard contents
+                content="$(xclip -selection clipboard -o 2>/dev/null || xsel --clipboard --output 2>/dev/null || "")"
+
+                if [ -z "$content" ]; then
+                    whiptail --title "Error" --msgbox "Clipboard is empty or xclip/xsel not available" $((menu_height / 2)) $menu_width
+                    continue
+                fi
+
+                # Check if content starts with "pwn"
+                if [[ "$content" == pwn* ]]; then
+                    whiptail --title "Error" --msgbox "Clipboard content cannot start with 'pwn'" $((menu_height / 2)) $menu_width
+                    continue
+                fi
+
+                whiptail --title "Pasting" --infobox "Sending keystrokes..." $((menu_height / 3)) $((menu_width / 2))
+                if [ "$choice" = "paste-home" ]; then
+                    type_content "$monitor_fifo" "$content" 1
+                else
+                    type_content "$monitor_fifo" "$content"
+                fi
+                whiptail --title "Success" --msgbox "Finished pasting clipboard contents" $((menu_height / 2)) $menu_width
+                ;;
+            eject)
+                echo "eject floppy0" > "$monitor_fifo"
+                whiptail --title "Success" --msgbox "Floppy ejected" $((menu_height / 2)) $((menu_width / 2))
+                ;;
+            snapshot)
+                whiptail --title "Snapshot" --infobox "Flushing disk and creating snapshot..." $((menu_height / 3)) $menu_width
+                # Commit any pending writes to disk
+                echo "commit ide0-hd0" > "$monitor_fifo"
+                sleep 1
+                # Copy the disk image to dos-snapshot
+                cp "$DOS_IMG" "$SNAPSHOT_FILE"
+                whiptail --title "Success" --msgbox "Snapshot saved" $((menu_height / 2)) $menu_width
+                ;;
+            reboot)
+                echo "system_reset" > "$monitor_fifo"
+                whiptail --title "Success" --msgbox "System reset sent" $((menu_height / 2)) $((menu_width / 2))
+                ;;
+            quit)
+                echo "quit" > "$monitor_fifo"
+                return 0
+                ;;
+        esac
+    done
+}
+
+cleanup() {
+    [ -n "$FLAG_SERVER_PID" ] && kill "$FLAG_SERVER_PID" 2>/dev/null || true
+    [ -n "$DOS_PID" ] && kill "$DOS_PID" 2>/dev/null || true
+    [ -n "$CAT_PID" ] && kill "$CAT_PID" 2>/dev/null || true
+    rm -f "${MONITOR_PIPE}.in" "${MONITOR_PIPE}.out" 2>/dev/null || true
+    ip netns del "$FLAG_NS" 2>/dev/null || true
+    ip link set "$TAP_DOS" down 2>/dev/null || true
+    ip link del "$TAP_DOS" 2>/dev/null || true
+    ip link del "$VETH_HOST" 2>/dev/null || true
+    ip link set "$BRIDGE_NAME" down 2>/dev/null || true
+    ip link del "$BRIDGE_NAME" 2>/dev/null || true
+    rm -f "$DOS_IMG"
+    exit 0
+}
+
+umask 077
+trap cleanup EXIT INT TERM
+
+if [ -f "$SNAPSHOT_FILE" ]; then
+    cp "$SNAPSHOT_FILE" "$DOS_IMG"
+else
+    qemu-img create -f raw "$DOS_IMG" 512M
+    parted "$DOS_IMG" --script mklabel msdos mkpart primary fat32 1MiB 100% set 1 boot on 2>/dev/null
+fi
+
+ip link add "$BRIDGE_NAME" type bridge
+ip link set "$BRIDGE_NAME" up
+
+# Create tap device for DOS VM (restricted to current user and group)
+ip tuntap add dev "$TAP_DOS" mode tap user "$(whoami)" group "$(id -gn)"
+ip link set "$TAP_DOS" master "$BRIDGE_NAME"
+ip link set "$TAP_DOS" up
+
+ip netns add "$FLAG_NS"
+ip link add "$VETH_HOST" type veth peer name "$VETH_NS"
+ip link set "$VETH_HOST" master "$BRIDGE_NAME"
+ip link set "$VETH_HOST" up
+ip link set "$VETH_NS" netns "$FLAG_NS"
+ip netns exec "$FLAG_NS" ip link set lo up
+ip netns exec "$FLAG_NS" ip link set "$VETH_NS" up
+ip netns exec "$FLAG_NS" ip addr add "${FLAG_SERVER_IP}/24" dev "$VETH_NS"
+
+ip netns exec "$FLAG_NS" socat "TCP-LISTEN:${FLAG_SERVER_PORT},bind=${FLAG_SERVER_IP},reuseaddr,fork" SYSTEM:"cat /flag" &
+FLAG_SERVER_PID=$!
+
+mkfifo "${MONITOR_PIPE}.in"
+mkfifo "${MONITOR_PIPE}.out"
+
+qemu-system-x86_64 \
+    -name dos \
+    -m 16M \
+    -smp 1 \
+    -drive file="$DOS_IMG",format=raw,if=ide \
+    -boot d \
+    -netdev tap,id=net0,ifname="$TAP_DOS",script=no,downscript=no \
+    -device pcnet,netdev=net0,mac=52:54:00:12:34:56 \
+    -monitor pipe:"$MONITOR_PIPE" \
+    -parallel none \
+    -vga cirrus \
+    >&/dev/null &
+
+DOS_PID=$!
+
+# Open the output pipe to prevent blocking, discard output
+cat "${MONITOR_PIPE}.out" > /dev/null &
+CAT_PID=$!
+
+# Wait a moment for QEMU to open the pipes
+sleep 1
+
+monitor_menu "${MONITOR_PIPE}.in"
+wait $DOS_PID 2>/dev/null || true

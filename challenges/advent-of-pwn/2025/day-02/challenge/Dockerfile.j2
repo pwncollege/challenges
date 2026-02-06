@@ -1,0 +1,28 @@
+FROM python:3.13 AS builder
+
+WORKDIR /build
+COPY claus.c .
+RUN gcc -o ./claus ./claus.c && \
+    chmod 4755 ./claus
+
+FROM ubuntu:24.04
+
+RUN apt update && \
+    apt install -y --no-install-recommends \
+        man-db manpages manpages-dev manpages-posix manpages-posix-dev less && \
+    yes | unminimize && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/claus.c /challenge/claus.c
+COPY --from=builder /build/claus /challenge/claus
+COPY --chmod=755 <<'EOF' /challenge/init-coal.sh
+#!/bin/sh
+
+set -eu
+
+mount -o remount,rw /proc/sys
+echo coal > /proc/sys/kernel/core_pattern
+mount -o remount,ro /proc/sys
+EOF
+
+RUN cd /challenge && ln -s ./init-coal.sh ./.init

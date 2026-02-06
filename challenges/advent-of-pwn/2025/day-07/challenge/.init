@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+chmod 644 /challenge/turkey.py
+touch /root/access.log
+chmod 600 /root/access.log
+
+nohup /usr/bin/python3 /challenge/turkey.py > /root/access.log 2>&1 &
+rm /challenge/.init

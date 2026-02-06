@@ -1,0 +1,38 @@
+FROM debian:stable AS builder
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      clang llvm libelf-dev zlib1g-dev libbpf-dev python3 \
+      bpftool ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY tracker.bpf.c northpole.c scrub_btf_lines.py /build/
+RUN <<'EOF'
+set -eu
+clang -g -O2 -Wall -Werror -target bpf -D__TARGET_ARCH_x86 -I/usr/include/x86_64-linux-gnu -c tracker.bpf.c -o tracker.bpf.o
+llvm-strip --strip-debug tracker.bpf.o || true
+python3 scrub_btf_lines.py tracker.bpf.o
+clang -O2 -Wall -Werror northpole.c -lbpf -lelf -lz -o northpole
+EOF
+
+FROM debian:stable-slim AS runtime
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      bpftool libbpf1 libelf1 zlib1g ca-certificates llvm && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /challenge
+
+COPY --from=builder /build/northpole.c /challenge/northpole.c
+COPY --from=builder --chmod=4755 /build/northpole /challenge/northpole
+COPY --from=builder /build/tracker.bpf.o /challenge/tracker.bpf.o
+COPY --chmod=755 <<'EOF' /challenge/init-northpole.sh
+#!/bin/sh
+
+set -eu
+
+/challenge/northpole > /dev/null 2>&1 &
+EOF
+
+RUN cd /challenge && ln -s ./init-northpole.sh ./.init
