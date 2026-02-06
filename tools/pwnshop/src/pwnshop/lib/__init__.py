@@ -1,5 +1,6 @@
 import base64
 import contextlib
+import json
 import logging
 import os
 import pathlib
@@ -8,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import urllib.request
 from typing import Iterable, Iterator, List, Optional, Sequence
 
 import black
@@ -17,6 +19,57 @@ import pyastyle
 logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
+
+SECCOMP_URL = "https://raw.githubusercontent.com/moby/profiles/master/seccomp/default.json"
+
+
+def _create_seccomp() -> str:
+    seccomp = json.loads(urllib.request.urlopen(SECCOMP_URL).read())
+
+    READ_IMPLIES_EXEC = 0x0400000
+    ADDR_NO_RANDOMIZE = 0x0040000
+
+    existing_personality_values = []
+    for syscalls in seccomp["syscalls"]:
+        if "personality" not in syscalls["names"]:
+            continue
+        if syscalls["action"] != "SCMP_ACT_ALLOW":
+            continue
+        assert len(syscalls["args"]) == 1
+        arg = syscalls["args"][0]
+        assert list(arg.keys()) == ["index", "value", "op"]
+        assert arg["index"] == 0, arg
+        assert arg["op"] == "SCMP_CMP_EQ"
+        existing_personality_values.append(arg["value"])
+
+    new_personality_values = []
+    for new_flag in [READ_IMPLIES_EXEC, ADDR_NO_RANDOMIZE]:
+        for value in [0, *existing_personality_values]:
+            new_value = value | new_flag
+            if new_value not in existing_personality_values:
+                new_personality_values.append(new_value)
+                existing_personality_values.append(new_value)
+
+    for new_value in new_personality_values:
+        seccomp["syscalls"].append({
+            "names": ["personality"],
+            "action": "SCMP_ACT_ALLOW",
+            "args": [
+                {
+                    "index": 0,
+                    "value": new_value,
+                    "op": "SCMP_CMP_EQ",
+                },
+            ],
+        })
+
+    seccomp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", prefix="pwnshop-seccomp-", delete=False)
+    json.dump(seccomp, seccomp_file)
+    seccomp_file.close()
+    return seccomp_file.name
+
+
+SECCOMP_PATH = _create_seccomp()
 
 
 class _NoSelfExtendLoader(jinja2.FileSystemLoader):
@@ -162,6 +215,7 @@ def run_challenge(
                 "--device=/dev/kvm",
                 "--runtime=" + os.environ.get("PWN_CHALLENGE_RUNTIME", "runc"),
                 "--cap-add=SYS_PTRACE",
+                f"--security-opt=seccomp={SECCOMP_PATH}",
                 *env_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
                 challenge_image,
