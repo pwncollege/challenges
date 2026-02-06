@@ -1,0 +1,10 @@
+name: Advent of Pwn
+type: public
+id: advent-of-pwn
+
+award:
+  emoji: "\U0001F385"
+
+modules:
+- id: "2025"
+
