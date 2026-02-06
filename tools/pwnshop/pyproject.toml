@@ -9,6 +9,7 @@ dependencies = [
   "click",
   "jinja2",
   "pyastyle",
+  "pyyaml",
   "rich",
 ]
 
