@@ -38,7 +38,7 @@ Then use `pwnshop` for all workflows:
 
 `nix develop` prompts for sudo every time:
 
-- That is expected: the dev shell starts the challenge runtime via `sudo pwn-challenge-runtime` in `shellHook`.
+- That is expected: the dev shell starts the challenge runtime via `sudo` in `shellHook`.
 - If you want fewer prompts, make sure your sudo timestamp is valid (e.g., run `sudo -v` once in another terminal).
 
 `systemctl` errors / "System has not been booted with systemd":
