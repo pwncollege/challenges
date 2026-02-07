@@ -43,14 +43,11 @@ def main() -> int:
         capture_output=True,
     )
 
-    # Always forward parse output (errors and summaries) to stderr so CI logs make sense.
     if parse_result.stderr:
         print(parse_result.stderr, end="", file=sys.stderr)
     if parse_result.returncode != 0:
         return parse_result.returncode
-
     if not parse_result.stdout.strip():
-        # parse-dojo-yml can exit 0 without producing JSON (e.g. skip); treat as no-op.
         return 0
 
     spec = json.loads(parse_result.stdout)
