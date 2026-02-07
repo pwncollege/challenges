@@ -5,34 +5,13 @@ let
     hash = "sha256-+SppAF77NbXlSrBGvIm40AmNC12GrexbX7fAPBoDAcs=";
   };
 
-  versionsYaml = builtins.readFile "${kataContainersSrc}/versions.yaml";
-
+  # Dojo-style: derive kernel version from Kata's versions.yaml via yq.
+  # This uses import-from-derivation (IFD): evaluation reads the derivation output.
   kernelVersionRaw =
-    let
-      lines = pkgs.lib.splitString "\n" versionsYaml;
-      parsed = pkgs.lib.foldl'
-        (st: line:
-          if st.version != null then
-            st
-          else if line == "assets:" then
-            st // { inAssets = true; inKernel = false; }
-          else if st.inAssets && pkgs.lib.hasPrefix "  kernel:" line then
-            st // { inKernel = true; }
-          else if st.inAssets && st.inKernel && pkgs.lib.hasPrefix "    version:" line then
-            let
-              raw = pkgs.lib.strings.trim (pkgs.lib.removePrefix "    version:" line);
-              unquoted = pkgs.lib.removeSuffix "\"" (pkgs.lib.removePrefix "\"" raw);
-            in
-            st // { version = unquoted; }
-          else
-            st)
-        { inAssets = false; inKernel = false; version = null; }
-        lines;
-    in
-    if parsed.version == null then
-      throw "runtime/kernel.nix: failed to parse assets.kernel.version from kata-containers versions.yaml"
-    else
-      parsed.version;
+    pkgs.lib.strings.trim (builtins.readFile "${pkgs.runCommand "${name}-kata-kernel-version" { nativeBuildInputs = [ pkgs.yq ]; } ''
+      mkdir -p "$out"
+      yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml > "$out/version"
+    ''}/version");
 
   kernelVersion =
     if pkgs.lib.hasPrefix "v" kernelVersionRaw then
