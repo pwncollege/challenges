@@ -1,0 +1,23 @@
+/* Tin Robot */
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    char b[64];
+
+    setbuf(stdout, NULL);
+    puts("beep boop | battery: {{ battery }}");
+    printf("input command (%s):\n", "{{ prompt }}");
+
+    if (!fgets(b, sizeof(b), stdin)) return 0;
+
+    if (strncmp(b, "dance", 5) == 0) {
+        puts("robot spins!");
+    } else if (strncmp(b, "beep", 4) == 0) {
+        puts("BEEP BEEP!");
+    } else {
+        printf("unknown command: %s", b);
+    }
+
+    return 0;
+}

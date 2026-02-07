@@ -1,0 +1,11 @@
+FROM ubuntu:24.04
+
+RUN apt update && \
+    apt install -y --no-install-recommends \
+        build-essential libseccomp-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /challenge
+COPY sleigh.c .
+RUN gcc -o ./sleigh ./sleigh.c -lseccomp && \
+    chmod 4755 ./sleigh

@@ -1,0 +1,15 @@
+ip netns add middleware
+ip link add veth-host type veth peer name veth-middleware
+ip link set veth-middleware netns middleware
+ip addr add 72.79.72.1/24 dev veth-host
+ip link set veth-host up
+
+ip netns exec middleware ip addr add 72.79.72.79/24 dev veth-middleware
+ip netns exec middleware ip link set veth-middleware up
+ip netns exec middleware ip route add default via 72.79.72.1   
+ip netns exec middleware ip link set lo up
+
+iptables -A OUTPUT -o veth-host -m owner --uid-owner root -j ACCEPT
+iptables -A OUTPUT -o veth-host -j REJECT
+
+echo "DUCK_CONTENT" | ip netns exec middleware /usr/bin/cobol - &

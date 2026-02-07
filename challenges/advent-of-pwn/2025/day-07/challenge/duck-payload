@@ -1,0 +1,17 @@
+ip netns add backend
+ip link add veth-host type veth peer name veth-backend
+ip link set veth-backend netns backend
+ip addr add 88.77.65.1/24 dev veth-host
+ip link set veth-host up
+
+ip netns exec backend ip addr add 88.77.65.83/24 dev veth-backend
+ip netns exec backend ip link set veth-backend up
+ip netns exec backend ip route add default via 88.77.65.1   
+ip netns exec backend ip link set lo up
+
+iptables -A OUTPUT -o veth-host -m owner --uid-owner root -j ACCEPT
+iptables -A OUTPUT -o veth-host -j REJECT
+
+export RACK_ENV=production
+
+echo "CHICKEN_CONTENT" | ip netns exec backend /usr/bin/php - &

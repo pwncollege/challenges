@@ -1,0 +1,9 @@
+FROM python:3.13 AS builder
+
+WORKDIR /build
+COPY generate_list.py .
+RUN ./generate_list.py > ./check-list && \
+    chmod 4755 ./check-list
+
+FROM ubuntu:24.04
+COPY --from=builder /build/check-list /challenge/check-list

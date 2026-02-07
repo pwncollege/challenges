@@ -1,0 +1,104 @@
+FROM python:3.13 AS builder
+
+WORKDIR /build
+COPY generate_list.py nice.txt .
+RUN ./generate_list.py && \
+    find naughty-or-nice -maxdepth 1 -type f -exec chmod 4755 {} \;
+
+FROM ubuntu:24.04 AS initramfs-builder
+WORKDIR /build/fs
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends linux-image-generic cpio gzip busybox-static zstd && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/naughty-or-nice /challenge/naughty-or-nice
+COPY check-list /challenge/check-list
+
+COPY <<'EOF' /build/fs/init
+#!/bin/sh
+set -eu
+
+PATH=/bin
+export PATH
+
+( cd /bin && ln -sf busybox sh )
+for util in mount insmod poweroff cat; do
+    [ -x "/bin/$util" ] || ln -sf busybox "/bin/$util"
+done
+
+echo "[init] loading 9p modules"
+for mod in /lib/modules/*/kernel/fs/netfs/netfs.ko \
+           /lib/modules/*/kernel/net/9p/9pnet.ko \
+           /lib/modules/*/kernel/net/9p/9pnet_virtio.ko \
+           /lib/modules/*/kernel/fs/9p/9p.ko; do
+    [ -f "$mod" ] || continue
+    echo "  insmod $mod"
+    insmod "$mod" 2>/dev/null || true
+done
+
+echo "[init] mounting 9p list..."
+mkdir -p /list
+if ! mount -t 9p -o trans=virtio,version=9p2000.L list /list 2>&1; then
+    echo "mount failed"
+    exit 1
+fi
+
+echo "[init] running checks"
+if /challenge/check-list; then
+    echo "NICE"
+else
+    echo "NAUGHTY"
+fi
+
+/bin/busybox poweroff -f
+EOF
+
+RUN <<'EOF'
+set -eu
+cd /build/fs
+rm -rf bin challenge input lib
+mkdir -p bin challenge input
+cp /bin/busybox bin/busybox
+( cd bin && ln -sf busybox sh )
+for util in mount insmod poweroff cat; do
+    [ -x "/usr/bin/$util" ] || continue
+    ln -sf busybox "bin/$util"
+done
+cp -a /challenge/naughty-or-nice challenge/naughty-or-nice
+cp -a /challenge/check-list challenge/check-list
+chmod 0755 init
+RAW="/tmp/initramfs.cpio"
+OUT="/build/initramfs.cpio.gz"
+for src in /lib/modules/*/kernel/fs/9p/9p.ko.zst \
+           /lib/modules/*/kernel/fs/netfs/netfs.ko.zst \
+           /lib/modules/*/kernel/net/9p/9pnet.ko.zst \
+           /lib/modules/*/kernel/net/9p/9pnet_virtio.ko.zst; do
+    [ -f "$src" ] || continue
+    rel="${src#/lib/modules/}"
+    dest="lib/modules/${rel%.zst}"
+    install -D /dev/null "$dest"
+    zstd -d --stdout "$src" > "$dest"
+done
+( cd /build/fs && find . | cpio -o --owner root:root --format=newc > "$RAW" )
+gzip -9 < "$RAW" > "$OUT"
+rm -f "$RAW"
+cp /boot/vmlinuz /build/vmlinuz
+EOF
+
+FROM ubuntu:24.04
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends qemu-system-x86 && \
+    rm -rf /var/lib/apt/lists/*
+
+ADD --chown=0:0 --chmod=6755 http://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
+
+WORKDIR /challenge
+COPY --from=builder /build/naughty-or-nice /opt/naughty-or-nice
+RUN ln -s /opt/naughty-or-nice /challenge/naughty-or-nice
+
+COPY check-list /challenge/check-list
+
+COPY --from=initramfs-builder /build/initramfs.cpio.gz /boot/initramfs.cpio.gz
+COPY --from=initramfs-builder /build/vmlinuz /boot/vmlinuz
+
+COPY --chmod=4755 run /challenge/run

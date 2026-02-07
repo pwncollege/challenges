@@ -1,0 +1,25 @@
+/* Wooden Train */
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    char stop[32];
+    int tickets = 0;
+
+    setbuf(stdout, NULL);
+    puts("choo choo!");
+
+    printf("cargo: %s\n", "{{ cargo }}");
+    printf("line: %s\n", "{{ line }}");
+    puts("next station:");
+
+    if (!fgets(stop, sizeof(stop), stdin)) return 0;
+
+    for (char *p = stop; *p; p++) {
+        if (*p == 'a' || *p == 'e' || *p == 'i' || *p == 'o' || *p == 'u') tickets++;
+    }
+
+    printf("next stop: %s", stop);
+    printf("tickets punched: %d\n", tickets);
+    return 0;
+}

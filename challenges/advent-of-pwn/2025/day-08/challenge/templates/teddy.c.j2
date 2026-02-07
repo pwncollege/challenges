@@ -1,0 +1,22 @@
+/* Teddy Bear */
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    char note[80];
+
+    setbuf(stdout, NULL);
+    puts("soft hug!");
+
+    printf("teddy keeps this secret: %s\n", "{{ secret }}");
+    printf("share a feeling (%s):\n", "{{ feeling }}");
+
+    if (!fgets(note, sizeof(note), stdin)) return 0;
+
+    size_t len = strlen(note);
+    if (len > 0 && note[len - 1] == '\n') note[len - 1] = 0;
+
+    printf("teddy repeats back: %s\n", note);
+    printf("letters counted: %zu\n", strlen(note));
+    return 0;
+}

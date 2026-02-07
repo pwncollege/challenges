@@ -1,0 +1,126 @@
+ARG BUSYBOX_VERSION=1.37.0
+ARG QEMU_VERSION=10.1.2
+
+FROM debian:stable AS builder
+ARG BUSYBOX_VERSION
+ARG QEMU_VERSION
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential ca-certificates cpio wget xz-utils bzip2 \
+    python3 python3-dev python3-venv \
+    meson ninja-build pkg-config \
+    libglib2.0-dev libpixman-1-dev libfdt-dev \
+    linux-image-amd64 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Build a static busybox for the initramfs.
+WORKDIR /build
+RUN wget -q https://busybox.net/downloads/busybox-${BUSYBOX_VERSION}.tar.bz2 && \
+    tar -xf busybox-${BUSYBOX_VERSION}.tar.bz2 && \
+    mv busybox-${BUSYBOX_VERSION} busybox
+
+WORKDIR /build/busybox
+RUN make defconfig && \
+    sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config && \
+    sed -i 's/^CONFIG_TC=.*/# CONFIG_TC is not set/' .config && \
+    make -j"$(nproc)" && \
+    make CONFIG_PREFIX=/build/rootfs install
+
+# Download QEMU sources.
+WORKDIR /build
+RUN wget -q https://download.qemu.org/qemu-${QEMU_VERSION}.tar.xz && \
+    tar -xf qemu-${QEMU_VERSION}.tar.xz && \
+    mv qemu-${QEMU_VERSION} qemu
+
+COPY pypu-pci.c pypu-capture.c pypu-capture.h pypu-privileged.h guest-init.sh /build/
+COPY pypu_programs/ /build/pypu_programs/
+
+RUN mkdir -p /build/rootfs/proc /build/rootfs/sys /build/rootfs/dev /build/rootfs/etc /build/rootfs/root /build/rootfs/bin
+
+RUN python3 - <<'PY'
+import pathlib, struct, py_compile
+program_dir = pathlib.Path("/build/pypu_programs")
+py_files = sorted(program_dir.glob("*.py"))
+if not py_files:
+    raise SystemExit("no python programs found in /build/pypu_programs")
+priv_src = next((p for p in py_files if p.name.startswith("privileged_")), None)
+if not priv_src:
+    raise SystemExit("no privileged_* python program found in /build/pypu_programs")
+mode = getattr(py_compile, "PycInvalidationMode", None)
+kwargs = {"invalidation_mode": mode.CHECKED_HASH} if mode else {}
+for src in py_files:
+    py_compile.compile(str(src), cfile=None, dfile=f"/build/{src.name}", **kwargs)
+    pyc_path = next((src.parent / "__pycache__").glob(f"{src.stem}.*.pyc"))
+    dest = src.with_suffix(".pyc")
+    dest.write_bytes(pyc_path.read_bytes())
+priv_pyc = priv_src.with_suffix(".pyc")
+priv_data = priv_pyc.read_bytes()
+magic, flags = struct.unpack_from("<II", priv_data, 0)
+pyc_hash = struct.unpack_from("<Q", priv_data, 8)[0]
+print(f"{priv_src.name} pyc {priv_pyc.name}: magic=0x{magic:08x} flags=0x{flags:08x} hash=0x{pyc_hash:016x}")
+print(f"PYPU_PRIVILEGED_HASH=0x{pyc_hash:016x}")
+pathlib.Path("/build/pypu-privileged.h").write_text("#pragma once\n#define PYPU_PRIVILEGED_HASH 0x%016xULL\n" % pyc_hash)
+PY
+
+RUN mkdir -p /build/rootfs/pypu_programs && \
+    cp /build/pypu_programs/*.pyc /build/rootfs/pypu_programs/
+
+RUN install -m 0755 /build/guest-init.sh /build/rootfs/init
+
+WORKDIR /build/qemu
+RUN cp /build/pypu-pci.c /build/pypu-capture.c /build/pypu-capture.h hw/misc/ && \
+    cp /build/pypu-privileged.h hw/misc/pypu-privileged.h && \
+    echo "system_ss.add(files('pypu-pci.c', 'pypu-capture.c'))" >> hw/misc/meson.build
+RUN PY_CFLAGS=$(python3-config --includes) && \
+    PY_LDFLAGS=$(python3-config --embed --ldflags 2>/dev/null || python3-config --ldflags) && \
+    ./configure --target-list=x86_64-softmmu --prefix=/build/qemu-install \
+    --disable-docs --disable-debug-info --disable-werror \
+    --audio-drv-list= --disable-guest-agent --disable-user --enable-kvm \
+    --extra-cflags="${PY_CFLAGS}" --extra-ldflags="${PY_LDFLAGS}"
+RUN make -j"$(nproc)" && make install
+
+# Package initramfs and kernel output.
+RUN mkdir -p /build/out && \
+    (cd /build/rootfs && find . | cpio -H newc -ov --owner root:root | gzip -9 > /build/out/rootfs.cpio.gz) && \
+    cp "$(ls -1 /boot/vmlinuz-* | sort | tail -n1)" /build/out/bzImage
+
+FROM debian:stable-slim AS runner
+
+ADD --chown=0:0 --chmod=6755 http://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libglib2.0-0 libpixman-1-0 libfdt1 libnuma1 \
+    python3 libpython3.13 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /challenge
+
+COPY --from=builder /build/pypu-*.c /build/pypu-*.h /challenge/src/
+
+COPY --from=builder /build/out /opt/runtime/
+COPY --from=builder /build/qemu-install /opt/runtime/qemu/
+COPY --from=builder /build/pypu_programs/*.pyc /opt/runtime/pypu_programs/
+
+COPY --chmod=4755 <<'EOF' /challenge/run.sh
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+set -euo pipefail
+
+PATH="/challenge/runtime/qemu/bin:$PATH"
+
+qemu-system-x86_64 \
+  -machine q35 \
+  -cpu qemu64 \
+  -m 512M \
+  -nographic \
+  -no-reboot \
+  -kernel /challenge/runtime/bzImage \
+  -initrd /challenge/runtime/rootfs.cpio.gz \
+  -append "console=ttyS0 quiet panic=-1" \
+  -device pypu-pci \
+  -serial stdio \
+  -monitor none
+EOF
+
+RUN ln -s /opt/runtime ./runtime

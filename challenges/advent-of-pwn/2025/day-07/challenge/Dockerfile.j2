@@ -1,0 +1,34 @@
+FROM ubuntu:24.04
+
+RUN apt-get -y update && apt-get -y upgrade
+
+RUN apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    iproute2 \
+    iptables \
+    iputils-ping \
+    libffi-dev \
+    libssl-dev \
+    net-tools \
+    nodejs \
+    npm \
+    python3-flask \
+    python3-requests \
+    ruby-full \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
+
+RUN gem install sinatra rackup puma
+
+# change the user to make things easier
+RUN usermod -md /home/hacker -l hacker ubuntu && groupmod -n hacker ubuntu
+
+RUN ln -s /usr/bin/ruby /usr/bin/php
+RUN ln -s /usr/bin/node /usr/bin/cobol
+
+COPY .init /challenge/.init
+COPY turkey.py /challenge/turkey.py
