@@ -28,9 +28,10 @@ def main() -> int:
 
     dojo_yml = pathlib.Path(args.dojo_yml).resolve()
     if dojo_yml.name != "dojo.yml":
-        raise SystemExit(f"Expected path ending in dojo.yml, got: {dojo_yml}")
+        print(f"Error: expected path ending in dojo.yml, got: {dojo_yml}", file=sys.stderr)
+        return 2
     if not dojo_yml.exists():
-        print(f"[skip] no dojo.yml at {dojo_yml}", file=sys.stderr)
+        print(f"Skipping: no dojo.yml at {dojo_yml}", file=sys.stderr)
         return 0
 
     dojo_dir = dojo_yml.parent
@@ -258,7 +259,7 @@ def main() -> int:
         if dojo_award is not None:
             spec["award"] = dojo_award
     except Exception as error:
-        print(f"[err] failed to parse {dojo_yml}: {error}", file=sys.stderr)
+        print(f"Error: failed to parse {dojo_yml}: {error}", file=sys.stderr)
         return 1
 
     module_count = 0
@@ -269,7 +270,7 @@ def main() -> int:
             if resource.get("type") == "challenge":
                 challenge_count += 1
 
-    print(f"[ok] parsed dojo={dojo_id} modules={module_count} challenges={challenge_count}", file=sys.stderr)
+    print(f"Parsed successfully: dojo={dojo_id} modules={module_count} challenges={challenge_count}", file=sys.stderr)
     if args.json:
         print(json.dumps(spec, indent=2, sort_keys=False))
     return 0

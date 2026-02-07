@@ -27,18 +27,18 @@ def main() -> int:
     dojo_url = os.environ.get("DOJO_URL")
     dojo_token = os.environ.get("DOJO_TOKEN")
     if not dojo_url:
-        print("Missing DOJO_URL env var.", file=sys.stderr)
+        print("Error: missing DOJO_URL env var.", file=sys.stderr)
         return 2
     if dojo_url.endswith("/"):
-        print("DOJO_URL must not end with '/'.", file=sys.stderr)
+        print("Error: DOJO_URL must not end with '/'.", file=sys.stderr)
         return 2
     if not dojo_token:
-        print("Missing DOJO_TOKEN env var.", file=sys.stderr)
+        print("Error: missing DOJO_TOKEN env var.", file=sys.stderr)
         return 2
 
     dojo_yml = pathlib.Path(args.dojo_yml).resolve()
     if dojo_yml.name != "dojo.yml":
-        print(f"[err] expected path ending in dojo.yml, got: {dojo_yml}", file=sys.stderr)
+        print(f"Error: expected path ending in dojo.yml, got: {dojo_yml}", file=sys.stderr)
         return 2
     dojo_dir = dojo_yml.parent
 
@@ -75,12 +75,12 @@ def main() -> int:
             slug = f"{dojo_prefix}/{module_id}/{challenge_id}"
             latest_path = manifests_dir / slug / "latest"
             if not latest_path.exists():
-                print(f"[err] missing published manifest tag file: {latest_path}", file=sys.stderr)
+                print(f"Error: missing published manifest tag file: {latest_path}", file=sys.stderr)
                 return 1
 
             image_id = latest_path.read_text().strip()
             if not image_id_regex.fullmatch(image_id):
-                print(f"[err] invalid image id in {latest_path}: {image_id!r}", file=sys.stderr)
+                print(f"Error: invalid image id in {latest_path}: {image_id!r}", file=sys.stderr)
                 return 1
             resource["image"] = f"{args.registry.rstrip('/')}/{slug}@{image_id}"
 
@@ -93,7 +93,7 @@ def main() -> int:
             timeout=60,
         )
     except Exception as error:
-        print(f"[err] dojo update request failed: {error}", file=sys.stderr)
+        print(f"Error: dojo update request failed: {error}", file=sys.stderr)
         return 1
 
     try:
@@ -102,10 +102,10 @@ def main() -> int:
         response_body = {"raw": response.text}
 
     if response.status_code != 200 or not response_body.get("success"):
-        print(f"[err] dojo update failed: status={response.status_code} body={response_body}", file=sys.stderr)
+        print(f"Error: dojo update failed: status={response.status_code} body={response_body}", file=sys.stderr)
         return 1
 
-    print(f"[ok] updated dojo={dojo_id}", file=sys.stderr)
+    print("Updated successfully", file=sys.stderr)
     return 0
 
 
