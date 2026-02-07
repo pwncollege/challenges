@@ -30,6 +30,7 @@ jobs:
     needs: determine-modified-challenges
     if: ${{ needs.determine-modified-challenges.outputs.challenges != '[]' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
