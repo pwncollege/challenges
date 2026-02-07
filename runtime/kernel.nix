@@ -15,23 +15,23 @@ let
     hash = "sha256-q0iACrSZhaeNIxiuisXyj9PhI+oXNX7yFJgQWlMzczY=";
   };
 
-  dojoFragment = ''
-CONFIG_SECURITY_LANDLOCK=y
-
-CONFIG_BPF_JIT=y
-CONFIG_BPF_SYSCALL=y
-CONFIG_BPF=y
-CONFIG_DEBUG_KERNEL=y
-CONFIG_DEBUG_INFO_DWARF4=y
-CONFIG_DEBUG_INFO_BTF=y
-CONFIG_DYNAMIC_FTRACE=y
-CONFIG_FTRACE=y
-CONFIG_FUNCTION_TRACER=y
-CONFIG_KPROBE_EVENTS=y
-CONFIG_KPROBES=y
-CONFIG_PERF_EVENTS=y
-CONFIG_PROFILING=y
-'';
+  config = pkgs.writeText "zz-dojo.conf" (pkgs.lib.strings.concatLines [
+    "CONFIG_SECURITY_LANDLOCK=y"
+    ""
+    "CONFIG_BPF_JIT=y"
+    "CONFIG_BPF_SYSCALL=y"
+    "CONFIG_BPF=y"
+    "CONFIG_DEBUG_KERNEL=y"
+    "CONFIG_DEBUG_INFO_DWARF4=y"
+    "CONFIG_DEBUG_INFO_BTF=y"
+    "CONFIG_DYNAMIC_FTRACE=y"
+    "CONFIG_FTRACE=y"
+    "CONFIG_FUNCTION_TRACER=y"
+    "CONFIG_KPROBE_EVENTS=y"
+    "CONFIG_KPROBES=y"
+    "CONFIG_PERF_EVENTS=y"
+    "CONFIG_PROFILING=y"
+  ]);
 in
 pkgs.stdenv.mkDerivation {
   pname = "${name}-linux-kernel";
@@ -78,11 +78,8 @@ pkgs.stdenv.mkDerivation {
     patchShebangs tools/packaging
     cd tools/packaging/kernel
 
-    for arch in x86_64 arm64; do
-cat > "configs/fragments/$arch/zz-dojo.conf" <<'EOF'
-${dojoFragment}
-EOF
-    done
+    install -D -m 0644 ${config} configs/fragments/x86_64/zz-dojo.conf
+    install -D -m 0644 ${config} configs/fragments/arm64/zz-dojo.conf
 
     cp ${kernelTarball} linux-${kernelVersion}.tar.xz
     sha256sum linux-${kernelVersion}.tar.xz > linux-${kernelVersion}.tar.xz.sha256
