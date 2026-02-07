@@ -16,7 +16,9 @@
       devShells = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
-          pwnChallengeRuntime = import ./runtime { inherit pkgs lib; };
+          runtimePkgs = {
+            "pwn-challenge-runtime" = import ./runtime { inherit pkgs lib; };
+          };
           pwnshop = pkgs.writeShellApplication {
             name = "pwnshop";
             runtimeInputs = with pkgs; [
@@ -36,12 +38,12 @@
               docker
               git
               git-crypt
-              pwnChallengeRuntime
+              runtimePkgs."pwn-challenge-runtime"
               pwnshop
               uv
             ];
             shellHook = ''
-              export DOCKER_HOST="$(sudo ${pwnChallengeRuntime}/bin/pwn-challenge-runtime)"
+              export DOCKER_HOST="$(sudo ${runtimePkgs."pwn-challenge-runtime"}/bin/pwn-challenge-runtime)"
             '';
           };
         });
