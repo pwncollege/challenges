@@ -32,7 +32,7 @@ If flakes are not enabled on your system, add this to `~/.config/nix/nix.conf`:
 experimental-features = nix-command flakes
 ```
 
-On shell entry, the dev shell will run `sudo pwn-challenge-runtime` to ensure the runtime `dockerd` is reachable and will export `DOCKER_HOST` accordingly.
+On shell entry, the dev shell will start the challenge runtime (using sudo). This is a dedicated docker daemon, properly configured (see [../runtime/](../runtime) for more details). It also exports `DOCKER_HOST` so Docker and `pwnshop` talk to this daemon.
 
 Then use `pwnshop` for all workflows:
 
@@ -45,7 +45,7 @@ Then use `pwnshop` for all workflows:
 
 `nix develop` prompts for sudo every time:
 
-- That is expected: the dev shell runs `sudo pwn-challenge-runtime` in `shellHook`.
+- That is expected: the dev shell starts the challenge runtime via `sudo pwn-challenge-runtime` in `shellHook`.
 - If you want fewer prompts, make sure your sudo timestamp is valid (e.g., run `sudo -v` once in another terminal).
 
 `systemctl` errors / "System has not been booted with systemd":
