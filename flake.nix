@@ -33,12 +33,12 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
+              docker
               git
               git-crypt
-              docker
-              uv
-              pwnshop
               pwnChallengeRuntime
+              pwnshop
+              uv
             ];
             shellHook = ''
               export DOCKER_HOST="$(sudo ${pwnChallengeRuntime}/bin/pwn-challenge-runtime)"
