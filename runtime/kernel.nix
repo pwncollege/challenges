@@ -9,7 +9,6 @@ let
     version="$(yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml)"
     printf '%s' "''${version#v}" > "$out"
   ''}";
-
   kernelMajor = builtins.elemAt (pkgs.lib.splitString "." kernelVersion) 0;
   kernelTarball = pkgs.fetchurl {
     url = "http://cdn.kernel.org/pub/linux/kernel/v${kernelMajor}.x/linux-${kernelVersion}.tar.xz";
