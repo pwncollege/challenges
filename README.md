@@ -109,7 +109,7 @@ Requirements for `nix develop`:
 
 - Linux (currently `x86_64-linux` only)
 - `systemd` as PID 1 (the dev shell spins up a dedicated `dockerd` via `systemctl`)
-- `sudo` access (to install runtime units and create `/var/lib/pwn.college/docker`)
+- `sudo` access (to install runtime units and start the runtime Docker daemon)
 - Nix with flakes enabled (you need `experimental-features = nix-command flakes`)
 
 ```bash

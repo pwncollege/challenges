@@ -8,7 +8,7 @@ The flake dev shell currently targets:
 
 - OS/arch: Linux (`x86_64-linux` only)
 - Init system: `systemd` (the runtime uses `systemctl` to manage a dedicated Docker daemon)
-- Privileges: `sudo` access (used to create and manage `/var/lib/pwn.college/docker` and `/run/pwn.college/docker`)
+- Privileges: `sudo` access (used to install runtime units, start the runtime Docker daemon, and create/manage `/var/lib/pwn.college/docker` and `/run/pwn.college/docker`)
 - Tooling: Nix with flakes enabled (so `nix develop` works)
   - Set `experimental-features = nix-command flakes` in your Nix config.
   - Common locations: `~/.config/nix/nix.conf` or `/etc/nix/nix.conf`.
