@@ -87,13 +87,8 @@ def main() -> int:
         print(f"Error: dojo update request failed: {error}", file=sys.stderr)
         return 1
 
-    response_body = None
-    try:
-        response_body = response.json()
-    except Exception:
-        response_body = response.text
-
-    if response.status_code != 200 or not (isinstance(response_body, dict) and response_body.get("success")):
+    response_body = response.text
+    if response.status_code != 200:
         print(f"Error: dojo update failed: status={response.status_code} body={response_body}", file=sys.stderr)
         return 1
 
