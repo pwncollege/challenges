@@ -34,9 +34,6 @@ def main() -> int:
         return 2
 
     dojo_yml = pathlib.Path(args.dojo_yml).resolve()
-    if dojo_yml.name != "dojo.yml":
-        print(f"Error: expected path ending in dojo.yml, got: {dojo_yml}", file=sys.stderr)
-        return 2
     dojo_dir = dojo_yml.parent
 
     parse_dojo_yml = pathlib.Path(__file__).resolve().parent / "parse-dojo-yml"
@@ -81,7 +78,7 @@ def main() -> int:
                 return 1
             resource["image"] = f"{args.registry.rstrip('/')}/{slug}@{image_id}"
 
-    update_url = f"{dojo_url.rstrip('/')}/pwncollege_api/v1/dojos/{dojo_id}/update"
+    update_url = f"{dojo_url}/pwncollege_api/v1/dojos/{dojo_id}/update"
     try:
         response = requests.post(
             update_url,
