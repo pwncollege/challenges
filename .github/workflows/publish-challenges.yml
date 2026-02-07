@@ -96,9 +96,10 @@ jobs:
     - name: Update dojo
       if: ${{ hashFiles(format('challenges/{0}/dojo.yml', matrix.challenges)) != '' }}
       env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
         DOJO_URL: https://pwn.college
         DOJO_TOKEN: ${{ secrets.DOJO_TOKEN }}
-      run: ./tools/dojo/update-dojo --manifests /mnt/publish/manifests --registry challenges.pwn.college challenges/${{ matrix.challenges }}/dojo.yml
+      run: ./tools/dojo/update-dojo --manifests /mnt/publish/manifests --registry challenges.pwn.college "$CHALLENGES_DIR/dojo.yml"
 
     - name: Report docker storage
       if: always()
