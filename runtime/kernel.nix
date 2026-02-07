@@ -82,7 +82,6 @@ pkgs.stdenv.mkDerivation {
     cd tools/packaging/kernel
 
     install -D -m 0644 ${config} configs/fragments/x86_64/${name}.conf
-    install -D -m 0644 ${config} configs/fragments/arm64/${name}.conf
 
     cp ${kernelTarball} linux-${kernelVersion}.tar.xz
     sha256sum linux-${kernelVersion}.tar.xz > linux-${kernelVersion}.tar.xz.sha256
