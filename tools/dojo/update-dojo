@@ -17,12 +17,11 @@ import sys
 
 import requests
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
     parser.add_argument("--manifests", required=True, help="Directory containing published manifest tag files.")
     parser.add_argument("--registry", required=True, help="Registry hostname for published images.")
-    parser.add_argument("dojo_yml", help="Path to dojo.yml.")
+    parser.add_argument("dojo_yml", type=pathlib.Path, help="Path to dojo.yml.")
     args = parser.parse_args()
 
     dojo_url = os.environ.get("DOJO_URL")
@@ -34,9 +33,8 @@ def main() -> int:
         print("Error: missing DOJO_TOKEN env var.", file=sys.stderr)
         return 2
 
-    dojo_yml = pathlib.Path(args.dojo_yml).resolve()
-    dojo_yml_arg = pathlib.Path(args.dojo_yml)
-    dojo_prefix = "/".join(dojo_yml_arg.parts[1:-1])
+    dojo_yml = args.dojo_yml
+    dojo_prefix = "/".join(dojo_yml.parts[1:-1])
 
     parse_dojo_yml = pathlib.Path(__file__).resolve().parent / "parse-dojo-yml"
     parse_result = subprocess.run(

@@ -22,11 +22,11 @@ NAME_REGEX = re.compile(r"^[\S ]{1,128}$")
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Parse and validate dojo.yml into a Dojo update payload.")
-    parser.add_argument("dojo_yml", help="Path to dojo.yml.")
+    parser.add_argument("dojo_yml", type=pathlib.Path, help="Path to dojo.yml.")
     parser.add_argument("--json", action="store_true", help="Print the JSON payload to stdout.")
     args = parser.parse_args()
 
-    dojo_yml = pathlib.Path(args.dojo_yml).resolve()
+    dojo_yml = args.dojo_yml
     if not dojo_yml.exists():
         print(f"Skipping: no dojo.yml at {dojo_yml}", file=sys.stderr)
         return 0
