@@ -5,19 +5,9 @@ let
     hash = "sha256-+SppAF77NbXlSrBGvIm40AmNC12GrexbX7fAPBoDAcs=";
   };
 
-  # Dojo-style: derive kernel version from Kata's versions.yaml via yq.
-  # This uses import-from-derivation (IFD): evaluation reads the derivation output.
-  kernelVersionRaw =
-    pkgs.lib.strings.trim (builtins.readFile "${pkgs.runCommand "${name}-kata-kernel-version" { nativeBuildInputs = [ pkgs.yq ]; } ''
-      mkdir -p "$out"
-      yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml > "$out/version"
-    ''}/version");
-
-  kernelVersion =
-    if pkgs.lib.hasPrefix "v" kernelVersionRaw then
-      pkgs.lib.removePrefix "v" kernelVersionRaw
-    else
-      kernelVersionRaw;
+  kernelVersion = pkgs.lib.removePrefix "v" (pkgs.lib.removeSuffix "\r" (pkgs.lib.removeSuffix "\n" (builtins.readFile "${pkgs.runCommand "${name}-kata-kernel-version" { nativeBuildInputs = [ pkgs.yq ]; } ''
+    yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml > "$out"
+  ''}")));
 
   kernelMajor = builtins.elemAt (pkgs.lib.splitString "." kernelVersion) 0;
   kernelTarball = pkgs.fetchurl {
@@ -44,7 +34,7 @@ CONFIG_PROFILING=y
 '';
 in
 pkgs.stdenv.mkDerivation {
-  pname = "${name}-kata-kernel";
+  pname = "${name}-linux-kernel";
   version = kernelVersion;
   dontUnpack = true;
   buildInputs = with pkgs; [
