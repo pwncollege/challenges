@@ -1,0 +1,286 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "pyyaml>=6.0",
+# ]
+# ///
+
+import argparse
+import datetime
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+import yaml
+
+
+ID_REGEX = re.compile(r"^[a-z0-9-]{1,32}$")
+NAME_REGEX = re.compile(r"^[\S ]{1,128}$")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Parse and validate dojo.yml into a Dojo update payload.")
+    parser.add_argument("--dojo-dir", default=os.environ.get("CHALLENGES_DIR"), help="Path to challenge group (contains dojo.yml).")
+    parser.add_argument("--json", action="store_true", help="Print the JSON payload to stdout.")
+    args = parser.parse_args()
+
+    if not args.dojo_dir:
+        print("Missing --dojo-dir (or CHALLENGES_DIR).", file=sys.stderr)
+        return 2
+
+    repo_root = pathlib.Path(
+        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+    )
+    dojo_dir = (repo_root / args.dojo_dir).resolve()
+    dojo_yml = dojo_dir / "dojo.yml"
+    if not dojo_yml.exists():
+        print(f"[skip] no dojo.yml at {dojo_yml}", file=sys.stderr)
+        return 0
+
+    try:
+        raw = yaml.safe_load(dojo_yml.read_text())
+        if not isinstance(raw, dict):
+            raise ValueError(f"{dojo_yml}: expected a mapping at the top level")
+
+        allowed_dojo_keys = {
+            "id",
+            "name",
+            "type",
+            "award",
+            "modules",
+            "description",
+            "privileged",
+            "allow_privileged",
+            "importable",
+            "interfaces",
+        }
+        extra = set(raw.keys()) - allowed_dojo_keys
+        if extra:
+            raise ValueError(f"dojo.yml: unsupported keys: {', '.join(sorted(extra))}")
+
+        dojo_id = raw.get("id")
+        if not isinstance(dojo_id, str) or not ID_REGEX.fullmatch(dojo_id):
+            raise ValueError("dojo.yml.id: expected /^[a-z0-9-]{1,32}$/")
+
+        dojo_name = raw.get("name") or dojo_id.replace("-", " ").title()
+        if not isinstance(dojo_name, str) or not NAME_REGEX.fullmatch(dojo_name):
+            raise ValueError("dojo.yml.name: invalid name")
+
+        dojo_type = raw.get("type")
+        if dojo_type is not None and (not isinstance(dojo_type, str) or not ID_REGEX.fullmatch(dojo_type)):
+            raise ValueError("dojo.yml.type: expected /^[a-z0-9-]{1,32}$/")
+
+        dojo_description = raw.get("description")
+        if dojo_description is not None and not isinstance(dojo_description, str):
+            raise ValueError("dojo.yml.description: expected string")
+
+        dojo_award = raw.get("award")
+        if dojo_award is not None:
+            if not isinstance(dojo_award, dict):
+                raise ValueError("dojo.yml.award: expected mapping")
+            extra = set(dojo_award.keys()) - {"emoji", "belt"}
+            if extra:
+                raise ValueError(f"dojo.yml.award: unsupported keys: {', '.join(sorted(extra))}")
+            if "emoji" in dojo_award and not isinstance(dojo_award["emoji"], str):
+                raise ValueError("dojo.yml.award.emoji: expected string")
+            if "belt" in dojo_award and not isinstance(dojo_award["belt"], str):
+                raise ValueError("dojo.yml.award.belt: expected string")
+
+        modules = raw.get("modules")
+        if not isinstance(modules, list) or not modules:
+            raise ValueError("dojo.yml.modules: expected a non-empty list")
+
+        dojo_defaults = {
+            key: raw.get(key)
+            for key in ["privileged", "allow_privileged", "importable", "interfaces"]
+            if key in raw
+        }
+
+        parsed_modules = []
+        for module_index, module_entry in enumerate(modules):
+            where_module = f"dojo.yml.modules[{module_index}]"
+            if not isinstance(module_entry, dict):
+                raise ValueError(f"{where_module}: expected mapping")
+
+            allowed_module_keys = {"id", "name", "description", "privileged", "allow_privileged", "importable", "interfaces"}
+            extra = set(module_entry.keys()) - allowed_module_keys
+            if extra:
+                raise ValueError(f"{where_module}: unsupported keys: {', '.join(sorted(extra))}")
+
+            module_id = module_entry.get("id")
+            if not isinstance(module_id, str) or not ID_REGEX.fullmatch(module_id):
+                raise ValueError(f"{where_module}.id: expected /^[a-z0-9-]{{1,32}}$/")
+
+            module_dir = dojo_dir / module_id
+            module_file_path = module_dir / "module.yml"
+            module_file_data = {}
+            if module_file_path.exists():
+                loaded = yaml.safe_load(module_file_path.read_text())
+                if loaded is None:
+                    loaded = {}
+                if not isinstance(loaded, dict):
+                    raise ValueError(f"{module_file_path}: expected a mapping at the top level")
+                module_file_data = loaded
+
+            module_data = dict(module_file_data)
+            module_data.update(module_entry)
+
+            allowed_module_data_keys = {"id", "name", "description", "challenges", "privileged", "allow_privileged", "importable", "interfaces"}
+            extra = set(module_data.keys()) - allowed_module_data_keys
+            if extra:
+                raise ValueError(f"{module_dir}/module.yml: unsupported keys: {', '.join(sorted(extra))}")
+
+            module_name = module_data.get("name") or module_id.replace("-", " ").title()
+            if not isinstance(module_name, str) or not NAME_REGEX.fullmatch(module_name):
+                raise ValueError(f"{where_module}.name: invalid name")
+
+            module_description = module_data.get("description")
+            if module_description is None and (module_dir / "DESCRIPTION.md").exists():
+                module_description = (module_dir / "DESCRIPTION.md").read_text()
+            if module_description is not None and not isinstance(module_description, str):
+                raise ValueError(f"{where_module}.description: expected string")
+
+            module_defaults = {
+                key: module_data.get(key)
+                for key in ["privileged", "allow_privileged", "importable", "interfaces"]
+                if key in module_data
+            }
+
+            challenges = module_data.get("challenges")
+            if not isinstance(challenges, list) or not challenges:
+                raise ValueError(f"{module_dir}/module.yml: expected non-empty 'challenges' list (challenge-only modules)")
+
+            resources = []
+            for challenge_index, challenge_entry in enumerate(challenges):
+                where_challenge = f"{module_dir}/module.yml.challenges[{challenge_index}]"
+                if not isinstance(challenge_entry, dict):
+                    raise ValueError(f"{where_challenge}: expected mapping")
+
+                challenge_id = challenge_entry.get("id")
+                if not isinstance(challenge_id, str) or not ID_REGEX.fullmatch(challenge_id):
+                    raise ValueError(f"{where_challenge}.id: expected /^[a-z0-9-]{{1,32}}$/")
+
+                challenge_dir = module_dir / challenge_id
+                challenge_file_path = challenge_dir / "challenge.yml"
+                challenge_file_data = {}
+                if challenge_file_path.exists():
+                    loaded = yaml.safe_load(challenge_file_path.read_text())
+                    if loaded is None:
+                        loaded = {}
+                    if not isinstance(loaded, dict):
+                        raise ValueError(f"{challenge_file_path}: expected a mapping at the top level")
+                    challenge_file_data = loaded
+
+                challenge_data = dict(challenge_file_data)
+                challenge_data.update(challenge_entry)
+
+                allowed_challenge_keys = {
+                    "id",
+                    "name",
+                    "description",
+                    "visibility",
+                    "required",
+                    "privileged",
+                    "allow_privileged",
+                    "importable",
+                    "progression_locked",
+                    "interfaces",
+                }
+                extra = set(challenge_data.keys()) - allowed_challenge_keys
+                if extra:
+                    raise ValueError(f"{challenge_dir}/challenge.yml: unsupported keys: {', '.join(sorted(extra))}")
+
+                if challenge_data.get("description") is None and (challenge_dir / "DESCRIPTION.md").exists():
+                    challenge_data["description"] = (challenge_dir / "DESCRIPTION.md").read_text()
+
+                challenge_name = challenge_data.get("name") or challenge_id.replace("-", " ").title()
+                if not isinstance(challenge_name, str) or not NAME_REGEX.fullmatch(challenge_name):
+                    raise ValueError(f"{where_challenge}.name: invalid name")
+
+                resource = {"type": "challenge", "id": challenge_id, "name": challenge_name}
+
+                if "description" in challenge_data:
+                    if not isinstance(challenge_data["description"], str):
+                        raise ValueError(f"{where_challenge}.description: expected string")
+                    resource["description"] = challenge_data["description"]
+
+                visibility = challenge_data.get("visibility")
+                if visibility is not None:
+                    if not isinstance(visibility, dict):
+                        raise ValueError(f"{where_challenge}.visibility: expected mapping")
+                    extra = set(visibility.keys()) - {"start", "stop"}
+                    if extra:
+                        raise ValueError(f"{where_challenge}.visibility: unsupported keys: {', '.join(sorted(extra))}")
+
+                    out_visibility = {}
+                    if "start" in visibility:
+                        if not isinstance(visibility["start"], str):
+                            raise ValueError(f"{where_challenge}.visibility.start: expected ISO string")
+                        datetime.datetime.fromisoformat(visibility["start"])
+                        out_visibility["start"] = visibility["start"]
+                    if "stop" in visibility:
+                        if not isinstance(visibility["stop"], str):
+                            raise ValueError(f"{where_challenge}.visibility.stop: expected ISO string")
+                        datetime.datetime.fromisoformat(visibility["stop"])
+                        out_visibility["stop"] = visibility["stop"]
+                    resource["visibility"] = out_visibility
+
+                for field in ["privileged", "allow_privileged", "importable", "interfaces"]:
+                    value = challenge_data.get(field, module_defaults.get(field, dojo_defaults.get(field)))
+                    if value is None:
+                        continue
+                    if field != "interfaces" and not isinstance(value, bool):
+                        raise ValueError(f"{where_challenge}.{field}: expected boolean")
+                    if field == "interfaces" and not isinstance(value, list):
+                        raise ValueError(f"{where_challenge}.interfaces: expected list")
+                    resource[field] = value
+
+                if "required" in challenge_data:
+                    if not isinstance(challenge_data["required"], bool):
+                        raise ValueError(f"{where_challenge}.required: expected boolean")
+                    resource["required"] = challenge_data["required"]
+
+                if "progression_locked" in challenge_data:
+                    if not isinstance(challenge_data["progression_locked"], bool):
+                        raise ValueError(f"{where_challenge}.progression_locked: expected boolean")
+                    resource["progression_locked"] = challenge_data["progression_locked"]
+
+                resources.append(resource)
+
+            module_out = {"id": module_id, "name": module_name, "resources": resources}
+            if module_description is not None:
+                module_out["description"] = module_description
+            parsed_modules.append(module_out)
+
+        spec = {"id": dojo_id, "name": dojo_name, "modules": parsed_modules}
+        if dojo_type is not None:
+            spec["type"] = dojo_type
+        if dojo_description is not None:
+            spec["description"] = dojo_description
+        if dojo_award is not None:
+            spec["award"] = dojo_award
+    except Exception as error:
+        print(f"[err] failed to parse {dojo_yml}: {error}", file=sys.stderr)
+        return 1
+
+    module_count = 0
+    challenge_count = 0
+    for module in spec.get("modules", []):
+        module_count += 1
+        for resource in module.get("resources", []):
+            if resource.get("type") == "challenge":
+                challenge_count += 1
+
+    print(f"[ok] parsed dojo={dojo_id} modules={module_count} challenges={challenge_count}", file=sys.stderr)
+    if args.json:
+        print(json.dumps(spec, indent=2, sort_keys=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

@@ -1,0 +1,129 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "pyyaml>=6.0",
+#   "requests>=2.0",
+# ]
+# ///
+
+import argparse
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+import requests
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
+    parser.add_argument("--dojo-dir", default=os.environ.get("CHALLENGES_DIR"), help="Path to challenge group (contains dojo.yml).")
+    parser.add_argument("--manifests-dir", default="/mnt/publish/manifests", help="Directory containing published manifest tag files.")
+    parser.add_argument("--registry", required=True, help="Registry hostname for published images.")
+    args = parser.parse_args()
+
+    if not args.dojo_dir:
+        print("Missing --dojo-dir (or CHALLENGES_DIR).", file=sys.stderr)
+        return 2
+
+    repo_root = pathlib.Path(
+        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+    )
+    parse_dojo_yml = repo_root / "tools" / "dojo" / "parse-dojo-yml"
+    parse_result = subprocess.run(
+        [str(parse_dojo_yml), "--dojo-dir", args.dojo_dir, "--json"],
+        text=True,
+        capture_output=True,
+    )
+
+    # Always forward parse output (errors and summaries) to stderr so CI logs make sense.
+    if parse_result.stderr:
+        print(parse_result.stderr, end="", file=sys.stderr)
+    if parse_result.returncode != 0:
+        return parse_result.returncode
+
+    if not parse_result.stdout.strip():
+        # parse-dojo-yml can exit 0 without producing JSON (e.g. skip); treat as no-op.
+        return 0
+
+    try:
+        spec = json.loads(parse_result.stdout)
+    except Exception as error:
+        print(f"[err] parse-dojo-yml produced invalid JSON: {error}", file=sys.stderr)
+        return 1
+
+    dojo_id = spec.get("id")
+    if not isinstance(dojo_id, str) or not dojo_id:
+        print("[err] parsed payload missing dojo id", file=sys.stderr)
+        return 1
+
+    try:
+        dojo_dir = (repo_root / args.dojo_dir).resolve()
+        dojo_prefix = dojo_dir.relative_to(repo_root / "challenges").parts[0]
+    except Exception:
+        dojo_prefix = dojo_dir.name
+
+    manifests_dir = pathlib.Path(args.manifests_dir).resolve()
+    image_id_regex = re.compile(r"^[A-Za-z0-9_+.-]+:[0-9a-f]{32,}$")
+    for module in spec.get("modules", []):
+        module_id = module.get("id")
+        for resource in module.get("resources", []):
+            if resource.get("type") != "challenge":
+                continue
+            challenge_id = resource.get("id")
+            slug = f"{dojo_prefix}/{module_id}/{challenge_id}"
+            latest_path = manifests_dir / slug / "latest"
+            if not latest_path.exists():
+                print(f"[err] missing published manifest tag file: {latest_path}", file=sys.stderr)
+                return 1
+
+            image_id = latest_path.read_text().strip()
+            if not image_id_regex.fullmatch(image_id):
+                print(f"[err] invalid image id in {latest_path}: {image_id!r}", file=sys.stderr)
+                return 1
+            resource["image"] = f"{args.registry.rstrip('/')}/{slug}@{image_id}"
+
+    module_count = 0
+    challenge_count = 0
+    for module in spec.get("modules", []):
+        module_count += 1
+        for resource in module.get("resources", []):
+            if resource.get("type") == "challenge":
+                challenge_count += 1
+    print(f"[ok] validated dojo={dojo_id} modules={module_count} challenges={challenge_count}", file=sys.stderr)
+
+    dojo_url = os.environ.get("DOJO_URL", "https://pwn.college")
+    dojo_token = os.environ.get("DOJO_TOKEN")
+    if not dojo_token:
+        print("Missing DOJO_TOKEN env var.", file=sys.stderr)
+        return 2
+
+    update_url = dojo_url.rstrip("/") + f"/pwncollege_api/v1/dojos/{dojo_id}/update"
+    try:
+        response = requests.post(
+            update_url,
+            json=spec,
+            headers={"Authorization": f"Bearer {dojo_token}"},
+            timeout=60,
+        )
+    except Exception as error:
+        print(f"[err] dojo update request failed: {error}", file=sys.stderr)
+        return 1
+
+    try:
+        response_body = response.json()
+    except Exception:
+        response_body = {"raw": response.text}
+
+    if response.status_code != 200 or not response_body.get("success"):
+        print(f"[err] dojo update failed: status={response.status_code} body={response_body}", file=sys.stderr)
+        return 1
+
+    print(f"[ok] updated dojo={dojo_id}", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
