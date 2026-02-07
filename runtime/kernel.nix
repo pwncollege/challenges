@@ -6,10 +6,8 @@ let
   };
 
   kernelVersion = builtins.readFile "${pkgs.runCommand "${name}-kata-kernel-version" { nativeBuildInputs = [ pkgs.yq ]; } ''
-    yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml | while IFS= read -r ver; do
-      printf '%s' "''${ver#v}" > "$out"
-      break
-    done
+    ver="$(yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml)"
+    printf '%s' "''${ver#v}" > "$out"
   ''}";
 
   kernelMajor = builtins.elemAt (pkgs.lib.splitString "." kernelVersion) 0;
