@@ -48,11 +48,7 @@ def main() -> int:
         return 0
 
     spec = json.loads(parse_result.stdout)
-
-    dojo_id = spec.get("id")
-    if not isinstance(dojo_id, str) or not dojo_id:
-        print("[err] parsed payload missing dojo id", file=sys.stderr)
-        return 1
+    dojo_id = spec["id"]
 
     dojo_prefix = dojo_dir.name
 
