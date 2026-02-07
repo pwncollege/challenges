@@ -19,7 +19,7 @@ import requests
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
-    parser.add_argument("--manifests", default="/mnt/publish/manifests", help="Directory containing published manifest tag files.")
+    parser.add_argument("--manifests", required=True, help="Directory containing published manifest tag files.")
     parser.add_argument("--registry", required=True, help="Registry hostname for published images.")
     parser.add_argument("dojo_yml", help="Path to dojo.yml.")
     args = parser.parse_args()
