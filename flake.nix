@@ -16,7 +16,9 @@
       devShells = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
+
           pwn-challenge-runtime = import ./runtime { inherit pkgs lib; };
+
           pwnshop = pkgs.writeShellApplication {
             name = "pwnshop";
             runtimeInputs = with pkgs; [
