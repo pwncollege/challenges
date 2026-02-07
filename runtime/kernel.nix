@@ -5,7 +5,7 @@ let
     hash = "sha256-+SppAF77NbXlSrBGvIm40AmNC12GrexbX7fAPBoDAcs=";
   };
 
-  kernelVersion = builtins.readFile "${pkgs.runCommand "${name}-kata-kernel-version" { nativeBuildInputs = [ pkgs.yq ]; } ''
+  kernelVersion = builtins.readFile "${pkgs.runCommand "kata-kernel-version" { nativeBuildInputs = [ pkgs.yq ]; } ''
     version="$(yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml)"
     printf '%s' "''${version#v}" > "$out"
   ''}";
