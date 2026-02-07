@@ -19,21 +19,20 @@ import requests
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
-    parser.add_argument("--dojo-dir", default=os.environ.get("CHALLENGES_DIR"), help="Path to challenge group (contains dojo.yml).")
-    parser.add_argument("--manifests-dir", default="/mnt/publish/manifests", help="Directory containing published manifest tag files.")
+    parser.add_argument("--manifests", default="/mnt/publish/manifests", help="Directory containing published manifest tag files.")
     parser.add_argument("--registry", required=True, help="Registry hostname for published images.")
+    parser.add_argument("dojo_yml", help="Path to dojo.yml.")
     args = parser.parse_args()
 
-    if not args.dojo_dir:
-        print("Missing --dojo-dir (or CHALLENGES_DIR).", file=sys.stderr)
+    dojo_yml = pathlib.Path(args.dojo_yml).resolve()
+    if dojo_yml.name != "dojo.yml":
+        print(f"[err] expected path ending in dojo.yml, got: {dojo_yml}", file=sys.stderr)
         return 2
+    dojo_dir = dojo_yml.parent
 
-    repo_root = pathlib.Path(
-        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
-    )
-    parse_dojo_yml = repo_root / "tools" / "dojo" / "parse-dojo-yml"
+    parse_dojo_yml = pathlib.Path(__file__).resolve().parent / "parse-dojo-yml"
     parse_result = subprocess.run(
-        [str(parse_dojo_yml), "--dojo-dir", args.dojo_dir, "--json"],
+        [str(parse_dojo_yml), "--json", str(dojo_yml)],
         text=True,
         capture_output=True,
     )
@@ -48,24 +47,16 @@ def main() -> int:
         # parse-dojo-yml can exit 0 without producing JSON (e.g. skip); treat as no-op.
         return 0
 
-    try:
-        spec = json.loads(parse_result.stdout)
-    except Exception as error:
-        print(f"[err] parse-dojo-yml produced invalid JSON: {error}", file=sys.stderr)
-        return 1
+    spec = json.loads(parse_result.stdout)
 
     dojo_id = spec.get("id")
     if not isinstance(dojo_id, str) or not dojo_id:
         print("[err] parsed payload missing dojo id", file=sys.stderr)
         return 1
 
-    try:
-        dojo_dir = (repo_root / args.dojo_dir).resolve()
-        dojo_prefix = dojo_dir.relative_to(repo_root / "challenges").parts[0]
-    except Exception:
-        dojo_prefix = dojo_dir.name
+    dojo_prefix = dojo_dir.name
 
-    manifests_dir = pathlib.Path(args.manifests_dir).resolve()
+    manifests_dir = pathlib.Path(args.manifests).resolve()
     image_id_regex = re.compile(r"^[A-Za-z0-9_+.-]+:[0-9a-f]{32,}$")
     for module in spec.get("modules", []):
         module_id = module.get("id")

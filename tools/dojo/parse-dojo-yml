@@ -9,10 +9,8 @@
 import argparse
 import datetime
 import json
-import os
 import pathlib
 import re
-import subprocess
 import sys
 
 import yaml
@@ -24,22 +22,18 @@ NAME_REGEX = re.compile(r"^[\S ]{1,128}$")
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Parse and validate dojo.yml into a Dojo update payload.")
-    parser.add_argument("--dojo-dir", default=os.environ.get("CHALLENGES_DIR"), help="Path to challenge group (contains dojo.yml).")
+    parser.add_argument("dojo_yml", help="Path to dojo.yml.")
     parser.add_argument("--json", action="store_true", help="Print the JSON payload to stdout.")
     args = parser.parse_args()
 
-    if not args.dojo_dir:
-        print("Missing --dojo-dir (or CHALLENGES_DIR).", file=sys.stderr)
-        return 2
-
-    repo_root = pathlib.Path(
-        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
-    )
-    dojo_dir = (repo_root / args.dojo_dir).resolve()
-    dojo_yml = dojo_dir / "dojo.yml"
+    dojo_yml = pathlib.Path(args.dojo_yml).resolve()
+    if dojo_yml.name != "dojo.yml":
+        raise SystemExit(f"Expected path ending in dojo.yml, got: {dojo_yml}")
     if not dojo_yml.exists():
         print(f"[skip] no dojo.yml at {dojo_yml}", file=sys.stderr)
         return 0
+
+    dojo_dir = dojo_yml.parent
 
     try:
         raw = yaml.safe_load(dojo_yml.read_text())
@@ -283,4 +277,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -59,7 +59,7 @@ jobs:
         RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
         RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
-        set -euo pipefail
+        set -eu
         containerd_blobs_dir="/var/lib/containerd/io.containerd.content.v1.content/blobs"
         publish_blobs_dir="/mnt/publish/blobs"
         publish_manifests_dir="/mnt/publish/manifests"
@@ -93,15 +93,14 @@ jobs:
         rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests" --config /dev/null --stats-one-line --stats-log-level NOTICE
         echo "::endgroup::"
 
-    - name: Update dojo spec (images)
+    - name: Update dojo
       if: ${{ hashFiles(format('challenges/{0}/dojo.yml', matrix.challenges)) != '' }}
       env:
-        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
         DOJO_URL: https://pwn.college
         DOJO_TOKEN: ${{ secrets.DOJO_TOKEN }}
       run: |
-        set -euo pipefail
-        ./tools/dojo/update-dojo --manifests-dir /mnt/publish/manifests --registry challenges.pwn.college
+        set -eu
+        ./tools/dojo/update-dojo --manifests /mnt/publish/manifests --registry challenges.pwn.college challenges/${{ matrix.challenges }}/dojo.yml
 
     - name: Report docker storage
       if: always()
