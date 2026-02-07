@@ -34,7 +34,7 @@ let
         "PROFILING"
       ];
     in
-    pkgs.writeText "pwn.conf" (pkgs.lib.strings.concatLines (map (t: "CONFIG_${t}=y") enable));
+    pkgs.writeText "${name}.conf" (pkgs.lib.strings.concatLines (map (t: "CONFIG_${t}=y") enable));
 in
 pkgs.stdenv.mkDerivation {
   pname = "${name}-linux-kernel";
@@ -81,8 +81,8 @@ pkgs.stdenv.mkDerivation {
     patchShebangs tools/packaging
     cd tools/packaging/kernel
 
-    install -D -m 0644 ${config} configs/fragments/x86_64/pwn.conf
-    install -D -m 0644 ${config} configs/fragments/arm64/pwn.conf
+    install -D -m 0644 ${config} configs/fragments/x86_64/${name}.conf
+    install -D -m 0644 ${config} configs/fragments/arm64/${name}.conf
 
     cp ${kernelTarball} linux-${kernelVersion}.tar.xz
     sha256sum linux-${kernelVersion}.tar.xz > linux-${kernelVersion}.tar.xz.sha256
