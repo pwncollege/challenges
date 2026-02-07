@@ -19,7 +19,7 @@ import requests
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
-    parser.add_argument("--manifests", required=True, help="Directory containing published manifest tag files.")
+    parser.add_argument("--manifests", type=pathlib.Path, required=True, help="Directory containing published manifest tag files.")
     parser.add_argument("--registry", required=True, help="Registry hostname for published images.")
     parser.add_argument("dojo_yml", type=pathlib.Path, help="Path to dojo.yml.")
     args = parser.parse_args()
@@ -52,7 +52,7 @@ def main() -> int:
 
     spec = json.loads(parse_result.stdout)
 
-    manifests_dir = pathlib.Path(args.manifests).resolve()
+    manifests_dir = args.manifests
     image_id_regex = re.compile(r"^[A-Za-z0-9_+.-]+:[0-9a-f]{32,}$")
     for module in spec.get("modules", []):
         module_id = module.get("id")
