@@ -72,15 +72,6 @@ def main() -> int:
                 return 1
             resource["image"] = f"{args.registry.rstrip('/')}/{slug}@{image_id}"
 
-    module_count = 0
-    challenge_count = 0
-    for module in spec.get("modules", []):
-        module_count += 1
-        for resource in module.get("resources", []):
-            if resource.get("type") == "challenge":
-                challenge_count += 1
-    print(f"[ok] validated dojo={dojo_id} modules={module_count} challenges={challenge_count}", file=sys.stderr)
-
     dojo_url = os.environ.get("DOJO_URL", "https://pwn.college")
     dojo_token = os.environ.get("DOJO_TOKEN")
     if not dojo_token:
