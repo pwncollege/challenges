@@ -17,13 +17,27 @@
         let
           pkgs = import nixpkgs { inherit system; };
           pwnChallengeRuntime = import ./runtime { inherit pkgs lib; };
+          pwnshop = pkgs.writeShellApplication {
+            name = "pwnshop";
+            runtimeInputs = with pkgs; [
+              git
+              uv
+            ];
+            text = ''
+              set -euo pipefail
+              root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+              exec "$root/pwnshop" "$@"
+            '';
+          };
         in
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
               git
-              jq
+              git-crypt
               docker
+              uv
+              pwnshop
               pwnChallengeRuntime
             ];
             shellHook = ''
