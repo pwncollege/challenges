@@ -51,7 +51,6 @@ def main() -> int:
         return 0
 
     spec = json.loads(parse_result.stdout)
-    dojo_id = spec["id"]
 
     manifests_dir = pathlib.Path(args.manifests).resolve()
     image_id_regex = re.compile(r"^[A-Za-z0-9_+.-]+:[0-9a-f]{32,}$")
@@ -73,6 +72,7 @@ def main() -> int:
                 return 1
             resource["image"] = f"{args.registry}/{slug}@{image_id}"
 
+    dojo_id = spec["id"]
     update_url = f"{dojo_url}/pwncollege_api/v1/dojos/{dojo_id}/update"
     try:
         response = requests.post(
