@@ -35,6 +35,7 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
+              docker
               git
               git-crypt
               pwn-challenge-runtime
