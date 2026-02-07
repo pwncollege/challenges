@@ -60,10 +60,8 @@ def main() -> int:
             challenge_id = resource.get("id")
             slug = f"{dojo_prefix}/{module_id}/{challenge_id}"
             image = f"{args.registry}/{slug}"
-            if manifests_dir:
-                latest_path = manifests_dir / slug / "latest"
-                if latest_path.exists():
-                    image = f"{image}@{latest_path.read_text().strip()}"
+            if manifests_dir and (latest_path := manifests_dir / slug / "latest").exists():
+                image = f"{image}@{latest_path.read_text().strip()}"
             resource["image"] = image
 
     dojo_id = spec["id"]
