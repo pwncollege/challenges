@@ -35,6 +35,9 @@ jobs:
       fail-fast: false
       matrix:
         challenges: ${{ fromJson(needs.determine-modified-challenges.outputs.challenges) }}
+        include:
+          - challenges: v8-exploitation
+            jobs: 1
 
     steps:
     - uses: actions/checkout@v4
@@ -50,6 +53,7 @@ jobs:
       with:
         challenges: ${{ matrix.challenges }}
         modified_since_ref: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+        jobs: ${{ matrix.jobs }}
 
     - name: Report docker storage
       if: always()

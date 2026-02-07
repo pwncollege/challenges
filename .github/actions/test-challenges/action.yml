@@ -8,6 +8,10 @@ inputs:
     description: Base ref challenges have been modified since.
     required: false
     default: ""
+  jobs:
+    description: Number of parallel jobs (default: nproc * 2).
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -36,9 +40,10 @@ runs:
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
+        JOBS_OVERRIDE: ${{ inputs.jobs }}
       run: |
         set -euo pipefail
-        JOBS=$(( $(nproc) * 2 ))
+        JOBS="${JOBS_OVERRIDE:-$(( $(nproc) * 2 ))}"
         echo "::group::Challenges to be tested"
         ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"
