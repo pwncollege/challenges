@@ -18,7 +18,7 @@ import requests
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
-    parser.add_argument("--manifests", type=pathlib.Path, required=True, help="Directory containing published manifest tag files.")
+    parser.add_argument("--manifests", type=pathlib.Path, help="Directory containing published manifest tag files.")
     parser.add_argument("--registry", required=True, help="Registry hostname for published images.")
     parser.add_argument("dojo_yml", type=pathlib.Path, help="Path to dojo.yml.")
     args = parser.parse_args()
@@ -59,13 +59,12 @@ def main() -> int:
                 continue
             challenge_id = resource.get("id")
             slug = f"{dojo_prefix}/{module_id}/{challenge_id}"
-            latest_path = manifests_dir / slug / "latest"
-            if not latest_path.exists():
-                print(f"Error: missing published manifest tag file: {latest_path}", file=sys.stderr)
-                return 1
-
-            image_id = latest_path.read_text().strip()
-            resource["image"] = f"{args.registry}/{slug}@{image_id}"
+            image = f"{args.registry}/{slug}"
+            if manifests_dir:
+                latest_path = manifests_dir / slug / "latest"
+                if latest_path.exists():
+                    image = f"{image}@{latest_path.read_text().strip()}"
+            resource["image"] = image
 
     dojo_id = spec["id"]
     update_url = f"{dojo_url}/pwncollege_api/v1/dojos/{dojo_id}/update"
