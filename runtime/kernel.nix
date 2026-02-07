@@ -5,9 +5,12 @@ let
     hash = "sha256-+SppAF77NbXlSrBGvIm40AmNC12GrexbX7fAPBoDAcs=";
   };
 
-  kernelVersion = pkgs.lib.removePrefix "v" (pkgs.lib.removeSuffix "\r" (pkgs.lib.removeSuffix "\n" (builtins.readFile "${pkgs.runCommand "${name}-kata-kernel-version" { nativeBuildInputs = [ pkgs.yq ]; } ''
-    yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml > "$out"
-  ''}")));
+  kernelVersion = builtins.readFile "${pkgs.runCommand "${name}-kata-kernel-version" { nativeBuildInputs = [ pkgs.yq ]; } ''
+    yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml | while IFS= read -r ver; do
+      printf '%s' "''${ver#v}" > "$out"
+      break
+    done
+  ''}";
 
   kernelMajor = builtins.elemAt (pkgs.lib.splitString "." kernelVersion) 0;
   kernelTarball = pkgs.fetchurl {
