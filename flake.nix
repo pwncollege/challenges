@@ -24,7 +24,6 @@
               git
               jq
               docker
-              kata-runtime
               pwnChallengeRuntime
             ];
             shellHook = ''
