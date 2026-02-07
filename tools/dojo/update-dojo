@@ -17,6 +17,7 @@ import sys
 
 import requests
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
     parser.add_argument("--manifests", required=True, help="Directory containing published manifest tag files.")
@@ -34,7 +35,8 @@ def main() -> int:
         return 2
 
     dojo_yml = pathlib.Path(args.dojo_yml).resolve()
-    dojo_dir = dojo_yml.parent
+    dojo_yml_arg = pathlib.Path(args.dojo_yml)
+    dojo_prefix = "/".join(dojo_yml_arg.parts[1:-1])
 
     parse_dojo_yml = pathlib.Path(__file__).resolve().parent / "parse-dojo-yml"
     parse_result = subprocess.run(
@@ -52,8 +54,6 @@ def main() -> int:
 
     spec = json.loads(parse_result.stdout)
     dojo_id = spec["id"]
-
-    dojo_prefix = dojo_dir.name
 
     manifests_dir = pathlib.Path(args.manifests).resolve()
     image_id_regex = re.compile(r"^[A-Za-z0-9_+.-]+:[0-9a-f]{32,}$")
@@ -73,7 +73,7 @@ def main() -> int:
             if not image_id_regex.fullmatch(image_id):
                 print(f"Error: invalid image id in {latest_path}: {image_id!r}", file=sys.stderr)
                 return 1
-            resource["image"] = f"{args.registry.rstrip('/')}/{slug}@{image_id}"
+            resource["image"] = f"{args.registry}/{slug}@{image_id}"
 
     update_url = f"{dojo_url}/pwncollege_api/v1/dojos/{dojo_id}/update"
     try:
