@@ -8,6 +8,17 @@ This is the pwn.college challenge monorepo containing cybersecurity CTF challeng
 
 ## Key Commands
 
+### Dev Environment (Nix)
+
+Preferred workflow is to use the repo's Nix flake dev shell:
+
+```bash
+nix develop
+./pwnshop test challenges/web-security/path-traversal-1
+```
+
+Requirements for `nix develop`: Linux (`x86_64-linux`), `systemd`, `sudo`, and Nix flakes enabled (`experimental-features = nix-command flakes` in `~/.config/nix/nix.conf` or `/etc/nix/nix.conf`). See `docs/development.md`.
+
 ### Challenge CLI
 
 All workflows run through the `./pwnshop` CLI (implemented in `tools/pwnshop/src/pwnshop/commands` and backed by shared helpers in `tools/pwnshop/src/pwnshop/lib`).
