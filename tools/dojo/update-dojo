@@ -29,6 +29,9 @@ def main() -> int:
     if not dojo_url:
         print("Missing DOJO_URL env var.", file=sys.stderr)
         return 2
+    if dojo_url.endswith("/"):
+        print("DOJO_URL must not end with '/'.", file=sys.stderr)
+        return 2
     if not dojo_token:
         print("Missing DOJO_TOKEN env var.", file=sys.stderr)
         return 2
@@ -81,7 +84,7 @@ def main() -> int:
                 return 1
             resource["image"] = f"{args.registry.rstrip('/')}/{slug}@{image_id}"
 
-    update_url = dojo_url.rstrip("/") + f"/pwncollege_api/v1/dojos/{dojo_id}/update"
+    update_url = f"{dojo_url}/pwncollege_api/v1/dojos/{dojo_id}/update"
     try:
         response = requests.post(
             update_url,
