@@ -85,9 +85,8 @@ def main() -> int:
         print(f"Error: dojo update request failed: {error}", file=sys.stderr)
         return 1
 
-    response_body = response.text
     if response.status_code != 200:
-        print(f"Error: dojo update failed: status={response.status_code} body={response_body}", file=sys.stderr)
+        print(f"Error: dojo update failed: status={response.status_code} body={response.text}", file=sys.stderr)
         return 1
 
     print("Updated successfully", file=sys.stderr)
