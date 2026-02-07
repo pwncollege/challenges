@@ -65,9 +65,6 @@ def main() -> int:
                 return 1
 
             image_id = latest_path.read_text().strip()
-            if not image_id:
-                print(f"Error: empty image id in {latest_path}", file=sys.stderr)
-                return 1
             resource["image"] = f"{args.registry}/{slug}@{image_id}"
 
     dojo_id = spec["id"]
