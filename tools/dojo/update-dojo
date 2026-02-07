@@ -24,6 +24,15 @@ def main() -> int:
     parser.add_argument("dojo_yml", help="Path to dojo.yml.")
     args = parser.parse_args()
 
+    dojo_url = os.environ.get("DOJO_URL")
+    dojo_token = os.environ.get("DOJO_TOKEN")
+    if not dojo_url:
+        print("Missing DOJO_URL env var.", file=sys.stderr)
+        return 2
+    if not dojo_token:
+        print("Missing DOJO_TOKEN env var.", file=sys.stderr)
+        return 2
+
     dojo_yml = pathlib.Path(args.dojo_yml).resolve()
     if dojo_yml.name != "dojo.yml":
         print(f"[err] expected path ending in dojo.yml, got: {dojo_yml}", file=sys.stderr)
@@ -71,12 +80,6 @@ def main() -> int:
                 print(f"[err] invalid image id in {latest_path}: {image_id!r}", file=sys.stderr)
                 return 1
             resource["image"] = f"{args.registry.rstrip('/')}/{slug}@{image_id}"
-
-    dojo_url = os.environ.get("DOJO_URL", "https://pwn.college")
-    dojo_token = os.environ.get("DOJO_TOKEN")
-    if not dojo_token:
-        print("Missing DOJO_TOKEN env var.", file=sys.stderr)
-        return 2
 
     update_url = dojo_url.rstrip("/") + f"/pwncollege_api/v1/dojos/{dojo_id}/update"
     try:
