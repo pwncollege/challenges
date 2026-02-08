@@ -8,15 +8,31 @@ import re
 import shutil
 import subprocess
 import tempfile
-from typing import Iterable, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
 import black
 import jinja2
 import pyastyle
+import yaml
 
 logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
+
+CHALLENGE_CONFIG_DEFAULTS: Dict[str, Any] = {
+    "privileged": False,
+}
+
+
+def load_challenge_config(challenge_path: pathlib.Path) -> Dict[str, Any]:
+    config = dict(CHALLENGE_CONFIG_DEFAULTS)
+    config_file = challenge_path / "challenge.yml"
+    if config_file.is_file():
+        logger.debug("loading challenge config from %s", config_file)
+        with open(config_file) as f:
+            user_config = yaml.safe_load(f) or {}
+        config.update(user_config)
+    return config
 
 
 class _NoSelfExtendLoader(jinja2.FileSystemLoader):
@@ -136,7 +152,7 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
 
 @contextlib.contextmanager
 def run_challenge(
-    challenge_image: str, *, volumes: Optional[Sequence[pathlib.Path]] = None
+    challenge_image: str, *, volumes: Optional[Sequence[pathlib.Path]] = None, privileged: bool = False
 ) -> Iterator[tuple[str, str]]:
     flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
     env_options = []
@@ -149,6 +165,8 @@ def run_challenge(
     logger.info("starting container for image %s", challenge_image)
     if volumes:
         logger.debug("mounting volumes: %s", volumes)
+    if privileged:
+        logger.debug("running container in privileged mode")
     container = (
         subprocess.check_output(
             [
@@ -159,8 +177,7 @@ def run_challenge(
                 "--detach",
                 "--init",
                 "--user=0:0",
-                "--device=/dev/kvm",
-                "--cap-add=SYS_PTRACE",
+                *(["--privileged"] if privileged else ["--device=/dev/kvm", "--cap-add=SYS_PTRACE"]),
                 *env_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
                 challenge_image,
