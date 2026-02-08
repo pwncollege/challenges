@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# thanks to armax00 for finding this insane hack
+mv /challenge/.inputrc /root

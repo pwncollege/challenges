@@ -1,0 +1,24 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+# props to HyperCube for the idea for this challenge
+
+# HINT: This challenge uses /bin/bash. Double-check which bash you do your prep work in...
+
+PATH=/usr/bin
+RESPONSE="$1"
+
+exec 2>/dev/null # props to amateurhour for this unintended solve
+
+# This disables command injection. If you can find a bypass of it, let Zardus know!
+set -T
+readonly BASH_SUBSHELL # props to HAL50000 for the bypass necessitating this fix
+trap '[[ $BASH_SUBSHELL -gt 0 ]] && exit' DEBUG
+
+if (( RESPONSE == RANDOM ))
+then
+	echo "Success!"
+	cat /flag
+else
+	echo "Wrong!"
+	rm /flag
+fi

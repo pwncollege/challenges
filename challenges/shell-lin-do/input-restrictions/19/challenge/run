@@ -1,0 +1,17 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+# This neat trick was generously contributed by armax00
+
+PATH=/usr/bin
+
+WORKDIR=$(mktemp -d)
+[ -n "$WORKDIR" ] || exit 1
+cd $WORKDIR
+
+doit() {
+	echo -n ""
+	read INPUT < <(head -c5 | tr -d "[A-Za-z0-9./~\-]")
+	eval "$INPUT"
+}
+
+doit

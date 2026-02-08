@@ -1,0 +1,3 @@
+#!/usr/bin/exec-suid -- /bin/sh
+
+fortune

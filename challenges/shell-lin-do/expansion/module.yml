@@ -1,0 +1,101 @@
+name: Abusing Expansion
+resources:
+- name: Resources
+  type: markdown
+  content: |
+    To expand your mind is the true goal of the shell.
+    Reading the knowledge linked here will help your mind grow.
+
+    - `# man 7 glob` (for file name matching)
+    - `# help` (documentation for shell builtins)
+    - [Bash reference on Shell Expansions](https://www.gnu.org/software/bash/manual/html_node/Shell-Expansions.html)
+
+challenges:
+
+- id: "2"
+  name: Path of the Unquoted
+  description: In the way of the unquoted, freedom is found, though often accompanied by unexpected guests.
+
+- id: "4"
+  name: Globbing Harmony
+  description: True power is not in controlling every star, but in the harmony of the glob, where all stars align
+
+- id: "10"
+  name: Zen of Expansion
+  description: To see all, one must expand their vision as the shell expands its variables.
+
+- id: "15"
+  name: Way of the Wildcard
+  description: The wildcard is a tempest, unrestrained. Master its path, and you master the storm.
+
+- id: "16"
+  name: Saga of the Sneaky Similarity
+  description: Like a ninja in the night, the comparison sneaks in. Guide its path, and the flag will be found.
+
+- id: "18"
+  name: Enigma of the Environment
+  description: Environment variables hold an enigma. Unravel it, and command the shell's surroundings.
+
+- id: "19"
+  name: Voyage of the Variable
+  description: Take a voyage in the world of variable variables, whose values are as fluid as water.
+
+- id: "20"
+  name: Dance of the Delimiters
+  description: Observe the dance of the delimiters, a ballet of separation and unity in the script's grand performance.
+
+- id: "21"
+  name: Symphony of Separation
+  description: Beyond the dance, there lies the symphony. Here, the delimiters rise and fall in a grand composition, where the maestro must conduct each pause and crescendo with unerring precision.
+
+- id: "22"
+  name: Saga of Sanitization
+  description: There are those who, faced with expression, will try to purge its glory. But even in the face of sanitization, suprises await.
+
+- id: "23"
+  name: Tale of the Test
+  description: In every test, there is room for a twist. Find a way to bring it to life, and the flag will be within your grasp.
+
+- id: "24"
+  name: Your Shattered Sanity
+  description: Be careful to keep your mind whole. Once shattered, you cannot trust what parts of it exist.
+
+- id: "24-1"
+  name: Untrustworthy Utterances
+  description: Spoken slyly, the wrong pair of words can cause more ruin than the strongest pair of fists.
+
+- id: "24-2"
+  name: Echoes in Silence
+  description: No scream will breach this barrier, only a perfectly placed whisper shall ripple the void.
+
+- id: "25"
+  name: Masquerade of the Self
+  description: In the deceptive dance of the shell, nothing is as it seems. Master the art of illusion, and the path to truth will unveil itself.
+
+- id: "30"
+  name: Journey of the PATH
+  description: In the journey of the PATH, each step uncovers new commands, new potentials.
+
+- id: "40"
+  name: Secrets of the Shell
+  description: The shell holds many secrets, waiting for those patient and brave enough to uncover them.
+
+- id: "40-1"
+  name: The Swap, Scheming
+  description: A single look can change an unknowable mystery into a thing quite predictable.
+
+- id: "41"
+  name: Shell Sorcery
+  description: This is where the arcane becomes algorithm, and every keystroke is a spell invoking the power of the command line.
+
+- id: "42"
+  name: The Commanded Condition
+  description: The condition guards the flag. Command it to be gone.
+
+- id: "42-1"
+  name: The Dreadful Discovery
+  description: In ages past, just two invocations banished command injections. Now we need three. Can you discover HAL50000's terrifying realization?
+
+- id: "43"
+  name: Index of Insanity
+  description: When you cannot find the good within the array, all hope may be lost. At the right time, a whispered word can sway the balance.

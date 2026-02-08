@@ -1,0 +1,39 @@
+name: Inputting a Surprise
+resources:
+- name: Resources
+  type: markdown
+  content: |
+    Wisdom harkens from a long-gone age.
+    Will you heed it?
+    
+    - [Common pitfalls in shell scripting (many of which lead to security issues in these levels!](https://mywiki.wooledge.org/BashPitfalls)
+    - [More weirdness!](http://www.etalabs.net/sh_tricks.html)
+
+challenges:
+- id: "10"
+  name: Dance of the Disguised
+  description: In the dance of the disguised, a surprise twirls gracefully. Can you keep pace with its rhythm?
+
+- id: "30"
+  name: Script of the Silent
+  description: In the script of the silent, each pause, each absence speaks volumes. Can you hear the unspoken lines?
+
+- id: "40"
+  name: One Single Slice
+  description: Calculate your attack well, and your swift slice will spoil the safety of your foe.
+
+- id: "50"
+  name: The Treacherous Title
+  description: The names we call ourselves define, in part, who we are. Can you find the true name of the flag?
+
+- id: "60"
+  name: The Dangling Danger
+  description: Despite focusing on the end goal, we often easily miss what comes at the end. Ironic.
+
+- id: "61"
+  name: The Evil End
+  description: You can try hard, and you can get far, but in the end, omission can cost you the flag.
+
+- id: "70"
+  name: An Eroded Erasure
+  description: You strive to erase your mistakes in life, but errors compound errors, and the flag is revealed.
