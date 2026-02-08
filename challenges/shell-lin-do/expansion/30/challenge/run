@@ -1,0 +1,9 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+PATH=/usr/bin
+[ -n "$1" ] || exit
+
+GUESSFILE=$(mktemp)
+
+printf $1 > $GUESSFILE
+grep -f /flag < $GUESSFILE || echo Goodbye!

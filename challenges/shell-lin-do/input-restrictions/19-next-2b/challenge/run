@@ -1,0 +1,16 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+PATH=/usr/bin
+
+WORKDIR=$(mktemp -d)
+[ -n "$WORKDIR" ] || exit 1
+cp "$1" "$WORKDIR/dangerous-script.sh"
+cd $WORKDIR
+
+doit() {
+	echo -n ""
+	cat dangerous-script.sh | tr -cd "[\n \-/a-z]" | grep -E "^(echo|read) " > safe-script.sh
+	bash safe-script.sh
+}
+
+doit
