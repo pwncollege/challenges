@@ -34,8 +34,8 @@ def main() -> int:
     dojo_dir = dojo_yml.parent
 
     try:
-        raw = yaml.safe_load(dojo_yml.read_text())
-        if not isinstance(raw, dict):
+        dojo_data = yaml.safe_load(dojo_yml.read_text())
+        if not isinstance(dojo_data, dict):
             raise ValueError(f"{dojo_yml}: expected a mapping at the top level")
 
         allowed_dojo_keys = {
@@ -50,47 +50,39 @@ def main() -> int:
             "importable",
             "interfaces",
         }
-        extra = set(raw.keys()) - allowed_dojo_keys
-        if extra:
+        if extra := set(dojo_data.keys()) - allowed_dojo_keys:
             raise ValueError(f"dojo.yml: unsupported keys: {', '.join(sorted(extra))}")
 
-        dojo_id = raw.get("id")
+        dojo_id = dojo_data.get("id")
         if not isinstance(dojo_id, str) or not ID_REGEX.fullmatch(dojo_id):
             raise ValueError("dojo.yml.id: expected /^[a-z0-9-]{1,32}$/")
 
-        dojo_name = raw.get("name") or dojo_id.replace("-", " ").title()
+        dojo_name = dojo_data.get("name") or dojo_id.replace("-", " ").title()
         if not isinstance(dojo_name, str) or not NAME_REGEX.fullmatch(dojo_name):
             raise ValueError("dojo.yml.name: invalid name")
 
-        dojo_type = raw.get("type")
+        dojo_type = dojo_data.get("type")
         if dojo_type is not None and (not isinstance(dojo_type, str) or not ID_REGEX.fullmatch(dojo_type)):
             raise ValueError("dojo.yml.type: expected /^[a-z0-9-]{1,32}$/")
 
-        dojo_description = raw.get("description")
+        dojo_description = dojo_data.get("description")
         if dojo_description is not None and not isinstance(dojo_description, str):
             raise ValueError("dojo.yml.description: expected string")
 
-        dojo_award = raw.get("award")
+        dojo_award = dojo_data.get("award")
         if dojo_award is not None:
             if not isinstance(dojo_award, dict):
                 raise ValueError("dojo.yml.award: expected mapping")
-            extra = set(dojo_award.keys()) - {"emoji", "belt"}
-            if extra:
+            if extra := set(dojo_award.keys()) - {"emoji", "belt"}:
                 raise ValueError(f"dojo.yml.award: unsupported keys: {', '.join(sorted(extra))}")
             if "emoji" in dojo_award and not isinstance(dojo_award["emoji"], str):
                 raise ValueError("dojo.yml.award.emoji: expected string")
             if "belt" in dojo_award and not isinstance(dojo_award["belt"], str):
                 raise ValueError("dojo.yml.award.belt: expected string")
 
-        modules = raw.get("modules")
+        modules = dojo_data.get("modules")
         if not isinstance(modules, list) or not modules:
             raise ValueError("dojo.yml.modules: expected a non-empty list")
-
-        dojo_defaults = {
-            key: raw.get(key)
-            for key in ["privileged", "allow_privileged", "importable", "interfaces"]
-            if key in raw
-        }
 
         parsed_modules = []
         for module_index, module_entry in enumerate(modules):
@@ -99,8 +91,7 @@ def main() -> int:
                 raise ValueError(f"{where_module}: expected mapping")
 
             allowed_module_keys = {"id", "name", "description", "privileged", "allow_privileged", "importable", "interfaces"}
-            extra = set(module_entry.keys()) - allowed_module_keys
-            if extra:
+            if extra := set(module_entry.keys()) - allowed_module_keys:
                 raise ValueError(f"{where_module}: unsupported keys: {', '.join(sorted(extra))}")
 
             module_id = module_entry.get("id")
@@ -109,21 +100,17 @@ def main() -> int:
 
             module_dir = dojo_dir / module_id
             module_file_path = module_dir / "module.yml"
-            module_file_data = {}
             if module_file_path.exists():
-                loaded = yaml.safe_load(module_file_path.read_text())
-                if loaded is None:
-                    loaded = {}
-                if not isinstance(loaded, dict):
+                module_file_data = yaml.safe_load(module_file_path.read_text()) or {}
+                if not isinstance(module_file_data, dict):
                     raise ValueError(f"{module_file_path}: expected a mapping at the top level")
-                module_file_data = loaded
+            else:
+                module_file_data = {}
 
-            module_data = dict(module_file_data)
-            module_data.update(module_entry)
+            module_data = {**module_file_data, **module_entry}
 
             allowed_module_data_keys = {"id", "name", "description", "challenges", "privileged", "allow_privileged", "importable", "interfaces"}
-            extra = set(module_data.keys()) - allowed_module_data_keys
-            if extra:
+            if extra := set(module_data.keys()) - allowed_module_data_keys:
                 raise ValueError(f"{module_dir}/module.yml: unsupported keys: {', '.join(sorted(extra))}")
 
             module_name = module_data.get("name") or module_id.replace("-", " ").title()
@@ -131,16 +118,11 @@ def main() -> int:
                 raise ValueError(f"{where_module}.name: invalid name")
 
             module_description = module_data.get("description")
-            if module_description is None and (module_dir / "DESCRIPTION.md").exists():
-                module_description = (module_dir / "DESCRIPTION.md").read_text()
+            module_description_path = module_dir / "DESCRIPTION.md"
+            if module_description is None and module_description_path.exists():
+                module_description = module_description_path.read_text()
             if module_description is not None and not isinstance(module_description, str):
                 raise ValueError(f"{where_module}.description: expected string")
-
-            module_defaults = {
-                key: module_data.get(key)
-                for key in ["privileged", "allow_privileged", "importable", "interfaces"]
-                if key in module_data
-            }
 
             challenges = module_data.get("challenges")
             if not isinstance(challenges, list) or not challenges:
@@ -158,17 +140,14 @@ def main() -> int:
 
                 challenge_dir = module_dir / challenge_id
                 challenge_file_path = challenge_dir / "challenge.yml"
-                challenge_file_data = {}
                 if challenge_file_path.exists():
-                    loaded = yaml.safe_load(challenge_file_path.read_text())
-                    if loaded is None:
-                        loaded = {}
-                    if not isinstance(loaded, dict):
+                    challenge_file_data = yaml.safe_load(challenge_file_path.read_text()) or {}
+                    if not isinstance(challenge_file_data, dict):
                         raise ValueError(f"{challenge_file_path}: expected a mapping at the top level")
-                    challenge_file_data = loaded
+                else:
+                    challenge_file_data = {}
 
-                challenge_data = dict(challenge_file_data)
-                challenge_data.update(challenge_entry)
+                challenge_data = {**challenge_file_data, **challenge_entry}
 
                 allowed_challenge_keys = {
                     "id",
@@ -182,12 +161,12 @@ def main() -> int:
                     "progression_locked",
                     "interfaces",
                 }
-                extra = set(challenge_data.keys()) - allowed_challenge_keys
-                if extra:
+                if extra := set(challenge_data.keys()) - allowed_challenge_keys:
                     raise ValueError(f"{challenge_dir}/challenge.yml: unsupported keys: {', '.join(sorted(extra))}")
 
-                if challenge_data.get("description") is None and (challenge_dir / "DESCRIPTION.md").exists():
-                    challenge_data["description"] = (challenge_dir / "DESCRIPTION.md").read_text()
+                challenge_description_path = challenge_dir / "DESCRIPTION.md"
+                if challenge_data.get("description") is None and challenge_description_path.exists():
+                    challenge_data["description"] = challenge_description_path.read_text()
 
                 challenge_name = challenge_data.get("name") or challenge_id.replace("-", " ").title()
                 if not isinstance(challenge_name, str) or not NAME_REGEX.fullmatch(challenge_name):
@@ -204,25 +183,23 @@ def main() -> int:
                 if visibility is not None:
                     if not isinstance(visibility, dict):
                         raise ValueError(f"{where_challenge}.visibility: expected mapping")
-                    extra = set(visibility.keys()) - {"start", "stop"}
-                    if extra:
+                    if extra := set(visibility.keys()) - {"start", "stop"}:
                         raise ValueError(f"{where_challenge}.visibility: unsupported keys: {', '.join(sorted(extra))}")
 
-                    out_visibility = {}
-                    if "start" in visibility:
-                        if not isinstance(visibility["start"], str):
-                            raise ValueError(f"{where_challenge}.visibility.start: expected ISO string")
-                        datetime.datetime.fromisoformat(visibility["start"])
-                        out_visibility["start"] = visibility["start"]
-                    if "stop" in visibility:
-                        if not isinstance(visibility["stop"], str):
-                            raise ValueError(f"{where_challenge}.visibility.stop: expected ISO string")
-                        datetime.datetime.fromisoformat(visibility["stop"])
-                        out_visibility["stop"] = visibility["stop"]
+                    out_visibility = {key: visibility[key] for key in ["start", "stop"] if key in visibility}
+                    for key, value in out_visibility.items():
+                        if not isinstance(value, str):
+                            raise ValueError(f"{where_challenge}.visibility.{key}: expected ISO string")
+                        datetime.datetime.fromisoformat(value)
                     resource["visibility"] = out_visibility
 
                 for field in ["privileged", "allow_privileged", "importable", "interfaces"]:
-                    value = challenge_data.get(field, module_defaults.get(field, dojo_defaults.get(field)))
+                    if field in challenge_data:
+                        value = challenge_data[field]
+                    elif field in module_data:
+                        value = module_data[field]
+                    else:
+                        value = dojo_data.get(field)
                     if value is None:
                         continue
                     if field != "interfaces" and not isinstance(value, bool):
@@ -259,15 +236,7 @@ def main() -> int:
         print(f"Error: failed to parse {dojo_yml}: {error}", file=sys.stderr)
         return 1
 
-    module_count = 0
-    challenge_count = 0
-    for module in spec.get("modules", []):
-        module_count += 1
-        for resource in module.get("resources", []):
-            if resource.get("type") == "challenge":
-                challenge_count += 1
-
-    print(f"Parsed successfully: dojo={dojo_id} modules={module_count} challenges={challenge_count}", file=sys.stderr)
+    print(f"Parsed successfully: dojo={dojo_id}", file=sys.stderr)
     if args.json:
         print(json.dumps(spec, indent=2, sort_keys=False))
     return 0
