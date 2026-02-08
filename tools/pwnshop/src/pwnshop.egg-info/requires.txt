@@ -1,0 +1,5 @@
+black
+click
+jinja2
+pyastyle
+rich
