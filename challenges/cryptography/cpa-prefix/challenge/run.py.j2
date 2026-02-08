@@ -1,0 +1,7 @@
+{% extends "common/crypto_cpa_ecb.py.j2" %}
+{% set chal.interface = "cli" %}
+{% set chal.input_mode = "prefix_flag" %}
+{% set chal.padding_mode = "pad_if_needed" %}
+{% set chal.output_mode = "split_blocks" %}
+{% set chal.loop_model = "bounded" %}
+{% set chal.action_label = "Prepend something to the flag." %}
