@@ -109,7 +109,7 @@ def main() -> int:
 
             module_data = {**module_file_data, **module_entry}
 
-            allowed_module_data_keys = {"id", "name", "description", "challenges", "privileged", "allow_privileged", "importable", "interfaces"}
+            allowed_module_data_keys = {"id", "name", "description", "challenges", "resources", "privileged", "allow_privileged", "importable", "interfaces"}
             if extra := set(module_data.keys()) - allowed_module_data_keys:
                 raise ValueError(f"{module_dir}/module.yml: unsupported keys: {', '.join(sorted(extra))}")
 
@@ -129,6 +129,16 @@ def main() -> int:
                 raise ValueError(f"{module_dir}/module.yml: expected non-empty 'challenges' list (challenge-only modules)")
 
             resources = []
+            if "resources" in module_data:
+                if not isinstance(module_data["resources"], list):
+                    raise ValueError(f"{module_dir}/module.yml.resources: expected list")
+                for resource_index, resource in enumerate(module_data["resources"]):
+                    if not isinstance(resource, dict):
+                        raise ValueError(f"{module_dir}/module.yml.resources[{resource_index}]: expected mapping")
+                    if resource.get("type") == "challenge":
+                        raise ValueError(f"{module_dir}/module.yml.resources[{resource_index}]: challenge resources must be defined in 'challenges'")
+                    resources.append(resource)
+
             for challenge_index, challenge_entry in enumerate(challenges):
                 where_challenge = f"{module_dir}/module.yml.challenges[{challenge_index}]"
                 if not isinstance(challenge_entry, dict):
