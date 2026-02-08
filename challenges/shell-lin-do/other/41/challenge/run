@@ -1,0 +1,34 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+PATH=/usr/bin
+
+WORKDIR=$(mktemp -d)
+[ -n "$WORKDIR" ] || exit 1
+cd $WORKDIR
+
+chmod o-rwx .
+chmod o-rwx /proc
+
+function check_script {
+	curl -s http://challenge.localhost:1337/install.sh -o script.sh || exit 1
+
+	# good installer scripts should just touch a bunch of files
+	grep -E '^(touch|echo|sleep) [0-9a-zA-Z]*$' script.sh > sanitized_script.sh
+	if ! diff script.sh sanitized_script.sh
+	then
+		echo "Looks like there are some shenanigans in your script. Aborting!"
+		rm -f /flag
+		exit 1
+	fi
+}
+
+echo "Thoroughly checking your install script for shenanigans..."
+i=0
+MAX=$(($RANDOM%1000+1337))
+while [ "$i" -lt "$MAX" ]
+do
+	check_script
+	echo -ne "\rChecked for the $((i++))th time... "
+done
+
+curl -s http://challenge.localhost:1337/install.sh | sh

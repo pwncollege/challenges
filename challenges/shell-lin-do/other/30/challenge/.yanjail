@@ -1,0 +1,92 @@
+# This disables command injection. If you can find a bypass of it, let Zardus know!
+set -T
+readonly BASH_SUBSHELL # props to HAL50000 for the bypass necessitating this fix
+trap '[[ $BASH_SUBSHELL -gt 0 ]] && exit' DEBUG
+
+set +H
+set +f
+set +m
+set +B
+
+export PS1="NO WAY OUT: "
+export PATH=/nope
+alias case=nope
+alias coproc=nope
+alias do=nope
+alias done=nope
+alias elif=nope
+alias else=nope
+alias esac=nope
+#alias exit=nope
+alias fi=nope
+alias for=nope
+alias function=nope
+alias if=nope
+alias in=nope
+alias select=nope
+alias then=nope
+alias time=nope
+alias until=nope
+alias while=nope
+
+enable -n .
+enable -n :
+enable -n [
+enable -n alias
+enable -n bg
+enable -n bind
+enable -n break
+enable -n builtin
+enable -n caller
+enable -n cd
+enable -n command
+enable -n compgen
+enable -n complete
+enable -n compopt
+enable -n continue
+enable -n declare
+enable -n dirs
+enable -n disown
+enable -n echo
+enable -n eval
+enable -n exec
+#enable -n exit
+enable -n export
+enable -n false
+enable -n fc
+enable -n fg
+enable -n getopts
+enable -n hash
+enable -n help
+enable -n history
+enable -n jobs
+enable -n kill
+enable -n let
+enable -n local
+enable -n logout
+enable -n mapfile
+enable -n popd
+enable -n printf
+enable -n pushd
+enable -n pwd
+enable -n read
+enable -n readarray
+enable -n readonly
+enable -n return
+enable -n set
+enable -n shift
+enable -n shopt
+enable -n source
+enable -n suspend
+enable -n test
+enable -n times
+enable -n trap
+enable -n true
+enable -n type
+enable -n typeset
+enable -n ulimit
+enable -n umask
+enable -n unalias
+enable -n unset
+enable -n wait
+enable -n enable

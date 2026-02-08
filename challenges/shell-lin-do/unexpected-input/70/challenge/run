@@ -1,0 +1,5 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+read FLAG < /flag
+read FLAG
+echo "$FLAG"

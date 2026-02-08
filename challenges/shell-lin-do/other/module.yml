@@ -1,0 +1,25 @@
+name: Other Challenges
+resources:
+- name: Resources
+  type: markdown
+  content: Wisdom develops in its own time. This cannot be rushed.
+
+challenges:
+- id: "10"
+  name: Secrets of the Processes
+  description: Journey down the labyrinth of processes. In their numbers, there is a unique tale to be told.
+- id: "20"
+  name: Puzzle of the Perverse Predicates
+  description: Perverse predicates pose a puzzle. Can you solve it by bending the rules?
+- id: "25"
+  name: The Flag, Resting Safely
+  description: The flag has moved much throughout this dojo. It is time to transmit it to a safe place, so it may rest.
+- id: "30"
+  name: The Scream of Silence
+  description: Some things must be screamed to the world, even if one can do nothing else.
+- id: "41"
+  name: Deception, Born of Wisdom
+  description: The wise know, without being told, when to convey truth, and when to transmit venom.
+- id: "45"
+  name: Beam me up, Sensei
+  description: A sage knows when to unveil reality and when to let illusion serve its purpose.

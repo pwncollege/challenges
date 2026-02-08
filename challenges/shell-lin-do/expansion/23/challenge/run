@@ -1,0 +1,15 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+if [[ "$#" -ne 1 ]]
+then
+	echo "Usage: $0 SKILL_LEVEL"
+	exit 1
+fi
+
+if [[ "$1" -eq 1337 ]]
+then
+	echo "Not skilled enough!"
+	exit 2
+fi
+
+echo "You are quite skilled!"

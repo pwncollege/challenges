@@ -1,0 +1,13 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+regex='^[0-9]+[\+\-\*/][0-9]+$'
+
+if [[ "$1" =~ $regex ]]
+then
+        RESULT=$[$1]
+        exit $RESULT
+else
+        exit 0
+fi
+
+cat /flag
