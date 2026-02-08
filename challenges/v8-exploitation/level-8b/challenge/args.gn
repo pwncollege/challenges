@@ -1,0 +1,7 @@
+dcheck_always_on = false
+is_debug = false
+is_component_build = false
+target_cpu = "x64"
+v8_enable_object_print = true
+v8_enable_disassembler = true
+v8_enable_backtrace = true
