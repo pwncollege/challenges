@@ -138,8 +138,7 @@ def main() -> int:
             if not isinstance(module_entry, dict):
                 raise ValueError(f"{where_module}: expected mapping")
 
-            allowed_module_keys = {"id", "name", "description", "privileged", "allow_privileged", "importable", "interfaces"}
-            forbid_extra_keys(where_module, module_entry, allowed_module_keys)
+            forbid_extra_keys(where_module, module_entry, {"id"})
 
             module_id = module_entry.get("id")
             if not isinstance(module_id, str) or not ID_REGEX.fullmatch(module_id):
