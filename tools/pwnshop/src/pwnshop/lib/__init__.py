@@ -160,11 +160,7 @@ def run_challenge(
                 "--init",
                 "--user=0:0",
                 "--device=/dev/kvm",
-                *(
-                    ["--runtime=" + os.environ["PWN_CHALLENGE_RUNTIME"]]
-                    if os.environ.get("PWN_CHALLENGE_RUNTIME")
-                    else []
-                ),
+                "--runtime=" + os.environ.get("PWN_CHALLENGE_RUNTIME", "runc"),
                 "--cap-add=SYS_PTRACE",
                 *env_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
