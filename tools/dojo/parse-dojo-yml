@@ -21,24 +21,6 @@ NAME_REGEX = re.compile(r"^[\S ]{1,128}$")
 
 
 RESOURCE_SPECS = {
-    "lecture": {
-        "required_str": ["name"],
-        "optional_str": ["video", "playlist", "slides"],
-        "optional_bool": [],
-        "defaults": {},
-    },
-    "markdown": {
-        "required_str": ["name", "content"],
-        "optional_str": [],
-        "optional_bool": ["expandable"],
-        "defaults": {"expandable": True},
-    },
-    "header": {
-        "required_str": ["content"],
-        "optional_str": [],
-        "optional_bool": [],
-        "defaults": {},
-    },
     "challenge": {
         "keys": {
             "type",
@@ -54,6 +36,24 @@ RESOURCE_SPECS = {
             "interfaces",
             "image",
         }
+    },
+    "header": {
+        "required_str": ["content"],
+        "optional_str": [],
+        "optional_bool": [],
+        "defaults": {},
+    },
+    "markdown": {
+        "required_str": ["name", "content"],
+        "optional_str": [],
+        "optional_bool": ["expandable"],
+        "defaults": {"expandable": True},
+    },
+    "lecture": {
+        "required_str": ["name"],
+        "optional_str": ["video", "playlist", "slides"],
+        "optional_bool": [],
+        "defaults": {},
     },
 }
 
