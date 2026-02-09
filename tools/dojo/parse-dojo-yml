@@ -176,7 +176,7 @@ def main() -> int:
             module_dir = dojo_dir / module_id
             module_data = {**read_yaml_mapping(module_dir / "module.yml"), **module_entry}
 
-            allowed_module_data_keys = {"id", "name", "description", "resources", "challenges", "privileged", "allow_privileged", "importable", "interfaces"}
+            allowed_module_data_keys = {"id", "name", "description", "resources", "privileged", "allow_privileged", "importable", "interfaces"}
             forbid_extra_keys(f"{module_dir}/module.yml", module_data, allowed_module_data_keys)
 
             module_name = module_data.get("name") or module_id.replace("-", " ").title()
@@ -193,13 +193,8 @@ def main() -> int:
             if not isinstance(module_resources, list):
                 raise ValueError(f"{module_dir}/module.yml.resources: expected list")
 
-            legacy_challenges = module_data.get("challenges") or []
-            if not isinstance(legacy_challenges, list):
-                raise ValueError(f"{module_dir}/module.yml.challenges: expected list")
-
             resources_out = []
             resource_items = [(f"{module_dir}/module.yml.resources[{i}]", r) for i, r in enumerate(module_resources)]
-            resource_items += [(f"{module_dir}/module.yml.challenges[{i}]", {"type": "challenge", **c}) for i, c in enumerate(legacy_challenges)]
 
             for resource_where, resource in resource_items:
                 if not isinstance(resource, dict):
