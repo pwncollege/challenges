@@ -1,0 +1,10 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+PATH=/usr/bin
+echo "Guess the flag:"
+if head -n1 | grep -q "$(< /flag)"
+then
+	echo "You got it!"
+else
+	echo "Nope."
+fi

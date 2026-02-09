@@ -1,0 +1,17 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/sh
+
+PATH=/usr/bin
+[ -n "$1" ] || exit 1
+
+WORKDIR=$(mktemp -d) || exit 2
+cp -rL "$1"/* $WORKDIR/files
+cd $WORKDIR/files
+
+# make sure there weren't linking shenanegans
+grep -q "{" notflag* && exit 3
+
+ls notflag* | while read FILE
+do
+	echo "###### FILE: $FILE #######"
+	cat "$FILE"
+done

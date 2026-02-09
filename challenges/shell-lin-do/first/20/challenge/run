@@ -1,0 +1,4 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+unset PATH
+did you think you could hack this? It doesnt even exist!

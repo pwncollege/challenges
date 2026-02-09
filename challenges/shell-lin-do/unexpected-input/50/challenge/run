@@ -1,0 +1,11 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+while read VAR
+do
+	declare -r $VAR
+done < <(declare -p | cut -d' ' -f3 | cut -d= -f1 | grep -v "^VAR$")
+
+read VAR < <(head -n1)
+read VAL < <(head -n1 | tr -cd 'a-zA-Z0-9')
+declare -n PTR="$VAR"
+PTR="$VAL"

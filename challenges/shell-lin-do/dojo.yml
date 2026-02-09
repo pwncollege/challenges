@@ -1,0 +1,11 @@
+id: shell-lin-do
+name: The Art of the Shell
+type: public
+award:
+  emoji: "\U0001F41A"
+modules:
+- id: first
+- id: expansion
+- id: input-restrictions
+- id: unexpected-input
+- id: other

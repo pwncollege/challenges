@@ -1,0 +1,10 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+PATH=/usr/bin
+
+[ -n "$1" ] || exit 1
+[ "$(realpath "$1")" != "/" ] || exit 1
+[ "$(realpath "$1")" != "/flag" ] || exit 2
+
+printf -v BACKUP_DIR "$1"
+tar cvf /tmp/backup "$BACKUP_DIR"
