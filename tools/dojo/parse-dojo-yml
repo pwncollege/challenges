@@ -5,21 +5,31 @@
 #   "pyyaml>=6.0",
 # ]
 # ///
+
 import argparse
 import datetime
 import json
 import pathlib
 import re
 import sys
+
 import yaml
 
+
 ID_REGEX = re.compile(r"^[a-z0-9-]{1,32}$")
+
 RESOURCE_SPECS = {
-    "challenge": ({"id": str, "name": str}, {"description": str, "required": bool, "privileged": bool, "allow_privileged": bool, "importable": bool, "progression_locked": bool, "interfaces": list, "image": str}, {}),
-    "header": ({"content": str}, {}, {}),
-    "markdown": ({"name": str, "content": str}, {"expandable": bool}, {"expandable": True}),
-    "lecture": ({"name": str}, {"video": str, "playlist": str, "slides": str}, {}),
+    "challenge": {
+        "required": {"id": str, "name": str},
+        "optional": {"description": str, "required": bool, "privileged": bool, "allow_privileged": bool, "importable": bool, "progression_locked": bool, "interfaces": list, "image": str},
+        "defaults": {},
+    },
+    "header": {"required": {"content": str}, "optional": {}, "defaults": {}},
+    "markdown": {"required": {"name": str, "content": str}, "optional": {"expandable": bool}, "defaults": {"expandable": True}},
+    "lecture": {"required": {"name": str}, "optional": {"video": str, "playlist": str, "slides": str}, "defaults": {}},
 }
+
+
 def read_yaml_mapping(path: pathlib.Path) -> dict:
     if not path.exists():
         return {}
@@ -58,7 +68,11 @@ def validate_resource(where: str, resource: dict, defaults: dict) -> dict:
     if resource_type not in RESOURCE_SPECS:
         raise ValueError(f"{where}.type: unsupported type {resource_type!r}")
 
-    required, optional, type_defaults = RESOURCE_SPECS[resource_type]
+    spec = RESOURCE_SPECS[resource_type]
+    required = spec["required"]
+    optional = spec["optional"]
+    type_defaults = spec["defaults"]
+
     allowed = {"type", "visibility"} | set(required) | set(optional) | set(type_defaults)
     if extra := set(resource) - allowed:
         raise ValueError(f"{where}: unsupported keys: {', '.join(sorted(extra))}")
