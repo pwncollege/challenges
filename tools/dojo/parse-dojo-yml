@@ -29,19 +29,21 @@ RESOURCE_SPECS = {
     "lecture": {"required": {"name": str}, "optional": {"video": str, "playlist": str, "slides": str}, "defaults": {}},
 }
 
+DOJO_KEYS = {"id", "name", "type", "description", "award", "image", "privileged", "allow_privileged", "importable", "interfaces", "visibility", "modules"}
+MODULE_KEYS = {"id", "name", "description", "image", "privileged", "allow_privileged", "importable", "interfaces", "visibility", "resources", "challenges"}
+PASSTHRU_KEYS = ("type", "award", "description", "image", "privileged", "allow_privileged", "importable", "interfaces", "visibility")
+
 
 def read_yaml_mapping(path: pathlib.Path) -> dict:
     if not path.exists():
         return {}
-    loaded = yaml.safe_load(path.read_text())
-    if loaded is None:
-        return {}
+    loaded = yaml.safe_load(path.read_text()) or {}
     if not isinstance(loaded, dict):
         raise ValueError(f"{path}: expected a mapping at the top level")
     return loaded
 
 
-def parse_visibility(visibility: object, where: str) -> dict | None:
+def parse_visibility(where: str, visibility: object):
     if visibility is None:
         return None
     if not isinstance(visibility, dict):
@@ -60,54 +62,6 @@ def parse_visibility(visibility: object, where: str) -> dict | None:
     return out
 
 
-def validate_resource(where: str, resource: dict, defaults: dict) -> dict:
-    resource_type = resource.get("type")
-    if not isinstance(resource_type, str):
-        raise ValueError(f"{where}.type: expected string")
-
-    if resource_type not in RESOURCE_SPECS:
-        raise ValueError(f"{where}.type: unsupported type {resource_type!r}")
-
-    spec = RESOURCE_SPECS[resource_type]
-    required = spec["required"]
-    optional = spec["optional"]
-    type_defaults = spec["defaults"]
-
-    allowed = {"type", "visibility"} | set(required) | set(optional) | set(type_defaults)
-    if extra := set(resource) - allowed:
-        raise ValueError(f"{where}: unsupported keys: {', '.join(sorted(extra))}")
-
-    out = {"type": resource_type}
-
-    for key, expected_type in required.items():
-        value = resource.get(key)
-        if not isinstance(value, expected_type):
-            raise ValueError(f"{where}.{key}: expected {expected_type.__name__}")
-        out[key] = value
-
-    for key, expected_type in optional.items():
-        if key in resource:
-            value = resource[key]
-            if not isinstance(value, expected_type):
-                raise ValueError(f"{where}.{key}: expected {expected_type.__name__}")
-            out[key] = value
-        elif key in type_defaults:
-            out[key] = type_defaults[key]
-
-    if resource_type == "challenge":
-        for key, value in defaults.items():
-            if key in out or key not in optional:
-                continue
-            if not isinstance(value, optional[key]):
-                raise ValueError(f"{where}.{key}: expected {optional[key].__name__}")
-            out[key] = value
-
-    if (visibility := parse_visibility(resource.get("visibility"), f"{where}.visibility")) is not None:
-        out["visibility"] = visibility
-
-    return out
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Parse and validate dojo.yml into a Dojo update payload.")
     parser.add_argument("dojo_yml", type=pathlib.Path, help="Path to dojo.yml.")
@@ -122,9 +76,12 @@ def main() -> int:
     dojo_dir = dojo_yml.parent
 
     try:
-        dojo_data = yaml.safe_load(dojo_yml.read_text())
+        dojo_data = yaml.safe_load(dojo_yml.read_text()) or {}
         if not isinstance(dojo_data, dict):
             raise ValueError(f"{dojo_yml}: expected a mapping at the top level")
+
+        if extra := set(dojo_data) - DOJO_KEYS:
+            raise ValueError(f"dojo.yml: unsupported keys: {', '.join(sorted(extra))}")
 
         dojo_id = dojo_data.get("id")
         if not isinstance(dojo_id, str) or not ID_REGEX.fullmatch(dojo_id):
@@ -136,13 +93,11 @@ def main() -> int:
         if not isinstance(modules, list) or not modules:
             raise ValueError("dojo.yml.modules: expected a non-empty list")
 
-        dojo_defaults = {key: dojo_data[key] for key in ["privileged", "allow_privileged", "importable", "interfaces"] if key in dojo_data}
-
         parsed_modules = []
         for module_index, module_entry in enumerate(modules):
             where_module = f"dojo.yml.modules[{module_index}]"
-            if not isinstance(module_entry, dict):
-                raise ValueError(f"{where_module}: expected mapping")
+            if not isinstance(module_entry, dict) or set(module_entry) != {"id"}:
+                raise ValueError(f"{where_module}: expected a mapping with only id")
 
             module_id = module_entry.get("id")
             if not isinstance(module_id, str) or not ID_REGEX.fullmatch(module_id):
@@ -150,23 +105,21 @@ def main() -> int:
 
             module_dir = dojo_dir / module_id
             module_data = read_yaml_mapping(module_dir / "module.yml")
+
+            if extra := set(module_data) - MODULE_KEYS:
+                raise ValueError(f"{module_dir}/module.yml: unsupported keys: {', '.join(sorted(extra))}")
+
+            if "challenges" in module_data:
+                raise ValueError(f"{module_dir}/module.yml: 'challenges' is no longer supported; convert to resources entries")
+
             module_resources = module_data.get("resources") or []
             if not isinstance(module_resources, list):
                 raise ValueError(f"{module_dir}/module.yml.resources: expected list")
 
-            module_defaults = {**dojo_defaults, **{key: module_data[key] for key in ["privileged", "allow_privileged", "importable", "interfaces"] if key in module_data}}
-
-            challenge_reads = {}
-            for resource in module_resources:
-                if not isinstance(resource, dict) or resource.get("type") != "challenge":
-                    continue
-                challenge_id = resource.get("id")
-                if isinstance(challenge_id, str):
-                    challenge_dir = module_dir / challenge_id
-                    challenge_reads[challenge_id] = (read_yaml_mapping(challenge_dir / "challenge.yml"), (challenge_dir / "DESCRIPTION.md").read_text() if (challenge_dir / "DESCRIPTION.md").exists() else None)
-
             module_name = module_data.get("name") or module_id.replace("-", " ").title()
-            module_description = module_data.get("description") or ((module_dir / "DESCRIPTION.md").read_text() if (module_dir / "DESCRIPTION.md").exists() else None)
+            module_description = module_data.get("description")
+            if module_description is None and (desc_path := module_dir / "DESCRIPTION.md").exists():
+                module_description = desc_path.read_text()
 
             resources_out = []
             for resource_index, resource in enumerate(module_resources):
@@ -174,31 +127,65 @@ def main() -> int:
                 if not isinstance(resource, dict):
                     raise ValueError(f"{where}: expected mapping")
 
-                if resource.get("type") != "challenge":
-                    resources_out.append(validate_resource(where, resource, {}))
-                    continue
+                resource_type = resource.get("type")
+                if not isinstance(resource_type, str) or resource_type not in RESOURCE_SPECS:
+                    raise ValueError(f"{where}.type: expected one of {', '.join(RESOURCE_SPECS)}")
 
-                challenge_id = resource.get("id")
-                if not isinstance(challenge_id, str) or not ID_REGEX.fullmatch(challenge_id):
-                    raise ValueError(f"{where}.id: expected /^[a-z0-9-]{{1,32}}$/")
+                resource_data = dict(resource)
+                if resource_type == "challenge":
+                    challenge_id = resource.get("id")
+                    if not isinstance(challenge_id, str) or not ID_REGEX.fullmatch(challenge_id):
+                        raise ValueError(f"{where}.id: expected /^[a-z0-9-]{{1,32}}$/")
 
-                challenge_yml, challenge_desc = challenge_reads.get(challenge_id, ({}, None))
-                challenge_data = {**challenge_yml, **resource, "id": challenge_id}
-                challenge_data.setdefault("name", challenge_id.replace("-", " ").title())
-                if challenge_data.get("description") is None and challenge_desc is not None:
-                    challenge_data["description"] = challenge_desc
+                    challenge_dir = module_dir / challenge_id
+                    challenge_data = read_yaml_mapping(challenge_dir / "challenge.yml")
+                    resource_data = {**challenge_data, **resource_data, "type": "challenge", "id": challenge_id}
+                    resource_data.setdefault("name", challenge_id.replace("-", " ").title())
+                    if resource_data.get("description") is None and (desc_path := challenge_dir / "DESCRIPTION.md").exists():
+                        resource_data["description"] = desc_path.read_text()
 
-                resources_out.append(validate_resource(where, challenge_data, module_defaults))
+                if (visibility := parse_visibility(f"{where}.visibility", resource_data.get("visibility"))) is not None:
+                    resource_data["visibility"] = visibility
+
+                spec = RESOURCE_SPECS[resource_type]
+                for key, value in spec["defaults"].items():
+                    resource_data.setdefault(key, value)
+
+                required = spec["required"]
+                optional = spec["optional"]
+                allowed = {"type", "visibility"} | set(required) | set(optional) | set(spec["defaults"])
+
+                if extra := set(resource_data) - allowed:
+                    raise ValueError(f"{where}: unsupported keys: {', '.join(sorted(extra))}")
+
+                out = {"type": resource_type}
+                for key, expected_type in required.items():
+                    value = resource_data.get(key)
+                    if not isinstance(value, expected_type):
+                        raise ValueError(f"{where}.{key}: expected {expected_type.__name__}")
+                    out[key] = value
+                for key, expected_type in optional.items():
+                    if key not in resource_data:
+                        continue
+                    value = resource_data[key]
+                    if not isinstance(value, expected_type):
+                        raise ValueError(f"{where}.{key}: expected {expected_type.__name__}")
+                    out[key] = value
+
+                if "visibility" in resource_data:
+                    out["visibility"] = resource_data["visibility"]
+
+                resources_out.append(out)
 
             module_out = {"id": module_id, "name": module_name, "resources": resources_out}
             if module_description is not None:
                 module_out["description"] = module_description
+            module_out.update({key: module_data[key] for key in PASSTHRU_KEYS if key in module_data})
+
             parsed_modules.append(module_out)
 
         spec = {"id": dojo_id, "name": dojo_name, "modules": parsed_modules}
-        for key in ["type", "description", "award"]:
-            if key in dojo_data:
-                spec[key] = dojo_data[key]
+        spec.update({key: dojo_data[key] for key in PASSTHRU_KEYS if key in dojo_data})
 
     except Exception as error:
         print(f"Error: failed to parse {dojo_yml}: {error}", file=sys.stderr)
@@ -208,7 +195,5 @@ def main() -> int:
     if args.json:
         print(json.dumps(spec, indent=2, sort_keys=False))
     return 0
-
-
 if __name__ == "__main__":
     raise SystemExit(main())
