@@ -20,13 +20,42 @@ ID_REGEX = re.compile(r"^[a-z0-9-]{1,32}$")
 NAME_REGEX = re.compile(r"^[\S ]{1,128}$")
 
 
-NON_CHALLENGE_SPECS = {
-    "lecture": {"required_str": ["name"], "optional_str": ["video", "playlist", "slides"], "optional_bool": [], "defaults": {}},
-    "markdown": {"required_str": ["name", "content"], "optional_str": [], "optional_bool": ["expandable"], "defaults": {"expandable": True}},
-    "header": {"required_str": ["content"], "optional_str": [], "optional_bool": [], "defaults": {}},
+RESOURCE_SPECS = {
+    "lecture": {
+        "required_str": ["name"],
+        "optional_str": ["video", "playlist", "slides"],
+        "optional_bool": [],
+        "defaults": {},
+    },
+    "markdown": {
+        "required_str": ["name", "content"],
+        "optional_str": [],
+        "optional_bool": ["expandable"],
+        "defaults": {"expandable": True},
+    },
+    "header": {
+        "required_str": ["content"],
+        "optional_str": [],
+        "optional_bool": [],
+        "defaults": {},
+    },
+    "challenge": {
+        "keys": {
+            "type",
+            "id",
+            "name",
+            "description",
+            "visibility",
+            "required",
+            "privileged",
+            "allow_privileged",
+            "importable",
+            "progression_locked",
+            "interfaces",
+            "image",
+        }
+    },
 }
-
-CHALLENGE_KEYS = {"type", "id", "name", "description", "visibility", "required", "privileged", "allow_privileged", "importable", "progression_locked", "interfaces", "image"}
 
 
 def read_yaml_mapping(path: pathlib.Path) -> dict:
@@ -180,8 +209,8 @@ def main() -> int:
                 if not isinstance(resource_type, str):
                     raise ValueError(f"{resource_where}.type: expected string")
 
-                if resource_type in NON_CHALLENGE_SPECS:
-                    spec = NON_CHALLENGE_SPECS[resource_type]
+                if resource_type in RESOURCE_SPECS and resource_type != "challenge":
+                    spec = RESOURCE_SPECS[resource_type]
                     allowed = {"type", "visibility"} | set(spec["required_str"] + spec["optional_str"] + spec["optional_bool"])
                     forbid_extra_keys(resource_where, resource, allowed)
 
@@ -202,10 +231,13 @@ def main() -> int:
                     resources_out.append(out)
                     continue
 
+                if resource_type not in RESOURCE_SPECS:
+                    raise ValueError(f"{resource_where}.type: unsupported type {resource_type!r}")
                 if resource_type != "challenge":
                     raise ValueError(f"{resource_where}.type: unsupported type {resource_type!r}")
 
-                forbid_extra_keys(resource_where, resource, CHALLENGE_KEYS)
+                challenge_keys = RESOURCE_SPECS["challenge"]["keys"]
+                forbid_extra_keys(resource_where, resource, challenge_keys)
 
                 challenge_id = resource.get("id")
                 if not isinstance(challenge_id, str) or not ID_REGEX.fullmatch(challenge_id):
@@ -213,7 +245,7 @@ def main() -> int:
 
                 challenge_dir = module_dir / challenge_id
                 challenge_data = {**read_yaml_mapping(challenge_dir / "challenge.yml"), **resource, "type": "challenge"}
-                forbid_extra_keys(f"{challenge_dir}/challenge.yml", challenge_data, CHALLENGE_KEYS)
+                forbid_extra_keys(f"{challenge_dir}/challenge.yml", challenge_data, challenge_keys)
 
                 if "name" not in challenge_data:
                     challenge_data["name"] = challenge_id.replace("-", " ").title()
@@ -245,7 +277,7 @@ def main() -> int:
                     elif field in dojo_data:
                         challenge_data[field] = dojo_data[field]
 
-                resources_out.append({key: challenge_data[key] for key in CHALLENGE_KEYS if key in challenge_data})
+                resources_out.append({key: challenge_data[key] for key in challenge_keys if key in challenge_data})
 
             module_out = {"id": module_id, "name": module_name, "resources": resources_out}
             if module_description is not None:
