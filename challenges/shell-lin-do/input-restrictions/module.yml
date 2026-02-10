@@ -9,73 +9,87 @@ resources:
     - [Neat resource for bypassing input restrictions in bash](https://book.hacktricks.xyz/linux-hardening/bypass-bash-restrictions)
     - [Shell Expansions](https://www.gnu.org/software/bash/manual/html_node/Shell-Expansions.html) from the Bash Manual
 
-challenges:
-
-- id: "10"
+- type: challenge
+  id: "10"
   name: Rhythm of Restriction
   description: In the rhythm of restriction, find the beat of freedom.
 
-- id: "11"
+- type: challenge
+  id: "11"
   name: Odyssey of the Octal
   description: Embark on the odyssey of the octal, where numbers whisper tales of eight.
 
-- id: "13"
+- type: challenge
+  id: "13"
   name: Riddle of the Radix
   description: Each radix is but a different lens to view the same truth.
 
-- id: "14"
+- type: challenge
+  id: "14"
   name: Whisper of the Withheld
   description: In the whisper of the withheld, the secrets of the shell are softly spoken.
-- id: "15"
+- type: challenge
+  id: "15"
   name: Path of the Unseen
   description: In the unseen, there exists a path. Discover it, and the shell will unveil new possibilities.
 
-- id: "16"
+- type: challenge
+  id: "16"
   name: Dance of the Disallowed
   description: In the dance of the disallowed, each step is a question, each pause an answer.
 
-- id: "17"
+- type: challenge
+  id: "17"
   name: Veil of the Forbidden
   description: Behind the veil of the forbidden, lies the truth waiting to be deciphered.
 
-- id: "18"
+- type: challenge
+  id: "18"
   name: Your Misplaced Memories
   description: When restrictions rule your thoughts, you might find the flag in a misplaced memory.
 
-- id: "19"
+- type: challenge
+  id: "19"
   name: Exclamations of Execution
   description: In the depth of confusion, seek your true name and find yourself anew.
 
-- id: "19-next"
+- type: challenge
+  id: "19-next"
   name: Sensing of Secrets
   description: In speaking truth, one can reveal mysteries.
 
-- id: "19-next-2"
+- type: challenge
+  id: "19-next-2"
   name: A String of Secrecy
   description: The path to secrets is not always direct. When so, one must first suggest, and only then demand.
 
-- id: "19-next-2b"
+- type: challenge
+  id: "19-next-2b"
   name: The Secret, Commanded
   description: The power to reach the flag has always been within you. Reach inside and activate it.
 
-- id: "19-next-3"
+- type: challenge
+  id: "19-next-3"
   name: The Stumble From Safety
   description: A perfect stumble can reveal the path of infinite potential. Is safety binding, or just an illusion?
 
-- id: "20"
+- type: challenge
+  id: "20"
   name: Precision of Parameters
   description: Precision is a virtue, where a whisper can be louder than a shout. Speak succinctly, and the flag will respond.
 
-- id: "23"
+- type: challenge
+  id: "23"
   name: Brevity's Enigma
   description: In brevity lies an enigma known to the few. Unravel it, and the flag will be within your grasp.
 
-- id: "25"
+- type: challenge
+  id: "25"
   name: Essense of Economy
   description: Economy is the essence of a well-crafted command. Embrace this essence, and the flag will be revealed.
 
-- id: "30"
+- type: challenge
+  id: "30"
   name: Mirage of Minimalism
   description: In the vast desert of commands, minimalism is but a mirage. Reach it, and the flag will quench your quest.
-
 

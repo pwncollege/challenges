@@ -4,12 +4,16 @@ description: |
   But your program already has a region of memory ready to go: the **stack**.
   The stack is pointed to by the `rsp` register, and it contains useful data about how your program was launched and accumulates other data as the program executes.
   Let's explore it!
-challenges:
-- id: mem-stack
+resources:
+- type: challenge
+  id: mem-stack
   name: "The Stack"
-- id: mem-stack-offsets
+- type: challenge
+  id: mem-stack-offsets
   name: "Stack Offsets"
-- id: mem-argv1
+- type: challenge
+  id: mem-argv1
   name: "Program Arguments on the Stack"
-- id: mem-pop
+- type: challenge
+  id: mem-pop
   name: "Popping From the Stack"
