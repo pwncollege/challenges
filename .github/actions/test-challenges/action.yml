@@ -19,7 +19,7 @@ runs:
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
-        cache-dependency-glob: tools/pwnshop/**
+        cache-dependency-glob: tools/**
 
     - name: Install git-crypt
       shell: bash
@@ -39,6 +39,11 @@ runs:
       run: |
         set -euo pipefail
         JOBS=$(( $(nproc) * 2 ))
+        if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
+          echo "::group::Validating dojo.yml"
+          ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
+          echo "::endgroup::"
+        fi
         echo "::group::Challenges to be tested"
         ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"

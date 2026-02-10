@@ -1,0 +1,90 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "pyyaml>=6.0",
+#   "requests>=2.0",
+# ]
+# ///
+
+import argparse
+import json
+import os
+import pathlib
+import subprocess
+import sys
+
+import requests
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
+    parser.add_argument("--manifests", type=pathlib.Path, help="Directory containing published manifest tag files.")
+    parser.add_argument("--registry", required=True, help="Registry hostname for published images.")
+    parser.add_argument("dojo_yml", type=pathlib.Path, help="Path to dojo.yml.")
+    args = parser.parse_args()
+
+    dojo_url = os.environ.get("DOJO_URL")
+    dojo_token = os.environ.get("DOJO_TOKEN")
+    if not dojo_url:
+        print("Error: missing DOJO_URL env var.", file=sys.stderr)
+        return 2
+    if not dojo_token:
+        print("Error: missing DOJO_TOKEN env var.", file=sys.stderr)
+        return 2
+
+    dojo_yml = args.dojo_yml
+    dojo_prefix = "/".join(dojo_yml.parts[1:-1])
+
+    parse_dojo_yml = pathlib.Path(__file__).resolve().parent / "parse-dojo-yml"
+    parse_result = subprocess.run(
+        [str(parse_dojo_yml), "--json", str(dojo_yml)],
+        text=True,
+        capture_output=True,
+    )
+
+    if parse_result.stderr:
+        print(parse_result.stderr, end="", file=sys.stderr)
+    if parse_result.returncode != 0:
+        return parse_result.returncode
+    if not parse_result.stdout.strip():
+        return 0
+
+    spec = json.loads(parse_result.stdout)
+
+    manifests_dir = args.manifests
+    for module in spec.get("modules", []):
+        module_id = module.get("id")
+        for resource in module.get("resources", []):
+            if resource.get("type") != "challenge":
+                continue
+            challenge_id = resource.get("id")
+            slug = f"{dojo_prefix}/{module_id}/{challenge_id}"
+            image = f"{args.registry}/{slug}"
+            if manifests_dir and (latest_path := manifests_dir / slug / "latest").exists():
+                image = f"{image}@{latest_path.read_text().strip()}"
+            resource["image"] = image
+
+    dojo_id = spec["id"]
+    update_url = f"{dojo_url}/pwncollege_api/v1/dojos/{dojo_id}/update"
+    try:
+        response = requests.post(
+            update_url,
+            json=spec,
+            headers={"Authorization": f"Bearer {dojo_token}"},
+            timeout=60,
+        )
+    except Exception as error:
+        print(f"Error: dojo update request failed: {error}", file=sys.stderr)
+        return 1
+
+    if response.status_code != 200:
+        print(f"Error: dojo update failed: status={response.status_code} body={response.text}", file=sys.stderr)
+        return 1
+
+    print("Updated successfully", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
