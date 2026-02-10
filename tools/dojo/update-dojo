@@ -17,14 +17,6 @@ import sys
 import requests
 
 
-def _auth_header_value(dojo_token: str) -> str:
-    # pwn.college uses CTFd-style API tokens (`ctfd_...`) which authenticate via
-    # `Authorization: Token <token>`. Some deployments may instead use bearer tokens.
-    if dojo_token.startswith("ctfd_"):
-        return f"Token {dojo_token}"
-    return f"Token {dojo_token}"
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
     parser.add_argument("--manifests", type=pathlib.Path, help="Directory containing published manifest tag files.")
@@ -80,9 +72,7 @@ def main() -> int:
             update_url,
             json=spec,
             headers={
-                "Authorization": _auth_header_value(dojo_token),
-                # Helps some WAF/bot filters distinguish us from "unknown" clients.
-                "User-Agent": "pwncollege-challenges-ci/dojo-update",
+                "Authorization": f"Token {dojo_token}",
             },
             timeout=60,
         )
