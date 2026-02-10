@@ -10,18 +10,24 @@ resources:
   video: 0a8NlF7z7Ro
   playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
   slides: 1wX5TH6DQjXw4GJo_T6I9GF7bhC689T52HSHaMUCmj1E
-challenges:
-- id: cmp-setz
+- type: challenge
+  id: cmp-setz
   name: "Comparing Values"
-- id: cmp-setz-argv1
+- type: challenge
+  id: cmp-setz-argv1
   name: "Comparing Characters"
-- id: cmp-jne
+- type: challenge
+  id: cmp-jne
   name: "Conditional Control Flow"
-- id: cmp-string
+- type: challenge
+  id: cmp-string
   name: "Comparing Strings"
-- id: cmp-reverse
+- type: challenge
+  id: cmp-reverse
   name: "Reverse the Password"
-- id: switch
+- type: challenge
+  id: switch
   name: "Conditionals Without Conditionals"
-- id: loop
+- type: challenge
+  id: loop
   name: "Looping"
