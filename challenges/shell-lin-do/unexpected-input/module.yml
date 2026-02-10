@@ -9,37 +9,31 @@ resources:
     - [Common pitfalls in shell scripting (many of which lead to security issues in these levels!](https://mywiki.wooledge.org/BashPitfalls)
     - [More weirdness!](http://www.etalabs.net/sh_tricks.html)
 
-- type: challenge
-  id: "10"
+challenges:
+- id: "10"
   name: Dance of the Disguised
   description: In the dance of the disguised, a surprise twirls gracefully. Can you keep pace with its rhythm?
 
-- type: challenge
-  id: "30"
+- id: "30"
   name: Script of the Silent
   description: In the script of the silent, each pause, each absence speaks volumes. Can you hear the unspoken lines?
 
-- type: challenge
-  id: "40"
+- id: "40"
   name: One Single Slice
   description: Calculate your attack well, and your swift slice will spoil the safety of your foe.
 
-- type: challenge
-  id: "50"
+- id: "50"
   name: The Treacherous Title
   description: The names we call ourselves define, in part, who we are. Can you find the true name of the flag?
 
-- type: challenge
-  id: "60"
+- id: "60"
   name: The Dangling Danger
   description: Despite focusing on the end goal, we often easily miss what comes at the end. Ironic.
 
-- type: challenge
-  id: "61"
+- id: "61"
   name: The Evil End
   description: You can try hard, and you can get far, but in the end, omission can cost you the flag.
 
-- type: challenge
-  id: "70"
+- id: "70"
   name: An Eroded Erasure
   description: You strive to erase your mistakes in life, but errors compound errors, and the flag is revealed.

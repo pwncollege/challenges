@@ -64,39 +64,28 @@ resources:
     Now, let's talk about notation.
     How do you differentiate `11` in decimal, `11` in binary (which equals `3` in decimal), and 11 in hex (which equals `17` in decimal)?
     For numerical constants, we sometimes prepend binary data with `0b`, hexadecimal with `0x`, and keep decimal as is, resulting in `11 == 0b1011 == 0xb`, `3 == 0b11 == 0x3`, and `17 == 0b10001 == 0x11`.
-- type: challenge
-  id: objdump
+challenges:
+- id: objdump
   name: "Disassembling Programs"
-- type: challenge
-  id: strace
+- id: strace
   name: "Tracing Syscalls"
-- type: challenge
-  id: gdb-launch
+- id: gdb-launch
   name: "Starting GDB"
-- type: challenge
-  id: gdb-quit
+- id: gdb-quit
   name: "Quitting GDB"
-- type: challenge
-  id: gdb-starti
+- id: gdb-starti
   name: "Starting Programs in GDB"
-- type: challenge
-  id: gdb-disassemble
+- id: gdb-disassemble
   name: "Disassembling in GDB"
-- type: challenge
-  id: gdb-stepi
+- id: gdb-stepi
   name: "Stepping Through Instructions"
-- type: challenge
-  id: gdb-print
+- id: gdb-print
   name: "Reading Register Values"
-- type: challenge
-  id: gdb-pop
+- id: gdb-pop
   name: "Popping Stack Values"
-- type: challenge
-  id: gdb-examine
+- id: gdb-examine
   name: "Examining Memory"
-- type: challenge
-  id: gdb-examine-argv1
+- id: gdb-examine-argv1
   name: "Examining Stack Pointers"
-- type: challenge
-  id: gdb-int3
+- id: gdb-int3
   name: "Cooperative Debugging"

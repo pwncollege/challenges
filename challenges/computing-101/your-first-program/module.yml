@@ -15,18 +15,14 @@ resources:
     video: IWbIZerH930
     playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
     slides: 1U8Rsz7FNTmy-3wGtPB-YCyanIIbox1J90adze9-1cfo
-  - type: challenge
-    id: rax
-    name: "Your First Register"
-  - type: challenge
-    id: exit
-    name: "Your First Syscall"
-  - type: challenge
-    id: exit-code
-    name: "Exit Codes"
-  - type: challenge
-    id: building
-    name: "Building Executables"
-  - type: challenge
-    id: movreg
-    name: "Moving Between Registers"
+challenges:
+- id: rax
+  name: "Your First Register"
+- id: exit
+  name: "Your First Syscall"
+- id: exit-code
+  name: "Exit Codes"
+- id: building
+  name: "Building Executables"
+- id: movreg
+  name: "Moving Between Registers"

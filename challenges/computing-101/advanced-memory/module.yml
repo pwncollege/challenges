@@ -10,6 +10,6 @@ resources:
     video: HahXfnOsSUU
     playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
     slides: 1lbPbd-jLj7VS7M-ntGhpv4_8WqSfqzLBNWG68_BIRL0
-  - type: challenge
-    id: mem-triple-deref
-    name: "Triple Dereference"
+challenges:
+- id: mem-triple-deref
+  name: "Triple Dereference"

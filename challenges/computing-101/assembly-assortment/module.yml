@@ -5,15 +5,12 @@ resources:
   video: 21MvbpgssU8
   playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
   slides: 1SeyZbM_qCDz4t03KDZ8Q0qi1GzsSSSJAkO-KeVlAL7w
-- type: challenge
-  id: add-reverse
+challenges:
+- id: add-reverse
   name: "Reverse the Calculation"
-- type: challenge
-  id: sub-reverse
+- id: sub-reverse
   name: "Reverse the Reverse"
-- type: challenge
-  id: xor-reverse
+- id: xor-reverse
   name: "Dealing with Bitwise Operations"
-- type: challenge
-  id: strcmp-stored
+- id: strcmp-stored
   name: "Loops on Data"

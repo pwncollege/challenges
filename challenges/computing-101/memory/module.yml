@@ -10,24 +10,18 @@ resources:
     video: HahXfnOsSUU
     playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
     slides: 1lbPbd-jLj7VS7M-ntGhpv4_8WqSfqzLBNWG68_BIRL0
-  - type: challenge
-    id: mem-load
-    name: "Loading From Memory"
-  - type: challenge
-    id: mem-load-2
-    name: "More Loading Practice"
-  - type: challenge
-    id: mem-dereference
-    name: "Dereferencing Pointers"
-  - type: challenge
-    id: mem-dereference-self
-    name: "Dereferencing Yourself"
-  - type: challenge
-    id: mem-offsets
-    name: "Dereferencing with Offsets"
-  - type: challenge
-    id: mem-stored-addr
-    name: "Stored Addresses"
-  - type: challenge
-    id: mem-double-deref
-    name: "Double Dereference"
+challenges:
+- id: mem-load
+  name: "Loading From Memory"
+- id: mem-load-2
+  name: "More Loading Practice"
+- id: mem-dereference
+  name: "Dereferencing Pointers"
+- id: mem-dereference-self
+  name: "Dereferencing Yourself"
+- id: mem-offsets
+  name: "Dereferencing with Offsets"
+- id: mem-stored-addr
+  name: "Stored Addresses"
+- id: mem-double-deref
+  name: "Double Dereference"

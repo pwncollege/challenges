@@ -9,16 +9,14 @@ resources:
     - [The ultimate resource in shell scripting (much of which inspired this dojo!)](https://mywiki.wooledge.org/)
     - [Apple's Surprisingly Salient Shell Scripting Synopsys](https://developer.apple.com/library/archive/documentation/OpenSource/Conceptual/ShellScripting/ShellScriptSecurity/ShellScriptSecurity.html)
 
-- type: challenge
-  id: "10"
+challenges:
+- id: "10"
   name: The Transient Path
-- type: challenge
-  id: "20"
+- id: "20"
   name: Ferocious Functionality
   description: |
     The shell is fierce, but fair. Fly far, and find flags.
-- type: challenge
-  id: "30"
+- id: "30"
   name: The Surprising Swap
   description: |
     A deep look in the mirror can reveal something new about yourself.
