@@ -71,9 +71,7 @@ def main() -> int:
         response = requests.post(
             update_url,
             json=spec,
-            headers={
-                "Authorization": f"Token {dojo_token}",
-            },
+            headers={"Authorization": f"Token {dojo_token}"},
             timeout=60,
         )
     except Exception as error:
