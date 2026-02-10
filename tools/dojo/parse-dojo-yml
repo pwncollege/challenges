@@ -21,11 +21,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 ID_REGEX = re.compile(r"^[a-z0-9-]{1,32}$")
 
-DOJO_SPECS = ["id", "name", "type", "award", "description", "modules"]
-MODULE_ATTRS = ["id", "name", "description", "resources"]
-
-VISIBILITY_KEY = "visibility"
-
 INHERIT_KEYS = ["privileged", "interfaces"]
 
 
@@ -287,7 +282,7 @@ def main() -> int:
                 "visibility": raw_module.visibility.model_dump(exclude_none=True) if raw_module.visibility else None,
                 "resources": resources_out,
             }
-            module_out = {key: module_out[key] for key in MODULE_ATTRS + ["visibility"] if module_out.get(key) is not None}
+            module_out = {key: module_out[key] for key in ["id", "name", "description", "resources", "visibility"] if module_out.get(key) is not None}
             parsed_modules.append(module_out)
 
         spec = {
@@ -299,7 +294,7 @@ def main() -> int:
             "visibility": raw_dojo.visibility.model_dump(exclude_none=True) if raw_dojo.visibility else None,
             "modules": parsed_modules,
         }
-        spec = {key: spec[key] for key in DOJO_SPECS + ["visibility"] if spec.get(key) is not None}
+        spec = {key: spec[key] for key in ["id", "name", "type", "award", "description", "modules", "visibility"] if spec.get(key) is not None}
 
         # Phase 3: validate.
         try:
