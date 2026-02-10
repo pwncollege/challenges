@@ -1,0 +1,10 @@
+on-unmatched = "info"
+
+[formatter.nix]
+command = "nixfmt"
+includes = ["*.nix", "**/*.nix"]
+
+[formatter.python]
+command = "ruff"
+options = ["format", "--line-length", "120"]
+includes = ["tools/**/*.py", "tools/maintainers/*"]

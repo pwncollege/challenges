@@ -7,23 +7,28 @@ on:
     branches: [ main, master ]
 
 jobs:
-  pwnshop:
+  nix-fmt:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        cache-dependency-glob: tools/pwnshop/**
+    - name: Install Nix
+      uses: DeterminateSystems/determinate-nix-action@v3
 
-    - name: Install Ruff
-      run: |
-        uv tool install --force ruff
-        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+    - name: Enable Magic Nix Cache
+      uses: DeterminateSystems/magic-nix-cache-action@v13
 
-    - name: Check pwnshop
-      working-directory: tools/pwnshop
+    - name: nix fmt (must be clean)
       run: |
-        ruff check
-        ruff format --check --diff
+        set -euo pipefail
+        nix fmt --no-write-lock-file
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "::error::nix fmt produced changes. Run 'nix fmt' locally and commit the result."
+          echo ""
+          echo "git status:"
+          git status --porcelain
+          echo ""
+          echo "git diff:"
+          git --no-pager diff
+          exit 1
+        fi

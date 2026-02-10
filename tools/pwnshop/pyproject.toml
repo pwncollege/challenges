@@ -14,10 +14,3 @@ dependencies = [
 
 [project.scripts]
 pwnshop = "pwnshop:cli"
-
-[tool.ruff]
-line-length = 120
-src = ["src"]
-
-[tool.ruff.lint.isort]
-known-first-party = ["pwnshop"]

@@ -5,10 +5,13 @@ let
     hash = "sha256-+SppAF77NbXlSrBGvIm40AmNC12GrexbX7fAPBoDAcs=";
   };
 
-  kernelVersion = builtins.readFile "${pkgs.runCommand "kata-kernel-version" { nativeBuildInputs = [ pkgs.yq ]; } ''
-    version="$(yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml)"
-    printf '%s' "''${version#v}" > "$out"
-  ''}";
+  kernelVersion = builtins.readFile "${pkgs.runCommand "kata-kernel-version"
+    { nativeBuildInputs = [ pkgs.yq ]; }
+    ''
+      version="$(yq -r '.assets.kernel.version' ${kataContainersSrc}/versions.yaml)"
+      printf '%s' "''${version#v}" > "$out"
+    ''
+  }";
   kernelMajor = builtins.elemAt (pkgs.lib.splitString "." kernelVersion) 0;
   kernelTarball = pkgs.fetchurl {
     url = "http://cdn.kernel.org/pub/linux/kernel/v${kernelMajor}.x/linux-${kernelVersion}.tar.xz";
