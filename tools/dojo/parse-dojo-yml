@@ -228,10 +228,14 @@ def main() -> int:
             challenge_entries = []
             if isinstance(raw_module.resources, list):
                 challenge_entries.extend(
-                    resource for resource in raw_module.resources if isinstance(resource, dict) and resource.get("type") == "challenge"
+                    resource
+                    for resource in raw_module.resources
+                    if isinstance(resource, dict) and resource.get("type") == "challenge"
                 )
             if isinstance(raw_module.challenges, list):
-                challenge_entries.extend(challenge for challenge in raw_module.challenges if isinstance(challenge, dict))
+                challenge_entries.extend(
+                    challenge for challenge in raw_module.challenges if isinstance(challenge, dict)
+                )
 
             for challenge in challenge_entries:
                 challenge_id = challenge.get("id")
