@@ -15,16 +15,17 @@ let
     pkgs.writeText unitFileName (lib.generators.toINI { listsAsDuplicateKeys = true; } sections);
 
   kataConfigToml =
-    pkgs.runCommand "${name}-kata-config.toml" { nativeBuildInputs = [ pkgs.gawk ]; } ''
-      kernel_line="$(awk '$1 == "kernel" { print; exit }' ${pkgs.kata-runtime}/share/defaults/kata-containers/configuration.toml)"
-      substitute ${pkgs.kata-runtime}/share/defaults/kata-containers/configuration.toml "$out" \
-        --replace-fail \
-          "$kernel_line" \
-          'kernel = "${kataKernel}/share/kata-containers/vmlinux.container"' \
-        --replace-fail \
-          'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params"]' \
-          'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "default_memory"]'
-    '';
+    pkgs.runCommand "${name}-kata-config.toml" { nativeBuildInputs = [ pkgs.gawk ]; }
+      ''
+        kernel_line="$(awk '$1 == "kernel" { print; exit }' ${pkgs.kata-runtime}/share/defaults/kata-containers/configuration.toml)"
+        substitute ${pkgs.kata-runtime}/share/defaults/kata-containers/configuration.toml "$out" \
+          --replace-fail \
+            "$kernel_line" \
+            'kernel = "${kataKernel}/share/kata-containers/vmlinux.container"' \
+          --replace-fail \
+            'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params"]' \
+            'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "default_memory"]'
+      '';
 
   dockerDaemonJson = jsonFormat.generate "${name}-docker-daemon.json" {
     "data-root" = dataRoot;

@@ -1,0 +1,30 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+PATH=/usr/bin
+
+read FLAG < /flag
+read DEST < <(tr -cd "[a-z0-9/]" <<< "$1")
+[[ "$DEST" == /* ]] || exit 1
+
+OLDIFS="$IFS"
+IFS="/"
+FILE=""
+for FRAGMENT in $DEST
+do
+	[ -z "$FRAGMENT" ] && continue
+	FILE="$FILE/$FRAGMENT"
+	[ $(stat -c %U "$FILE") == "hacker" ] && exit 2
+	[ $(stat -c %G "$FILE") == "hacker" ] && exit 3
+	[[ $(stat -c %A "$FILE") =~ .....w..w. ]] && exit 4
+	[ "$FRAGMENT" == "proc" ] && exit 5
+	[ "$FRAGMENT" == "fd" ] && exit 6
+	[ "$FRAGMENT" == "hacker" ] && exit 7
+
+	chmod 000 "$FILE"
+done
+IFS="$OLDIFS"
+
+[ -e "$FILE" ] && exit 6 # fix clever bypass by amateurhour
+umask 777
+touch "$DEST"
+echo $FLAG > "$DEST"

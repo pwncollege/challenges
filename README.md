@@ -103,7 +103,26 @@ The repository contains all you need to build these challenges.
 
 ### Prerequisites
 
-Install required Python packages in a virtual environment:
+The recommended way to work in this repo is via the Nix flake dev shell.
+
+Requirements for `nix develop`:
+
+- Linux (currently `x86_64-linux` only)
+- `systemd` as PID 1 (the dev shell spins up a dedicated `dockerd` via `systemctl`)
+- `sudo` access (to install runtime units and start the runtime Docker daemon)
+- Nix with flakes enabled (you need `experimental-features = nix-command flakes`)
+
+```bash
+# enter the dev shell (will likely prompt for sudo)
+nix develop
+```
+
+More details: `docs/development.md`.
+
+If you are not using Nix, you will need a working Docker setup and the Python tooling for `pwnshop`.
+At minimum, install `uv` and then use `./pwnshop ...` (it will manage Python deps from `tools/pwnshop/uv.lock`).
+
+For legacy/manual environments, you can still install a basic set of Python packages in a virtual environment:
 
 ```bash
 pip install black click jinja2 pyastyle pwntools rich

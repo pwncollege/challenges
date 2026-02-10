@@ -31,6 +31,7 @@ PGP_END = "-----END PGP PUBLIC KEY BLOCK-----"
 
 UNIQUE_MAINTAINER_FIELDS = ["name", "github", "key", "email"]
 
+
 class Maintainer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -39,13 +40,9 @@ class Maintainer(BaseModel):
         pattern=r"^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$",
         description="1-39 lowercase letters, digits, or hyphens, and cannot begin or end with a hyphen",
     )
-    groups: List[str] = Field(
-        min_length=1, description="a non-empty list of glob patterns"
-    )
+    groups: List[str] = Field(min_length=1, description="a non-empty list of glob patterns")
     key: str = Field(description="a valid ASCII-armored PGP public key block")
-    email: Optional[EmailStr] = Field(
-        default=None, description="a valid email address, if provided"
-    )
+    email: Optional[EmailStr] = Field(default=None, description="a valid email address, if provided")
 
     @field_validator("key")
     @classmethod
@@ -102,11 +99,7 @@ try:
     maintainers = yaml.safe_load(maintainers_path.read_text())
 except yaml.YAMLError as e:
     print(
-        (
-            "## ❌ Issues found in `maintainers.yml`\n"
-            "YAML parse error:\n"
-            f"\n```\n{e}\n```"
-        ),
+        (f"## ❌ Issues found in `maintainers.yml`\nYAML parse error:\n\n```\n{e}\n```"),
         file=open(GITHUB_STEP_SUMMARY, "a") if GITHUB_STEP_SUMMARY else sys.stderr,
     )
     sys.exit(1)
@@ -131,18 +124,14 @@ except ValidationError as e:
                 details.append(f"\n### Maintainer at index {maintainer_index}:")
             else:
                 name = maintainers[maintainer_index]["name"]
-                details.append(
-                    f"\n### Maintainer named `{name}` (at index {maintainer_index}):"
-                )
+                details.append(f"\n### Maintainer named `{name}` (at index {maintainer_index}):")
             for field, error in errors.items():
                 if error["type"] == "extra_forbidden":
                     details.append(f"- **{field}** is not a valid field")
                     continue
                 field_description = Maintainer.model_fields[field].description
                 if error["type"] == "missing":
-                    details.append(
-                        f"- **{field}** is required, but missing ({field_description})"
-                    )
+                    details.append(f"- **{field}** is required, but missing ({field_description})")
                 else:
                     details.append(f"- **{field}** is invalid ({field_description})")
 
@@ -158,9 +147,7 @@ for field in UNIQUE_MAINTAINER_FIELDS:
     for maintainer in maintainers:
         shared_values.setdefault(maintainer.get(field), []).append(maintainer)
     duplicate_values = {
-        value: maintainers
-        for value, maintainers in shared_values.items()
-        if value is not None and len(maintainers) > 1
+        value: maintainers for value, maintainers in shared_values.items() if value is not None and len(maintainers) > 1
     }
     for duplicate_maintainers in duplicate_values.values():
         duplicate_value_errors.setdefault(field, []).append(duplicate_maintainers)

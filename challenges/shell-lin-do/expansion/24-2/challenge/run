@@ -1,0 +1,7 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+# Thanks to livz for contributing this challenge!
+
+PATH=/bin
+
+[[ $(cat /flag) = $(cat "$1") ]] && echo "Got it!"

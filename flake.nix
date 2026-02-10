@@ -13,7 +13,27 @@
       forAllSystems = f: lib.genAttrs systems (system: f system);
     in
     {
-      devShells = forAllSystems (system:
+      formatter = forAllSystems (
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        pkgs.writeShellApplication {
+          name = "fmt";
+          runtimeInputs = [
+            pkgs.nixfmt-rfc-style
+            pkgs.ruff
+            pkgs.treefmt
+          ];
+          text = ''
+            set -euo pipefail
+            exec treefmt "$@"
+          '';
+        }
+      );
+
+      devShells = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
 
@@ -46,6 +66,7 @@
               export DOCKER_HOST="$(sudo ${pwn-challenge-runtime}/bin/pwn-challenge-runtime)"
             '';
           };
-        });
+        }
+      );
     };
 }

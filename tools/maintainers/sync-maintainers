@@ -13,9 +13,7 @@ import sys
 
 import yaml
 
-repository_root = pathlib.Path(
-    subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
-)
+repository_root = pathlib.Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
 
 maintainers_path = repository_root / "maintainers.yml"
 maintainers = yaml.safe_load(maintainers_path.read_text())
@@ -37,11 +35,7 @@ for maintainer in maintainers:
         input=maintainer["key"],
     )
     fingerprint = next(
-        (
-            line.split(":")[9].upper()
-            for line in key_metadata.splitlines()
-            if line.startswith("fpr:")
-        ),
+        (line.split(":")[9].upper() for line in key_metadata.splitlines() if line.startswith("fpr:")),
         None,
     )
 
@@ -54,9 +48,7 @@ for maintainer in maintainers:
     )
 
     maintainer_groups = [
-        group
-        for group in all_groups
-        if any(fnmatch.fnmatchcase(group, pattern) for pattern in maintainer["groups"])
+        group for group in all_groups if any(fnmatch.fnmatchcase(group, pattern) for pattern in maintainer["groups"])
     ]
 
     for group in maintainer_groups:

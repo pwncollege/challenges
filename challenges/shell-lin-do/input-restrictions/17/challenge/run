@@ -1,0 +1,15 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+PATH=/usr/bin
+
+WORKDIR=$(mktemp -d)
+[ -n "$WORKDIR" ] || exit 1
+cd $WORKDIR
+
+doit() {
+	echo -n ""
+	read INPUT < <(head -n1 | tr -cd "[_$}{()#;:<=+]")
+	eval "$INPUT"
+}
+
+doit
