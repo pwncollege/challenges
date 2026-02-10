@@ -16,6 +16,7 @@ import sys
 
 import requests
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
     parser.add_argument("--manifests", type=pathlib.Path, help="Directory containing published manifest tag files.")

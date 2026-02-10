@@ -251,7 +251,10 @@ def main() -> int:
         parsed_modules = []
         for module_ref, raw_module, module_description_md, challenge_reads in module_reads:
             module_name = raw_module.name or module_ref.id.replace("-", " ").title()
-            module_defaults = {**dojo_defaults, **{key: getattr(raw_module, key) for key in INHERIT_KEYS if getattr(raw_module, key) is not None}}
+            module_defaults = {
+                **dojo_defaults,
+                **{key: getattr(raw_module, key) for key in INHERIT_KEYS if getattr(raw_module, key) is not None},
+            }
 
             resources_out = []
             if isinstance(raw_module.resources, list):
@@ -265,7 +268,9 @@ def main() -> int:
                         challenge_data, challenge_description_md = challenge_reads.get(challenge_id, ({}, None))
 
                         resource = {**challenge_data, **resource, "type": "challenge", "id": challenge_id}
-                        resource.setdefault("name", challenge_id.replace("-", " ").title() if isinstance(challenge_id, str) else None)
+                        resource.setdefault(
+                            "name", challenge_id.replace("-", " ").title() if isinstance(challenge_id, str) else None
+                        )
 
                         if resource.get("description") is None:
                             resource["description"] = challenge_description_md
