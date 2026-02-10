@@ -73,6 +73,7 @@ class RawModuleYml(BaseModel):
     interfaces: Optional[list] = None
 
     resources: Optional[list] = None
+    challenges: Optional[list] = None
 
 
 class ChallengeResource(BaseModel):
@@ -224,23 +225,27 @@ def main() -> int:
                 module_description_md = (module_dir / "DESCRIPTION.md").read_text()
 
             challenge_reads = {}
+            challenge_entries = []
             if isinstance(raw_module.resources, list):
-                for resource in raw_module.resources:
-                    if not isinstance(resource, dict) or resource.get("type") != "challenge":
-                        continue
+                challenge_entries.extend(
+                    resource for resource in raw_module.resources if isinstance(resource, dict) and resource.get("type") == "challenge"
+                )
+            if isinstance(raw_module.challenges, list):
+                challenge_entries.extend(challenge for challenge in raw_module.challenges if isinstance(challenge, dict))
 
-                    challenge_id = resource.get("id")
-                    if not isinstance(challenge_id, str):
-                        continue
+            for challenge in challenge_entries:
+                challenge_id = challenge.get("id")
+                if not isinstance(challenge_id, str):
+                    continue
 
-                    challenge_dir = module_dir / challenge_id
-                    challenge_data = read_yaml_mapping(challenge_dir / "challenge.yml")
+                challenge_dir = module_dir / challenge_id
+                challenge_data = read_yaml_mapping(challenge_dir / "challenge.yml")
 
-                    challenge_description_md = None
-                    if (challenge_dir / "DESCRIPTION.md").exists():
-                        challenge_description_md = (challenge_dir / "DESCRIPTION.md").read_text()
+                challenge_description_md = None
+                if (challenge_dir / "DESCRIPTION.md").exists():
+                    challenge_description_md = (challenge_dir / "DESCRIPTION.md").read_text()
 
-                    challenge_reads[challenge_id] = (challenge_data, challenge_description_md)
+                challenge_reads[challenge_id] = (challenge_data, challenge_description_md)
 
             module_reads.append((module_ref, raw_module, module_description_md, challenge_reads))
 
@@ -277,6 +282,28 @@ def main() -> int:
 
                         for key, value in module_defaults.items():
                             resource.setdefault(key, value)
+
+                    resources_out.append(resource)
+
+            if isinstance(raw_module.challenges, list):
+                for challenge in raw_module.challenges:
+                    if not isinstance(challenge, dict):
+                        resources_out.append(challenge)
+                        continue
+
+                    challenge_id = challenge.get("id")
+                    challenge_data, challenge_description_md = challenge_reads.get(challenge_id, ({}, None))
+
+                    resource = {**challenge_data, **challenge, "type": "challenge", "id": challenge_id}
+                    resource.setdefault(
+                        "name", challenge_id.replace("-", " ").title() if isinstance(challenge_id, str) else None
+                    )
+
+                    if resource.get("description") is None:
+                        resource["description"] = challenge_description_md
+
+                    for key, value in module_defaults.items():
+                        resource.setdefault(key, value)
 
                     resources_out.append(resource)
 
