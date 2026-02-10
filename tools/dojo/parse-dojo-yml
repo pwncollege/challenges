@@ -24,7 +24,9 @@ ID_REGEX = re.compile(r"^[a-z0-9-]{1,32}$")
 DOJO_SPECS = ["id", "name", "type", "award", "description", "modules"]
 MODULE_ATTRS = ["id", "name", "description", "resources"]
 
-INHERIT_KEYS = ["image", "privileged", "allow_privileged", "importable", "interfaces"]
+VISIBILITY_KEY = "visibility"
+
+INHERIT_KEYS = ["privileged", "interfaces"]
 
 
 class Visibility(BaseModel):
@@ -57,10 +59,7 @@ class RawDojoYml(BaseModel):
     description: Optional[str] = None
     visibility: Optional[Visibility] = None
 
-    image: Optional[str] = None
     privileged: Optional[bool] = None
-    allow_privileged: Optional[bool] = None
-    importable: Optional[bool] = None
     interfaces: Optional[list] = None
 
     modules: list[RawModuleRef] = Field(min_length=1)
@@ -75,10 +74,7 @@ class RawModuleYml(BaseModel):
     description: Optional[str] = None
     visibility: Optional[Visibility] = None
 
-    image: Optional[str] = None
     privileged: Optional[bool] = None
-    allow_privileged: Optional[bool] = None
-    importable: Optional[bool] = None
     interfaces: Optional[list] = None
 
     resources: Optional[list] = None
@@ -94,11 +90,8 @@ class ChallengeResource(BaseModel):
     description: Optional[str] = None
     required: Optional[bool] = None
     privileged: Optional[bool] = None
-    allow_privileged: Optional[bool] = None
-    importable: Optional[bool] = None
     progression_locked: Optional[bool] = None
     interfaces: Optional[list] = None
-    image: Optional[str] = None
     visibility: Optional[Visibility] = None
 
 
