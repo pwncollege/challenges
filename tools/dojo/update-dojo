@@ -22,7 +22,7 @@ def _auth_header_value(dojo_token: str) -> str:
     # `Authorization: Token <token>`. Some deployments may instead use bearer tokens.
     if dojo_token.startswith("ctfd_"):
         return f"Token {dojo_token}"
-    return f"Bearer {dojo_token}"
+    return f"Token {dojo_token}"
 
 
 def main() -> int:
