@@ -63,7 +63,7 @@ def main() -> int:
             image = f"{args.registry}/{slug}:latest"
             if manifests_dir and (latest_path := manifests_dir / slug / "latest").exists():
                 digest = latest_path.read_text().strip()
-                image = f"{args.registry}/{slug}:latest@{digest}"
+                image = f"{image}@{digest}"
             resource["image"] = image
 
     dojo_id = spec["id"]
