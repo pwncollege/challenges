@@ -13,7 +13,7 @@ Take, for instance, `al`, the lowest 8 (or _least significant_ 8) bits of `rax`.
 The value in `al` (in bits) is:
 
 ```
-rax = 10001010
+al = 10001010
 ```
 
 If we shift once to the left using the `shl` instruction:

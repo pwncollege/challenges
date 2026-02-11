@@ -29,7 +29,7 @@ ret
 
 Notice how `rbp` is always used to restore the stack to where it originally was. If we don't restore the stack after use, we will eventually run out. In addition, notice how we subtracted from `rsp`, because the stack grows down. To make the stack have more space, we subtract the space we need. The `ret` and `call` still work the same.
 
-Consider the fact that to assign a value to `list[2]` we subtract 12 bytes (3 dwords). That is because the stack grows down and when we moved `rsp` our stack contains addresses <`rsp`, `rbp`).
+Consider the fact that to assign a value to `list[2]` we subtract 12 bytes (3 dwords). That is because the stack grows down and when we moved `rsp` our stack contains addresses <`rsp`, `rbp`.
 
 Once again, please make function(s) that implement the following:
 
