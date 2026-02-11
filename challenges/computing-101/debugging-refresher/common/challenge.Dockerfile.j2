@@ -2,7 +2,7 @@
 {%- block additional_packages %}{{ super() }} build-essential{% endblock -%}
 {%- block setup %}
 RUN <<'EOF_BUILD'
-set -euo pipefail
+set -eu
 for src in /challenge/*.c; do
     [ -f "$src" ] || continue
     out="/challenge/$(basename "$src" .c)"
