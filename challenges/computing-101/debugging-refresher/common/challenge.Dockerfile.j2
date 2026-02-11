@@ -1,5 +1,5 @@
 {%- extends "computing-101/common/Dockerfile.j2" -%}
-{%- block additional_packages %}{{ super() }} gcc{% endblock -%}
+{%- block additional_packages %}{{ super() }} build-essential{% endblock -%}
 {%- block setup %}
 RUN <<'EOF_BUILD'
 set -euo pipefail
