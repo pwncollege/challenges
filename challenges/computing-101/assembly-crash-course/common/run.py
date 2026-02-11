@@ -13,7 +13,6 @@ import collections
 import string
 import random
 import textwrap
-import pathlib
 from collections import defaultdict
 
 import pwnlib
@@ -27,8 +26,9 @@ pwnlib.context.context.update(arch="amd64")
 builtin_print = print
 print = lambda text: builtin_print(re.sub("\n{2,}", "\n\n", textwrap.dedent(str(text))))
 
-config = (pathlib.Path(__file__).parent / ".config").read_text()
-level = int(config)
+{% endraw %}
+level = {{ level }}
+{% raw %}
 
 os.setuid(os.geteuid())
 
