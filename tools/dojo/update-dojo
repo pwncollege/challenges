@@ -19,7 +19,6 @@ import requests
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update a Dojo via the Dojo update endpoint.")
-    parser.add_argument("--manifests", type=pathlib.Path, help="Directory containing published manifest tag files.")
     parser.add_argument("--registry", required=True, help="Registry hostname for published images.")
     parser.add_argument("dojo_yml", type=pathlib.Path, help="Path to dojo.yml.")
     args = parser.parse_args()
@@ -52,7 +51,6 @@ def main() -> int:
 
     spec = json.loads(parse_result.stdout)
 
-    manifests_dir = args.manifests
     for module in spec.get("modules", []):
         module_id = module.get("id")
         for resource in module.get("resources", []):
@@ -60,11 +58,7 @@ def main() -> int:
                 continue
             challenge_id = resource.get("id")
             slug = f"{dojo_prefix}/{module_id}/{challenge_id}"
-            image = f"{args.registry}/{slug}:latest"
-            if manifests_dir and (latest_path := manifests_dir / slug / "latest").exists():
-                digest = latest_path.read_text().strip()
-                image = f"{image}@{digest}"
-            resource["image"] = image
+            resource["image"] = f"{args.registry}/{slug}:latest"
 
     dojo_id = spec["id"]
     update_url = f"{dojo_url}/pwncollege_api/v1/dojos/{dojo_id}/update"
