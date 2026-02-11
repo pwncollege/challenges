@@ -1,3 +1,4 @@
+{% raw %}
 #!/usr/bin/exec-suid --real -- /bin/python3 -I
 
 import os
@@ -2460,3 +2461,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+{% endraw %}

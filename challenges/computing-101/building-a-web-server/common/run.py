@@ -1,3 +1,4 @@
+{% raw %}
 #!/usr/bin/exec-suid -- /bin/python3 -I
 
 import os
@@ -490,3 +491,5 @@ $ {sys.argv[0]} ./server
 
 
 challenge()
+
+{% endraw %}
