@@ -1,0 +1,44 @@
+{% extends "common/base.c.j2" %}
+{% set iterations = 8 %}
+{% set initial_breakpoint = true %}
+{% set loop_breakpoint = false %}
+
+{% block level_text %}
+    puts("We write code in order to express an idea which can be reproduced and refined. We can think of our analysis as a program");
+    puts("which injests the target to be analyzed as data. As the saying goes, code is data and data is code.\n");
+    puts("While using gdb interactively as we've done with the past levels is incredibly powerful, another powerful tool is gdb");
+    puts("scripting. By scripting gdb, you can very quickly create a custom-tailored program analysis tool. If you know how to");
+    puts("interact with gdb, you already know how to write a gdb script--the syntax is exactly the same. You can write your");
+    puts("commands to some file, for example `x.gdb`, and then launch gdb using the flag `-x <PATH_TO_SCRIPT>`. This file will");
+    puts("execute all of the gdb commands after gdb launches. Alternatively, you can execute individual commands with `-ex");
+    puts("'<COMMAND>'`. You can pass multiple commands with multiple `-ex` arguments. Finally, you can have some commands be");
+    puts("always executed for any gdb session by putting them in `~/.gdbinit`. You probably want to put `set disassembly-flavor");
+    puts("intel` in there.\n");
+    puts("Within gdb scripting, a very powerful construct is breakpoint commands. Consider the following gdb script:\n");
+    puts("  start");
+    puts("  break *main+42");
+    puts("  commands");
+    puts("    x/gx $rbp-0x32");
+    puts("    continue");
+    puts("  end");
+    puts("  continue");
+    puts("");
+    puts("In this case, whenever we hit the instruction at `main+42`, we will output a particular local variable and then continue");
+    puts("execution.\n");
+    puts("Now consider a similar, but slightly more advanced script using some commands you haven't yet seen:\n");
+    puts("  start");
+    puts("  break *main+42");
+    puts("  commands");
+    puts("    silent");
+    puts("    set $local_variable = *(unsigned long long*)($rbp-0x32)");
+    puts("    printf \"Current value: %llx\\n\", $local_variable");
+    puts("    continue");
+    puts("  end");
+    puts("  continue");
+    puts("");
+    puts("In this case, the `silent` indicates that we want gdb to not report that we have hit a breakpoint, to make the output a");
+    puts("bit cleaner. Then we use the `set` command to define a variable within our gdb session, whose value is our local");
+    puts("variable. Finally, we output the current value using a formatted string.\n");
+    puts("Use gdb scripting to help you collect the random values.\n");
+{% endblock %}
+

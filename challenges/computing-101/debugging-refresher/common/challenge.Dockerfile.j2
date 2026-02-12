@@ -2,10 +2,6 @@
 {%- block additional_packages %}{{ super() }} build-essential{% endblock -%}
 {%- block setup %}
 RUN <<'EOF_BUILD'
-cat > /challenge/embryogdb_level{{ level }}.c <<'EOF_SRC'
-{% include "common/src/embryogdb_level" ~ level ~ ".c" %}
-EOF_SRC
-
 set -eu
 for src in /challenge/*.c; do
     [ -f "$src" ] || continue
