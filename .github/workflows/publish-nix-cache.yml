@@ -33,7 +33,7 @@ jobs:
       uses: DeterminateSystems/magic-nix-cache-action@v13
 
     - name: Build dev shell output
-      id: resolve-devshell-out
+      id: build-devshell
       run: |
         set -euo pipefail
         printf 'path=%s\n' "$(nix build --no-link --print-out-paths .#devShells.x86_64-linux.default)" >> "${GITHUB_OUTPUT}"
@@ -59,12 +59,12 @@ jobs:
         chmod 600 "${signing_key_file}"
 
         cache_store="s3://${R2_BUCKET_NAME}?scheme=https&endpoint=${R2_ENDPOINT}&region=auto&secret-key=${signing_key_file}"
-        devshell_out='${{ steps.resolve-devshell-out.outputs.path }}'
+        devshell_out='${{ steps.build-devshell.outputs.path }}'
 
         nix copy --to "${cache_store}" "${devshell_out}"
 
     - name: Check cache availability from public domain
       run: |
         set -euo pipefail
-        devshell_out='${{ steps.resolve-devshell-out.outputs.path }}'
+        devshell_out='${{ steps.build-devshell.outputs.path }}'
         nix path-info --store "https://${R2_PUBLIC_CACHE_DOMAIN}" "${devshell_out}" >/dev/null
