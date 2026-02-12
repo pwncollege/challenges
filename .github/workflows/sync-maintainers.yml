@@ -1,7 +1,6 @@
 name: Sync Maintainers
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
     paths:
@@ -9,6 +8,7 @@ on:
       - "tools/maintainers/sync-maintainers"
       - ".github/workflows/sync-maintainers.yml"
       - ".git-crypt/keys/**/A6C1BD8AA19BE7CC1B05DD6E1E180F029DD5460F.gpg"
+  workflow_dispatch:
 
 permissions:
   contents: write
