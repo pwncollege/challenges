@@ -7,7 +7,7 @@ on:
       - flake.nix
       - flake.lock
       - runtime/**
-      - pwnshop
+      - tools/pwnshop/**
   workflow_dispatch:
 
 concurrency:
