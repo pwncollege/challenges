@@ -11,42 +11,47 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
-      if: ${{ inputs.modified_since_ref != '' }}
-      with:
-        fetch-depth: 0
+    - name: Install Nix
+      uses: DeterminateSystems/determinate-nix-action@v3
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        cache-dependency-glob: tools/**
-
-    - name: Install git-crypt
-      shell: bash
-      run: |
-        sudo apt-get update && sudo apt-get install -y git-crypt
+    - name: Enable Magic Nix Cache
+      uses: DeterminateSystems/magic-nix-cache-action@v13
 
     - name: Remove encrypted directories
       shell: bash
+      env:
+        WORKSPACE: ${{ env.CI_WORKSPACE || github.workspace }}
       run: |
-        git crypt status -e | sed -e "s/ *encrypted: //" | xargs dirname | xargs rm -rf
+        set -euo pipefail
+        nix develop -c bash -euo pipefail -c '
+          cd "$WORKSPACE"
+          git crypt status -e | sed -e "s/ *encrypted: //" | xargs -r dirname | xargs -r rm -rf
+        '
 
     - name: Test challenges
       shell: bash
       env:
+        WORKSPACE: ${{ env.CI_WORKSPACE || github.workspace }}
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
         set -euo pipefail
-        JOBS=$(( $(nproc) * 2 ))
-        if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
-          echo "::group::Validating dojo.yml"
-          ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
-          echo "::endgroup::"
+        if [ -n "$MODIFIED_SINCE" ]; then
+          git -C "$WORKSPACE" fetch --prune --unshallow || true
+          git -C "$WORKSPACE" fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
         fi
-        echo "::group::Challenges to be tested"
-        ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
-        echo "::endgroup::"
-        echo "::group::Testing challenges"
-        ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
-        echo "::endgroup::"
+        nix develop -c bash -euo pipefail -c '
+          cd "$WORKSPACE"
+          JOBS=$(( $(nproc) * 2 ))
+          if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
+            echo "::group::Validating dojo.yml"
+            ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
+            echo "::endgroup::"
+          fi
+          echo "::group::Challenges to be tested"
+          ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
+          echo "::endgroup::"
+          echo "::group::Testing challenges"
+          ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
+          echo "::endgroup::"
+        '

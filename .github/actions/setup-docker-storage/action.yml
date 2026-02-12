@@ -18,3 +18,8 @@ runs:
           sudo ln -s "/mnt/$service" "/var/lib/$service"
         done
         sudo systemctl start docker
+        workspace="/mnt/workspace"
+        sudo mkdir -p "$workspace"
+        sudo chown -R "$USER":"$USER" "$workspace"
+        rsync -a --delete "$GITHUB_WORKSPACE"/ "$workspace"/
+        echo "CI_WORKSPACE=$workspace" >> "$GITHUB_ENV"
