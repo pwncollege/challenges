@@ -32,7 +32,7 @@ jobs:
     - name: Enable Magic Nix Cache
       uses: DeterminateSystems/magic-nix-cache-action@v13
 
-    - name: Build dev shell output
+    - name: Build devshell
       id: build-devshell
       run: |
         set -euo pipefail
