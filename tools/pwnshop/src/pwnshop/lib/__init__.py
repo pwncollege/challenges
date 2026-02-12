@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
+
 class RelativeEnvironment(jinja2.Environment):
     def join_path(self, template: str, parent: str) -> str:
         return posixpath.normpath(str(pathlib.PurePosixPath(parent).parent / template))
