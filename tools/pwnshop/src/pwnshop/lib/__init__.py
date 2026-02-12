@@ -18,23 +18,6 @@ logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
-def _find_git_root(start: pathlib.Path) -> pathlib.Path:
-    """
-    Walk upwards from *start* (file or dir) to find a git worktree root.
-
-    Git worktrees store `.git` as a file, not a directory, so we only check for
-    existence.
-    """
-
-    start = pathlib.Path(start)
-    if start.is_file():
-        start = start.parent
-    for candidate in (start, *start.parents):
-        if (candidate / ".git").exists():
-            return candidate
-    raise FileNotFoundError(f"Could not locate git root from {start}")
-
-
 class RelativeEnvironment(jinja2.Environment):
     def join_path(self, template: str, parent: str) -> str:
         return str(pathlib.PurePosixPath(parent).parent / template)
@@ -43,12 +26,9 @@ class RelativeEnvironment(jinja2.Environment):
 def render(template: pathlib.Path) -> str:
     logger.debug("rendering template %s (seed=%d)", template, CHALLENGE_SEED)
     template = pathlib.Path(template).resolve()
-    git_root = _find_git_root(template)
+    git_root = next(parent for parent in template.parents if (parent / ".git").exists())
     challenges_root = git_root / "challenges"
-    try:
-        template_name = template.relative_to(challenges_root).as_posix()
-    except ValueError as e:
-        raise FileNotFoundError(f"Template {template} is not under {challenges_root}") from e
+    template_name = template.relative_to(challenges_root).as_posix()
 
     env = RelativeEnvironment(loader=jinja2.FileSystemLoader(challenges_root))
     try:
