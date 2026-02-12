@@ -9,6 +9,7 @@ let
   jsonFormat = pkgs.formats.json { };
 
   kataKernel = import ./kernel.nix { inherit pkgs name; };
+  seccompProfile = import ./seccomp.nix { inherit pkgs name; };
 
   toSystemdUnit =
     unitFileName: sections:
@@ -32,6 +33,7 @@ let
     "exec-root" = runRoot;
     "pidfile" = "${runRoot}/dockerd.pid";
     "log-driver" = "journald";
+    "seccomp-profile" = "${seccompProfile}";
 
     "features" = {
       "containerd-snapshotter" = true;
