@@ -77,7 +77,7 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout, log
             for test in tests:
                 test_name = test.relative_to(rendered)
                 logger.debug("running test %s in %s", test_name, challenge_path)
-                with lib.run_challenge(image_id, volumes=[test]) as (container, _):
+                with lib.run_challenge(image_id, challenge_path=challenge_path, volumes=[test]) as (container, _):
                     try:
                         run = subprocess.run(
                             ["docker", "exec", "--user=1000:1000", container, f"{test}"],

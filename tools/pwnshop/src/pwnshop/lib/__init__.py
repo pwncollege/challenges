@@ -13,6 +13,10 @@ from typing import Iterable, Iterator, List, Optional, Sequence
 import black
 import jinja2
 import pyastyle
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    yaml = None
 
 logger = logging.getLogger(__name__)
 
@@ -134,11 +138,209 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
     return rendered_directory
 
 
+def _parse_bool(value: object) -> Optional[bool]:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().strip("\"'").lower()
+        if normalized in {"true", "yes", "on", "1"}:
+            return True
+        if normalized in {"false", "no", "off", "0"}:
+            return False
+    return None
+
+
+def _parse_key_value(line: str) -> Optional[tuple[str, str]]:
+    if ":" not in line:
+        return None
+    key, value = line.split(":", 1)
+    return key.strip(), value.strip()
+
+
+def _normalize_scalar(value: object) -> str:
+    text = str(value).strip()
+    if "#" in text:
+        text = text.split("#", 1)[0].rstrip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {"'", '"'}:
+        text = text[1:-1]
+    return text.strip()
+
+
+def _load_yaml(path: pathlib.Path) -> object:
+    if not path.is_file() or yaml is None:
+        return None
+    try:
+        return yaml.safe_load(path.read_text())
+    except Exception as error:  # pragma: no cover - defensive
+        logger.debug("failed to parse %s as yaml: %s", path, error)
+        return None
+
+
+def _fallback_mapping_privileged(path: pathlib.Path) -> Optional[bool]:
+    if not path.is_file():
+        return None
+    for raw_line in path.read_text().splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key_value = _parse_key_value(stripped)
+        if not key_value:
+            continue
+        key, value = key_value
+        if key == "privileged":
+            parsed = _parse_bool(_normalize_scalar(value))
+            if parsed is not None:
+                return parsed
+    return None
+
+
+def _module_privileged(path: pathlib.Path, challenge_id: str) -> tuple[Optional[bool], Optional[bool]]:
+    data = _load_yaml(path)
+    if isinstance(data, dict):
+        module_default = _parse_bool(data.get("privileged"))
+        challenge_override = None
+        for key in ("resources", "challenges"):
+            entries = data.get(key)
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                if _normalize_scalar(entry.get("id", "")) != challenge_id:
+                    continue
+                if key == "resources" and _normalize_scalar(entry.get("type", "")) != "challenge":
+                    continue
+                parsed = _parse_bool(entry.get("privileged"))
+                if parsed is not None:
+                    challenge_override = parsed
+                    return module_default, challenge_override
+        return module_default, challenge_override
+
+    if not path.is_file():
+        return None, None
+
+    module_default = None
+    challenge_override = None
+    section = None
+    item: Optional[dict[str, str]] = None
+
+    def flush_item(current_section: Optional[str], current_item: Optional[dict[str, str]]) -> None:
+        nonlocal challenge_override
+        if current_item is None:
+            return
+        if _normalize_scalar(current_item.get("id", "")) != challenge_id:
+            return
+        is_challenge = current_section == "challenges" or _normalize_scalar(current_item.get("type", "")) == "challenge"
+        if not is_challenge:
+            return
+        if "privileged" not in current_item:
+            return
+        parsed = _parse_bool(_normalize_scalar(current_item["privileged"]))
+        if parsed is not None:
+            challenge_override = parsed
+
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        lstripped = line.lstrip()
+
+        if section is not None and lstripped.startswith("-"):
+            flush_item(section, item)
+            item = {}
+            remainder = lstripped[1:].strip()
+            if not remainder:
+                continue
+            key_value = _parse_key_value(remainder)
+            if key_value:
+                key, value = key_value
+                item[key] = value
+            continue
+
+        if section is not None and item is not None and indent > 0:
+            key_value = _parse_key_value(lstripped)
+            if key_value:
+                key, value = key_value
+                item[key] = value
+            continue
+
+        if indent == 0:
+            flush_item(section, item)
+            item = None
+            key_value = _parse_key_value(stripped)
+            if not key_value:
+                section = None
+                continue
+            key, value = key_value
+            if key == "privileged":
+                module_default = _parse_bool(_normalize_scalar(value))
+            section = key if key in {"resources", "challenges"} and not value else None
+            continue
+
+    flush_item(section, item)
+    return module_default, challenge_override
+
+
+def _find_ancestor_file(challenge_path: pathlib.Path, filename: str) -> Optional[pathlib.Path]:
+    for parent in challenge_path.parents:
+        candidate = parent / filename
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def challenge_is_privileged(challenge_path: Optional[pathlib.Path]) -> bool:
+    if challenge_path is None:
+        return False
+    challenge_path = challenge_path.resolve()
+    challenge_id = challenge_path.name
+
+    module_default = None
+    module_override = None
+    if module_yml := _find_ancestor_file(challenge_path, "module.yml"):
+        module_default, module_override = _module_privileged(module_yml, challenge_id)
+
+    challenge_override = None
+    challenge_yml = challenge_path / "challenge.yml"
+    data = _load_yaml(challenge_yml)
+    if isinstance(data, dict):
+        challenge_override = _parse_bool(data.get("privileged"))
+    if challenge_override is None:
+        challenge_override = _fallback_mapping_privileged(challenge_yml)
+
+    privileged = next((value for value in (module_override, challenge_override, module_default) if value is not None), False)
+    logger.debug(
+        "resolved privileged=%s for %s (module_override=%s challenge_override=%s module_default=%s)",
+        privileged,
+        challenge_path,
+        module_override,
+        challenge_override,
+        module_default,
+    )
+    return privileged
+
+
 @contextlib.contextmanager
 def run_challenge(
-    challenge_image: str, *, volumes: Optional[Sequence[pathlib.Path]] = None
+    challenge_image: str,
+    *,
+    challenge_path: Optional[pathlib.Path] = None,
+    volumes: Optional[Sequence[pathlib.Path]] = None,
 ) -> Iterator[tuple[str, str]]:
     flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
+    privileged = challenge_is_privileged(challenge_path)
+    runtime = "kata" if privileged else os.environ.get("PWN_CHALLENGE_RUNTIME", "runc")
+    runtime_options = [
+        "--device=/dev/kvm",
+        "--device=/dev/net/tun",
+        "--runtime=" + runtime,
+        "--cap-add=SYS_PTRACE",
+        "--sysctl=net.ipv4.ip_unprivileged_port_start=1024",
+    ]
+    if privileged:
+        runtime_options.extend(["--cap-add=SYS_ADMIN", "--cap-add=NET_ADMIN"])
     env_options = []
     for key, value in {
         "FLAG": flag,
@@ -147,6 +349,7 @@ def run_challenge(
     }.items():
         env_options.extend(["--env", f"{key}={value}"])
     logger.info("starting container for image %s", challenge_image)
+    logger.debug("container runtime options for %s: %s", challenge_path or "<none>", runtime_options)
     if volumes:
         logger.debug("mounting volumes: %s", volumes)
     container = (
@@ -159,9 +362,7 @@ def run_challenge(
                 "--detach",
                 "--init",
                 "--user=0:0",
-                "--device=/dev/kvm",
-                "--runtime=" + os.environ.get("PWN_CHALLENGE_RUNTIME", "runc"),
-                "--cap-add=SYS_PTRACE",
+                *runtime_options,
                 *env_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
                 challenge_image,
