@@ -150,9 +150,9 @@ def run_challenge(
     )
     runtime = "kata" if privileged else os.environ.get("PWN_CHALLENGE_RUNTIME", "runc")
     runtime_options = [
+        f"--runtime={runtime}",
         "--device=/dev/kvm",
         "--device=/dev/net/tun",
-        f"--runtime={runtime}",
         "--cap-add=SYS_PTRACE",
         "--sysctl=net.ipv4.ip_unprivileged_port_start=1024",
     ]
