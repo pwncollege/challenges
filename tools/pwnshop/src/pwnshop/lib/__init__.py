@@ -143,7 +143,7 @@ def run_challenge(
     volumes: Optional[Sequence[pathlib.Path]] = None,
 ) -> Iterator[tuple[str, str]]:
     flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
-    privileged = bool((yaml.safe_load(challenge_yml.read_text()) or {}).get("privileged")) if yaml and challenge_path and (challenge_yml := challenge_path / "challenge.yml").is_file() else False
+    privileged = ((yaml.safe_load(challenge_yml.read_text()) or {}).get("privileged") is True) if challenge_path and (challenge_yml := challenge_path / "challenge.yml").is_file() else False
     runtime = "kata" if privileged else os.environ.get("PWN_CHALLENGE_RUNTIME", "runc")
     runtime_options = [
         "--device=/dev/kvm",
