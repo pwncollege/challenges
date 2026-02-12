@@ -3,7 +3,6 @@ import contextlib
 import logging
 import os
 import pathlib
-import posixpath
 import random
 import re
 import shutil
@@ -37,41 +36,8 @@ def _find_git_root(start: pathlib.Path) -> pathlib.Path:
 
 
 class RelativeEnvironment(jinja2.Environment):
-    """
-    Jinja2 environment that supports relative template references.
-
-    We use a single search path rooted at `git-root/challenges/` to avoid
-    overlapping loader search paths (which previously caused self-extends).
-    """
-
     def join_path(self, template: str, parent: str) -> str:
-        parent_path = pathlib.PurePosixPath(parent)
-
-        # Interpret `common/...` as module-local common (e.g. `computing-101/common/...`)
-        # unless the parent itself is inside `<module>/common/`, in which case `common/...`
-        # is treated as global `challenges/common/...` (this matches the historical intent
-        # of module common templates extending the global common templates).
-        if template.startswith("common/"):
-            if len(parent_path.parts) >= 2 and parent_path.parts[1] == "common":
-                return template
-            if parent_path.parts:
-                module_common = pathlib.PurePosixPath(parent_path.parts[0]) / template
-                # Fall back to global `common/...` if the module doesn't provide it.
-                if isinstance(self.loader, jinja2.FileSystemLoader) and self.loader.searchpath:
-                    base = pathlib.Path(self.loader.searchpath[0])
-                    if (base / module_common.as_posix()).exists():
-                        return module_common.as_posix()
-                return template
-
-        # Treat non-dot-prefixed paths containing a slash as rooted at the loader root.
-        if "/" in template and not template.startswith(("./", "../")):
-            return template
-
-        joined = parent_path.parent / template
-        normalized = pathlib.PurePosixPath(posixpath.normpath(joined.as_posix()))
-        if normalized.is_absolute() or ".." in normalized.parts:
-            raise jinja2.TemplateNotFound(template)
-        return normalized.as_posix()
+        return str(pathlib.PurePosixPath(parent).parent / template)
 
 
 def render(template: pathlib.Path) -> str:
