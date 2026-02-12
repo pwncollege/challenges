@@ -3,6 +3,7 @@ import contextlib
 import logging
 import os
 import pathlib
+import posixpath
 import random
 import re
 import shutil
@@ -20,7 +21,7 @@ CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
 class RelativeEnvironment(jinja2.Environment):
     def join_path(self, template: str, parent: str) -> str:
-        return str(pathlib.PurePosixPath(parent).parent / template)
+        return posixpath.normpath(str(pathlib.PurePosixPath(parent).parent / template))
 
 
 def render(template: pathlib.Path) -> str:
