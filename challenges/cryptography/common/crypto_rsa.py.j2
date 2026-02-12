@@ -1,0 +1,45 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+{% set chal = namespace() %}
+
+from Crypto.PublicKey import RSA
+
+
+flag = open("/flag", "rb").read()
+assert len(flag) <= 256
+
+
+def rsa1():
+    key = RSA.generate(2048)
+    print(f"(public)  n = {key.n:#x}")
+    print(f"(public)  e = {key.e:#x}")
+    print(f"(private) d = {key.d:#x}")
+
+    ciphertext = pow(
+        int.from_bytes(flag, "little"),
+        key.e,
+        key.n
+    ).to_bytes(256, "little")
+
+    print(f"Flag Ciphertext (hex): {ciphertext.hex()}")
+
+
+def rsa2():
+    key = RSA.generate(2048)
+    print(f"e = {key.e:#x}")
+    print(f"p = {key.p:#x}")
+    print(f"q = {key.q:#x}")
+
+    ciphertext = pow(
+        int.from_bytes(flag, "little"),
+        key.e,
+        key.n
+    ).to_bytes(256, "little")
+
+    print(f"Flag Ciphertext (hex): {ciphertext.hex()}")
+
+
+if chal.mode == "rsa1":
+    rsa1()
+elif chal.mode == "rsa2":
+    rsa2()
