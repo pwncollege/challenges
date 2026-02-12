@@ -463,7 +463,7 @@ class ASMBase:
                 return insn.size
 
 {% endraw %}
-{% include "common/levels/asm_level" ~ level ~ ".py" %}
+{% block level_class %}{% endblock %}
 {% raw %}
 
 def main():
