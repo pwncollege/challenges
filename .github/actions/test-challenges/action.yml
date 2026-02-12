@@ -18,40 +18,31 @@ runs:
       uses: DeterminateSystems/magic-nix-cache-action@v13
 
     - name: Remove encrypted directories
-      shell: bash
-      env:
-        WORKSPACE: ${{ env.CI_WORKSPACE || github.workspace }}
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      working-directory: ${{ env.CI_WORKSPACE || github.workspace }}
       run: |
-        set -euo pipefail
-        nix develop -c bash -euo pipefail -c '
-          cd "$WORKSPACE"
-          git crypt status -e | sed -e "s/ *encrypted: //" | xargs -r dirname | xargs -r rm -rf
-        '
+        git crypt status -e | sed -e "s/ *encrypted: //" | xargs -r dirname | xargs -r rm -rf
 
     - name: Test challenges
-      shell: bash
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      working-directory: ${{ env.CI_WORKSPACE || github.workspace }}
       env:
-        WORKSPACE: ${{ env.CI_WORKSPACE || github.workspace }}
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
-        set -euo pipefail
         if [ -n "$MODIFIED_SINCE" ]; then
-          git -C "$WORKSPACE" fetch --prune --unshallow || true
-          git -C "$WORKSPACE" fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
+          git fetch --prune --unshallow || true
+          git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
         fi
-        nix develop -c bash -euo pipefail -c '
-          cd "$WORKSPACE"
-          JOBS=$(( $(nproc) * 2 ))
-          if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
-            echo "::group::Validating dojo.yml"
-            ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
-            echo "::endgroup::"
-          fi
-          echo "::group::Challenges to be tested"
-          ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
+        JOBS=$(( $(nproc) * 2 ))
+        if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
+          echo "::group::Validating dojo.yml"
+          ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
           echo "::endgroup::"
-          echo "::group::Testing challenges"
-          ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
-          echo "::endgroup::"
-        '
+        fi
+        echo "::group::Challenges to be tested"
+        ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
+        echo "::endgroup::"
+        echo "::group::Testing challenges"
+        ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
+        echo "::endgroup::"
