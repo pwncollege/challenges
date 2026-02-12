@@ -152,7 +152,7 @@ def run_challenge(
     runtime_options = [
         "--device=/dev/kvm",
         "--device=/dev/net/tun",
-        "--runtime=" + runtime,
+        f"--runtime={runtime}",
         "--cap-add=SYS_PTRACE",
         "--sysctl=net.ipv4.ip_unprivileged_port_start=1024",
     ]
