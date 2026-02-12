@@ -42,8 +42,6 @@ jobs:
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
-        AWS_REGION: auto
-        AWS_DEFAULT_REGION: auto
         AWS_EC2_METADATA_DISABLED: "true"
         NIX_CACHE_SIGNING_PRIVATE_KEY: ${{ secrets.NIX_CACHE_SIGNING_PRIVATE_KEY }}
       run: |
