@@ -47,11 +47,24 @@ jobs:
       run: |
         set -euo pipefail
 
+        aws_dir="${HOME}/.aws"
+        mkdir -p "${aws_dir}"
+        {
+          printf '%s\n' '[default]'
+          printf '%s\n' "aws_access_key_id=${AWS_ACCESS_KEY_ID}"
+          printf '%s\n' "aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}"
+        } > "${aws_dir}/credentials"
+        {
+          printf '%s\n' '[default]'
+          printf '%s\n' 'region = auto'
+        } > "${aws_dir}/config"
+        chmod 600 "${aws_dir}/credentials" "${aws_dir}/config"
+
         signing_key_file="${RUNNER_TEMP}/nix-cache-private-key"
         printf '%s\n' "${NIX_CACHE_PRIVATE_KEY}" > "${signing_key_file}"
         chmod 600 "${signing_key_file}"
 
-        nix copy --to "s3://${R2_BUCKET_NAME}?scheme=https&endpoint=${R2_ENDPOINT}&region=auto&secret-key=${signing_key_file}" '${{ steps.build-dev-shell.outputs.path }}'
+        nix copy --to "s3://${R2_BUCKET_NAME}?scheme=https&endpoint=${R2_ENDPOINT}&region=auto&profile=default&secret-key=${signing_key_file}" '${{ steps.build-dev-shell.outputs.path }}'
 
     - name: Check cache availability from public domain
       run: |
