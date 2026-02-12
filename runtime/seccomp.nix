@@ -1,7 +1,6 @@
 { pkgs, name }:
 let
   seccompBaseProfile = pkgs.fetchurl {
-    # Pin the upstream Docker seccomp base profile so nix builds stay reproducible.
     url = "https://raw.githubusercontent.com/moby/profiles/9fb516320ad275f544b4995f424dfa8b6261cffa/seccomp/default.json";
     hash = "sha256-AVNvHR35OK5hHrog1jSeDeepm27N7hVJQnoLAbgwHig=";
   };
