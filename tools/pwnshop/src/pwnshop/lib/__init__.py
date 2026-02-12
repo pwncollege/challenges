@@ -137,13 +137,17 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
 
 @contextlib.contextmanager
 def run_challenge(
+    challenge_path: pathlib.Path,
     challenge_image: str,
     *,
-    challenge_path: Optional[pathlib.Path] = None,
     volumes: Optional[Sequence[pathlib.Path]] = None,
 ) -> Iterator[tuple[str, str]]:
     flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
-    privileged = yaml.safe_load(challenge_yml.read_text()).get("privileged") if challenge_path and (challenge_yml := challenge_path / "challenge.yml").is_file() else False
+    privileged = (
+        yaml.safe_load(challenge_yml.read_text()).get("privileged")
+        if (challenge_yml := challenge_path / "challenge.yml").is_file()
+        else False
+    )
     runtime = "kata" if privileged else os.environ.get("PWN_CHALLENGE_RUNTIME", "runc")
     runtime_options = [
         "--device=/dev/kvm",
@@ -162,7 +166,7 @@ def run_challenge(
     }.items():
         env_options.extend(["--env", f"{key}={value}"])
     logger.info("starting container for image %s", challenge_image)
-    logger.debug("container runtime options for %s: %s", challenge_path or "<none>", runtime_options)
+    logger.debug("container runtime options for %s: %s", challenge_path, runtime_options)
     if volumes:
         logger.debug("mounting volumes: %s", volumes)
     container = (
