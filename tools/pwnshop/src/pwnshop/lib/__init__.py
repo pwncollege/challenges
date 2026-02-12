@@ -3,6 +3,7 @@ import contextlib
 import logging
 import os
 import pathlib
+import posixpath
 import random
 import re
 import shutil
@@ -18,77 +19,74 @@ logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
+def _find_git_root(start: pathlib.Path) -> pathlib.Path:
+    """
+    Walk upwards from *start* (file or dir) to find a git worktree root.
 
-class _NoSelfExtendLoader(jinja2.FileSystemLoader):
-    """FileSystemLoader that prevents templates from extending/including themselves.
-
-    When search paths overlap (e.g. parent directories containing identically-named
-    subdirectories), ``computing-101/common/Dockerfile.j2`` extending
-    ``common/Dockerfile.j2`` can resolve back to itself.  This loader cooperates
-    with :class:`_NoSelfExtendEnv` (which overrides ``join_path``) to give each
-    extends/include reference a unique name encoding which physical file to skip.
+    Git worktrees store `.git` as a file, not a directory, so we only check for
+    existence.
     """
 
-    def __init__(self, searchpath, **kwargs):
-        super().__init__(searchpath, **kwargs)
-        self._name_to_realpath = {}
-        self._skip_registry = {}
-        self._counter = 0
+    start = pathlib.Path(start)
+    if start.is_file():
+        start = start.parent
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    raise FileNotFoundError(f"Could not locate git root from {start}")
 
-    def get_source(self, environment, template):
-        if template in self._skip_registry:
-            skip_realpath, actual_name = self._skip_registry[template]
-        else:
-            skip_realpath, actual_name = None, template
 
-        for searchpath in self.searchpath:
-            filename = os.path.join(os.fspath(searchpath), *actual_name.split("/"))
-            if not os.path.isfile(filename):
-                continue
-            realpath = os.path.realpath(filename)
-            if realpath == skip_realpath:
-                continue
+class RelativeEnvironment(jinja2.Environment):
+    """
+    Jinja2 environment that supports relative template references.
 
-            self._name_to_realpath[template] = realpath
-            with open(filename, encoding=self.encoding) as f:
-                contents = f.read()
-            mtime = os.path.getmtime(filename)
+    We use a single search path rooted at `git-root/challenges/` to avoid
+    overlapping loader search paths (which previously caused self-extends).
+    """
 
-            def uptodate(fn=filename, mt=mtime):
-                try:
-                    return os.path.getmtime(fn) == mt
-                except OSError:
-                    return False
+    def join_path(self, template: str, parent: str) -> str:
+        parent_path = pathlib.PurePosixPath(parent)
 
-            return contents, filename, uptodate
+        # Interpret `common/...` as module-local common (e.g. `computing-101/common/...`)
+        # unless the parent itself is inside `<module>/common/`, in which case `common/...`
+        # is treated as global `challenges/common/...` (this matches the historical intent
+        # of module common templates extending the global common templates).
+        if template.startswith("common/"):
+            if len(parent_path.parts) >= 2 and parent_path.parts[1] == "common":
+                return template
+            if parent_path.parts:
+                module_common = pathlib.PurePosixPath(parent_path.parts[0]) / template
+                # Fall back to global `common/...` if the module doesn't provide it.
+                if isinstance(self.loader, jinja2.FileSystemLoader) and self.loader.searchpath:
+                    base = pathlib.Path(self.loader.searchpath[0])
+                    if (base / module_common.as_posix()).exists():
+                        return module_common.as_posix()
+                return template
 
-        raise jinja2.TemplateNotFound(actual_name)
-
-    def make_skip_name(self, template, parent_name):
-        """Return a unique template name that skips the physical file *parent_name* resolved to."""
-        realpath = self._name_to_realpath.get(parent_name)
-        if not realpath:
+        # Treat non-dot-prefixed paths containing a slash as rooted at the loader root.
+        if "/" in template and not template.startswith(("./", "../")):
             return template
-        self._counter += 1
-        unique = f"\x00skip{self._counter}\x00{template}"
-        self._skip_registry[unique] = (realpath, template)
-        return unique
 
-
-class _NoSelfExtendEnv(jinja2.Environment):
-    """Jinja2 environment that prevents circular template inheritance from overlapping search paths."""
-
-    def join_path(self, template, parent):
-        if isinstance(self.loader, _NoSelfExtendLoader):
-            return self.loader.make_skip_name(template, parent)
-        return template
+        joined = parent_path.parent / template
+        normalized = pathlib.PurePosixPath(posixpath.normpath(joined.as_posix()))
+        if normalized.is_absolute() or ".." in normalized.parts:
+            raise jinja2.TemplateNotFound(template)
+        return normalized.as_posix()
 
 
 def render(template: pathlib.Path) -> str:
     logger.debug("rendering template %s (seed=%d)", template, CHALLENGE_SEED)
-    env = _NoSelfExtendEnv(loader=_NoSelfExtendLoader(template.parents))
+    template = pathlib.Path(template).resolve()
+    git_root = _find_git_root(template)
+    challenges_root = git_root / "challenges"
     try:
-        rendered = env.get_template(template.name).render(
+        template_name = template.relative_to(challenges_root).as_posix()
+    except ValueError as e:
+        raise FileNotFoundError(f"Template {template} is not under {challenges_root}") from e
+
+    env = RelativeEnvironment(loader=jinja2.FileSystemLoader(challenges_root))
+    try:
+        rendered = env.get_template(template_name).render(
             random=random.Random(CHALLENGE_SEED), trim_blocks=True, lstrip_blocks=True
         )
     except jinja2.TemplateNotFound as e:
