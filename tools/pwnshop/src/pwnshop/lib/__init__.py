@@ -25,14 +25,13 @@ class RelativeEnvironment(jinja2.Environment):
 
 def render(template: pathlib.Path) -> str:
     logger.debug("rendering template %s (seed=%d)", template, CHALLENGE_SEED)
-    template = pathlib.Path(template).resolve()
+    template = template.resolve()
     git_root = next(parent for parent in template.parents if (parent / ".git").exists())
     challenges_root = git_root / "challenges"
-    template_name = template.relative_to(challenges_root).as_posix()
 
     env = RelativeEnvironment(loader=jinja2.FileSystemLoader(challenges_root))
     try:
-        rendered = env.get_template(template_name).render(
+        rendered = env.get_template(template.relative_to(challenges_root).as_posix()).render(
             random=random.Random(CHALLENGE_SEED), trim_blocks=True, lstrip_blocks=True
         )
     except jinja2.TemplateNotFound as e:
