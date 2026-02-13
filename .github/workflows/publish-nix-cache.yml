@@ -28,7 +28,7 @@ jobs:
       id: build-dev-shell
       run: |
         set -euo pipefail
-        printf 'path=%s\n' "$(nix build --accept-flake-config --no-link --print-out-paths .#devShells.x86_64-linux.default)" >> "${GITHUB_OUTPUT}"
+        printf 'path=%s\n' "$(nix build --no-link --print-out-paths .#devShells.x86_64-linux.default)" >> "${GITHUB_OUTPUT}"
 
     - name: Sign dev shell closure
       run: |
