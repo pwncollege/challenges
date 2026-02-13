@@ -1,5 +1,5 @@
 name: Report runtime storage
-description: Emit disk and runtime docker usage.
+description: Report runtime storage.
 runs:
   using: composite
   steps:

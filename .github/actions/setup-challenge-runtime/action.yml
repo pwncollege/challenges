@@ -1,5 +1,5 @@
 name: Setup challenge runtime
-description: Prepare the host for the pwn.college challenge runtime.
+description: Setup challenge runtime
 runs:
   using: composite
   steps:
@@ -9,21 +9,5 @@ runs:
         echo "::group::Disk usage"
         df -h
         echo "::endgroup::"
-        src="/var/lib/pwn.college"
-        dst="/mnt/pwn.college"
-
-        sudo mkdir -p "$dst"
-
-        if [ -L "$src" ] && [ "$(readlink -f "$src")" = "$dst" ]; then
-          exit 0
-        fi
-
-        if [ -e "$src" ] && [ ! -L "$src" ]; then
-          echo "Error: $src exists and is not a symlink; refusing to overwrite." >&2
-          exit 1
-        fi
-
-        if [ -L "$src" ]; then
-          sudo rm -f "$src"
-        fi
-        sudo ln -s "$dst" "$src"
+        sudo mkdir -p /mnt/pwn.college; [ -L /var/lib/pwn.college ] && [ "$(readlink -f /var/lib/pwn.college)" = /mnt/pwn.college ] || { [ -e /var/lib/pwn.college ] && [ ! -L /var/lib/pwn.college ] && { echo "Error: /var/lib/pwn.college exists and is not a symlink; refusing to overwrite." >&2; exit 1; }; sudo rm -f /var/lib/pwn.college 2>/dev/null || true; sudo ln -s /mnt/pwn.college /var/lib/pwn.college; }
+        nix develop -c bash -lc 'echo DOCKER_HOST=$DOCKER_HOST'
