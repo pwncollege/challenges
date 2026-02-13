@@ -1,0 +1,60 @@
+name: Publish Nix Cache
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - flake.nix
+      - flake.lock
+      - runtime/**
+      - tools/pwnshop/**
+  workflow_dispatch:
+
+concurrency:
+  group: publish-nix-cache-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-dev-shell-cache:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/setup-nix
+
+    - name: Build dev shell
+      id: build-dev-shell
+      run: |
+        set -euo pipefail
+        printf 'path=%s\n' "$(nix build --no-link --print-out-paths .#devShells.x86_64-linux.default)" >> "${GITHUB_OUTPUT}"
+
+    - name: Sign dev shell closure
+      run: |
+        set -euo pipefail
+        nix store sign --recursive --key-file <(echo '${{ secrets.NIX_CACHE_PRIVATE_KEY }}') '${{ steps.build-dev-shell.outputs.path }}'
+
+    - name: Configure AWS credentials
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
+      run: |
+        set -euo pipefail
+        nix shell nixpkgs#awscli --command aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
+        nix shell nixpkgs#awscli --command aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
+        nix shell nixpkgs#awscli --command aws configure set region auto
+
+    - name: Publish dev shell closure to R2 cache
+      env:
+        R2_BUCKET_NAME: challenges-nix-cache
+        R2_ENDPOINT: ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      run: |
+        set -euo pipefail
+        nix copy --to "s3://${R2_BUCKET_NAME}?endpoint=${R2_ENDPOINT}" '${{ steps.build-dev-shell.outputs.path }}'
+
+    - name: Check cache availability from public domain
+      env:
+        R2_PUBLIC_CACHE_DOMAIN: nix-cache.challenges.pwn.college
+      run: |
+        set -euo pipefail
+        nix path-info --store "https://${R2_PUBLIC_CACHE_DOMAIN}" '${{ steps.build-dev-shell.outputs.path }}' >/dev/null

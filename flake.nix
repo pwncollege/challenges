@@ -1,6 +1,13 @@
 {
   description = "pwn.college challenges dev env";
 
+  nixConfig = {
+    extra-substituters = [ "https://nix-cache.challenges.pwn.college" ];
+    extra-trusted-public-keys = [
+      "nix-cache.challenges.pwn.college-1:Qj32MyanSS2fW+W7MtEFN3fWSksMT8l6IyJuG9Lw5bc="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
   };
