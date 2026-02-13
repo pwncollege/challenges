@@ -1,6 +1,5 @@
 import base64
 import contextlib
-import json
 import logging
 import os
 import pathlib
@@ -9,7 +8,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import urllib.request
 from typing import Iterable, Iterator, List, Optional, Sequence
 
 import black
