@@ -49,7 +49,6 @@
           pwnshop = pkgs.writeShellApplication {
             name = "pwnshop";
             runtimeInputs = with pkgs; [
-              clang-tools
               git
               uv
             ];
@@ -63,7 +62,6 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              clang-tools
               docker
               git
               git-crypt

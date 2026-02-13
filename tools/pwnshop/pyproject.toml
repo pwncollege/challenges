@@ -7,8 +7,8 @@ authors = [{ name = "pwn.college" }]
 dependencies = [
   "black",
   "click",
-  "clang-format",
   "jinja2",
+  "pyastyle",
   "rich",
 ]
 
