@@ -100,7 +100,7 @@ def render(template: pathlib.Path) -> str:
             return black.format_str(rendered, mode=black.FileMode(line_length=120))
         if ".c" in template.suffixes:
             logger.debug("formatting %s as C with clang-format", template)
-            return subprocess.check_output(["clang-format", "-style={BasedOnStyle: LLVM, BreakBeforeBraces: Allman, ColumnLimit: 120}"], input=rendered, text=True)
+            return subprocess.check_output(["clang-format"], input=rendered, text=True)
     except black.parsing.InvalidInput as error:
         logger.warning("template %s does not format properly: %s", template, error)
     return rendered
