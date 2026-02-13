@@ -19,13 +19,13 @@ runs:
 
     - name: Remove encrypted directories
       shell: 'nix develop -c bash -euo pipefail {0}'
-      working-directory: ${{ env.CI_WORKSPACE || github.workspace }}
+      working-directory: ${{ github.workspace }}
       run: |
         git crypt status -e | sed -e "s/ *encrypted: //" | xargs -r dirname | xargs -r rm -rf
 
     - name: Test challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
-      working-directory: ${{ env.CI_WORKSPACE || github.workspace }}
+      working-directory: ${{ github.workspace }}
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}

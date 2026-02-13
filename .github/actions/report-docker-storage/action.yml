@@ -11,9 +11,7 @@ runs:
         echo "::endgroup::"
         echo "::group::/mnt usage"
         sudo sh -c 'du -sh /mnt/* 2>/dev/null || true'
-        if [ -n "${CI_WORKSPACE:-}" ]; then
-          sudo sh -c "du -sh '${CI_WORKSPACE}' 2>/dev/null || true"
-        fi
+        sudo sh -c 'du -sh /var/lib/pwn.college 2>/dev/null || true'
         echo "::endgroup::"
         echo "::group::Docker system usage"
         docker system df

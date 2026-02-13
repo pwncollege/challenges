@@ -17,9 +17,11 @@ runs:
           sudo mkdir -p "/mnt/$service"
           sudo ln -s "/mnt/$service" "/var/lib/$service"
         done
+        # The nix-based pwn challenge runtime uses its own dockerd with data-root:
+        #   /var/lib/pwn.college/docker
+        # Mirror the same /mnt redirection we do for system docker/containerd.
+        sudo rm -rf /var/lib/pwn.college
+        sudo mkdir -p /mnt/pwn.college
+        sudo chown -R root:root /mnt/pwn.college
+        sudo ln -s /mnt/pwn.college /var/lib/pwn.college
         sudo systemctl start docker
-        workspace="/mnt/workspace"
-        sudo mkdir -p "$workspace"
-        sudo chown -R "$USER":"$USER" "$workspace"
-        rsync -a --delete "$GITHUB_WORKSPACE"/ "$workspace"/
-        echo "CI_WORKSPACE=$workspace" >> "$GITHUB_ENV"
