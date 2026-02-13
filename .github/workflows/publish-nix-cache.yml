@@ -21,12 +21,7 @@ jobs:
       contents: read
     steps:
     - uses: actions/checkout@v4
-    - uses: DeterminateSystems/determinate-nix-action@v3.14.0
-      with:
-        extra-conf: |
-          extra-substituters = https://nix-cache.challenges.pwn.college
-          extra-trusted-public-keys = nix-cache.challenges.pwn.college-1:Qj32MyanSS2fW+W7MtEFN3fWSksMT8l6IyJuG9Lw5bc=
-    - uses: DeterminateSystems/flakehub-cache-action@v3.15.2
+    - uses: ./.github/actions/setup-nix
 
     - name: Build dev shell
       id: build-dev-shell
