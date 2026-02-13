@@ -16,7 +16,7 @@ jobs:
       uses: DeterminateSystems/determinate-nix-action@v3
 
     - name: Enable Magic Nix Cache
-      uses: DeterminateSystems/magic-nix-cache-action@v13
+      uses: DeterminateSystems/magic-nix-cache-action@main
 
     - name: nix fmt (must be clean)
       run: |
