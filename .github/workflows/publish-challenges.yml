@@ -36,7 +36,7 @@ jobs:
     - uses: DeterminateSystems/determinate-nix-action@v3.14.0
     - uses: DeterminateSystems/flakehub-cache-action@v3.15.2
 
-    - name: Set up Docker storage
+    - name: Move storage
       uses: ./.github/actions/move-runtime-storage
 
     - name: Install uv
@@ -105,6 +105,6 @@ jobs:
         DOJO_TOKEN: ${{ secrets.DOJO_TOKEN }}
       run: ./tools/dojo/update-dojo --registry challenges.pwn.college "$CHALLENGES_DIR/dojo.yml"
 
-    - name: Report docker storage
+    - name: Report runtime storage
       if: always()
       uses: ./.github/actions/report-runtime-storage

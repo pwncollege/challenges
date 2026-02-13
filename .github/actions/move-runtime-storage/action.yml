@@ -5,10 +5,30 @@ runs:
   steps:
     - name: Move storage
       shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        SKIP_PWN_CHALLENGE_RUNTIME: "1"
       run: |
         echo "::group::Disk usage"
         df -h
         echo "::endgroup::"
-        sudo rm -rf /var/lib/pwn.college
-        sudo mkdir -p /mnt/pwn.college
-        sudo ln -s /mnt/pwn.college /var/lib/pwn.college
+        src="/var/lib/pwn.college"
+        dst="/mnt/pwn.college"
+
+        # Ensure the runtime isn't running while we move its state directory.
+        sudo systemctl stop pwn-challenge-runtime.service 2>/dev/null || true
+        sudo systemctl stop pwn-challenge-runtime.socket 2>/dev/null || true
+
+        if [ -L "$src" ] && [ "$(readlink -f "$src")" = "$dst" ]; then
+          exit 0
+        fi
+
+        sudo mkdir -p "$dst"
+
+        if [ -d "$src" ] && [ ! -L "$src" ]; then
+          sudo tar -C "$src" -cf - . | sudo tar -C "$dst" -xf -
+          sudo rm -rf "$src"
+        else
+          sudo rm -f "$src" 2>/dev/null || true
+        fi
+
+        sudo ln -s "$dst" "$src"
