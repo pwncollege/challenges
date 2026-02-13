@@ -1,0 +1,13 @@
+name: Setup challenge runtime
+description: Setup challenge runtime
+runs:
+  using: composite
+  steps:
+    - name: Setup challenge runtime
+      shell: bash -euo pipefail {0}
+      run: |
+        echo "::group::Disk usage"
+        df -h
+        echo "::endgroup::"
+        sudo ln -s /mnt/pwn.college /var/lib/pwn.college
+        nix develop -c bash -lc 'echo DOCKER_HOST=$DOCKER_HOST'
