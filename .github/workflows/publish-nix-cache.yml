@@ -28,6 +28,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: DeterminateSystems/nix-installer-action@main
     - uses: DeterminateSystems/magic-nix-cache-action@main
+
     - name: Build dev shell
       id: build-dev-shell
       run: |
@@ -35,13 +36,10 @@ jobs:
         printf 'path=%s\n' "$(nix build --accept-flake-config --no-link --print-out-paths .#devShells.x86_64-linux.default)" >> "${GITHUB_OUTPUT}"
 
     - name: Sign dev shell closure
-      env:
-        NIX_CACHE_PRIVATE_KEY: ${{ secrets.NIX_CACHE_PRIVATE_KEY }}
       run: |
         set -euo pipefail
         nix_cache_private_key="${RUNNER_TEMP}/nix-cache-private-key"
-        # shellcheck disable=SC2153
-        printf '%s\n' "${NIX_CACHE_PRIVATE_KEY}" > "${nix_cache_private_key}"
+        printf '%s\n' '${{ secrets.NIX_CACHE_PRIVATE_KEY }}' > "${nix_cache_private_key}"
         chmod 600 "${nix_cache_private_key}"
         nix store sign --recursive --key-file "${nix_cache_private_key}" '${{ steps.build-dev-shell.outputs.path }}'
 
