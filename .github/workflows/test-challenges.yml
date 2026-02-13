@@ -45,9 +45,6 @@ jobs:
     - name: Set up Docker storage
       uses: ./.github/actions/setup-docker-storage
 
-    - name: Set up Docker
-      uses: docker/setup-buildx-action@v3
-
     - name: Test challenges
       uses: ./.github/actions/test-challenges
       with:

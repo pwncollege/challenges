@@ -13,9 +13,6 @@ runs:
         docker system df
         docker system df -v
         echo "::endgroup::"
-        echo "::group::Docker storage contents"
-        sudo sh -c 'du -sh /var/lib/docker/* 2>/dev/null || true'
-        echo "::endgroup::"
-        echo "::group::Containerd storage contents"
-        sudo sh -c 'du -sh /var/lib/containerd/* 2>/dev/null || true'
+        echo "::group::pwn.college runtime storage contents"
+        sudo sh -c 'du -sh /var/lib/pwn.college/docker/* 2>/dev/null || true'
         echo "::endgroup::"

@@ -1,5 +1,5 @@
 name: Setup docker storage
-description: Move Docker storage to /mnt for more space.
+description: Move pwn.college challenge runtime storage to /mnt for more space.
 runs:
   using: composite
   steps:
@@ -9,12 +9,6 @@ runs:
         echo "::group::Disk usage"
         df -h
         echo "::endgroup::"
-        sudo systemctl stop docker
-        sudo systemctl stop containerd
-        sudo sh -c 'echo "{\"features\":{\"containerd-snapshotter\":true}}" > /etc/docker/daemon.json'
-        for service in docker containerd pwn.college; do
-          sudo rm -rf "/var/lib/$service"
-          sudo mkdir -p "/mnt/$service"
-          sudo ln -s "/mnt/$service" "/var/lib/$service"
-        done
-        sudo systemctl start docker
+        sudo rm -rf /var/lib/pwn.college
+        sudo mkdir -p /mnt/pwn.college
+        sudo ln -s /mnt/pwn.college /var/lib/pwn.college
