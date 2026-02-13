@@ -7,12 +7,12 @@ import random
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from typing import Iterable, Iterator, List, Optional, Sequence
 
 import black
 import jinja2
-import pyastyle
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,49 @@ class _NoSelfExtendEnv(jinja2.Environment):
         return template
 
 
+def _clang_format(contents: str, *, assume_filename: str) -> str:
+    override = os.environ.get("PWN_CLANG_FORMAT")
+    if override:
+        clang_format = override
+    elif os.environ.get("IN_NIX_SHELL"):
+        # When running under Nix, prefer the Nix-provided clang-format (in /nix/store)
+        # over any venv-provided wrapper. On NixOS, binaries from manylinux wheels
+        # typically won't run without nix-ld.
+        clang_format = _which_ignoring_prefix("clang-format", ignore_prefix=sys.prefix)
+    else:
+        clang_format = shutil.which("clang-format")
+
+    if not clang_format:
+        raise FileNotFoundError("clang-format not found in PATH (set PWN_CLANG_FORMAT to override)")
+
+    # Keep this self-contained (no repo-wide .clang-format dependency) and roughly
+    # match the previous astyle Allman output.
+    style = "{BasedOnStyle: LLVM, BreakBeforeBraces: Allman, ColumnLimit: 120}"
+    proc = subprocess.run(
+        [clang_format, f"-assume-filename={assume_filename}", f"-style={style}"],
+        input=contents,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return proc.stdout
+
+
+def _which_ignoring_prefix(exe: str, *, ignore_prefix: str) -> Optional[str]:
+    ignore_prefix_real = os.path.realpath(ignore_prefix)
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if not directory:
+            continue
+        candidate = os.path.join(directory, exe)
+        if not (os.path.isfile(candidate) and os.access(candidate, os.X_OK)):
+            continue
+        candidate_real = os.path.realpath(candidate)
+        if candidate_real == ignore_prefix_real or candidate_real.startswith(ignore_prefix_real + os.sep):
+            continue
+        return candidate
+    return None
+
+
 def render(template: pathlib.Path) -> str:
     logger.debug("rendering template %s (seed=%d)", template, CHALLENGE_SEED)
     env = _NoSelfExtendEnv(loader=_NoSelfExtendLoader(template.parents))
@@ -98,10 +141,13 @@ def render(template: pathlib.Path) -> str:
         if ".py" in template.suffixes or "python" in rendered.splitlines()[0]:
             logger.debug("formatting %s as python with black", template)
             return black.format_str(rendered, mode=black.FileMode(line_length=120))
-        if ".c" in template.suffixes:
-            logger.debug("formatting %s as C with astyle", template)
-            return re.sub("\n{2,}", "\n\n", pyastyle.format(rendered, "--style=allman"))
+        if any(suffix in template.suffixes for suffix in (".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp")):
+            logger.debug("formatting %s as C/C++ with clang-format", template)
+            assume_filename = template.with_suffix("").name  # strip trailing .j2
+            return re.sub("\n{2,}", "\n\n", _clang_format(rendered, assume_filename=assume_filename))
     except black.parsing.InvalidInput as error:
+        logger.warning("template %s does not format properly: %s", template, error)
+    except (FileNotFoundError, subprocess.CalledProcessError) as error:
         logger.warning("template %s does not format properly: %s", template, error)
     return rendered
 
