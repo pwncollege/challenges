@@ -52,7 +52,7 @@ jobs:
     - name: Publish dev shell closure to R2 cache
       run: |
         set -euo pipefail
-        nix copy --to "s3://${R2_BUCKET_NAME}?profile=${AWS_PROFILE_NAME}&endpoint=${R2_ENDPOINT}&compression=zstd" '${{ steps.build-dev-shell.outputs.path }}'
+        nix copy --to "s3://${R2_BUCKET_NAME}?profile=${AWS_PROFILE_NAME}&endpoint=${R2_ENDPOINT}" '${{ steps.build-dev-shell.outputs.path }}'
 
     - name: Check cache availability from public domain
       run: |
