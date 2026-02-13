@@ -16,28 +16,17 @@ runs:
       with:
         fetch-depth: 0
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        cache-dependency-glob: tools/**
-
-    - name: Install git-crypt
-      shell: bash
-      run: |
-        sudo apt-get update && sudo apt-get install -y git-crypt
-
     - name: Remove encrypted directories
-      shell: bash
+      shell: 'nix develop -c bash -euo pipefail {0}'
       run: |
-        git crypt status -e | sed -e "s/ *encrypted: //" | xargs dirname | xargs rm -rf
+        git crypt status -e | sed -e "s/ *encrypted: //" | xargs -r dirname | xargs -r rm -rf
 
     - name: Test challenges
-      shell: bash
+      shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
-        set -euo pipefail
         JOBS=$(( $(nproc) * 2 ))
         if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
           echo "::group::Validating dojo.yml"
