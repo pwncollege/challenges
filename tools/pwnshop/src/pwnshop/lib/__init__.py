@@ -16,6 +16,7 @@ import jinja2
 logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
+
 clang_format = shutil.which("clang-format")
 if not clang_format:
     logger.warning("clang-format not found; C templates will not be formatted")
