@@ -8,6 +8,7 @@ dependencies = [
   "black",
   "click",
   "jinja2",
+  "pyyaml",
   "rich",
 ]
 
