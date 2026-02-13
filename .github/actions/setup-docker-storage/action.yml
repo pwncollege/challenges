@@ -12,16 +12,10 @@ runs:
         sudo systemctl stop docker
         sudo systemctl stop containerd
         sudo sh -c 'echo "{\"features\":{\"containerd-snapshotter\":true}}" > /etc/docker/daemon.json'
-        for service in docker containerd; do
+        # docker + containerd use /var/lib/{docker,containerd}; pwn challenge runtime uses /var/lib/pwn.college/docker.
+        for service in docker containerd pwn.college; do
           sudo rm -rf "/var/lib/$service"
           sudo mkdir -p "/mnt/$service"
           sudo ln -s "/mnt/$service" "/var/lib/$service"
         done
-        # The nix-based pwn challenge runtime uses its own dockerd with data-root:
-        #   /var/lib/pwn.college/docker
-        # Mirror the same /mnt redirection we do for system docker/containerd.
-        sudo rm -rf /var/lib/pwn.college
-        sudo mkdir -p /mnt/pwn.college
-        sudo chown -R root:root /mnt/pwn.college
-        sudo ln -s /mnt/pwn.college /var/lib/pwn.college
         sudo systemctl start docker
