@@ -19,11 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      R2_BUCKET_NAME: challenges-nix-cache
-      R2_PUBLIC_CACHE_DOMAIN: nix-cache.challenges.pwn.college
-      R2_ENDPOINT: ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-      AWS_PROFILE_NAME: default
     steps:
     - uses: actions/checkout@v4
     - uses: DeterminateSystems/nix-installer-action@main
@@ -46,15 +41,20 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
         set -euo pipefail
-        nix shell nixpkgs#awscli --command aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}" --profile "${AWS_PROFILE_NAME}"
-        nix shell nixpkgs#awscli --command aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}" --profile "${AWS_PROFILE_NAME}"
+        nix shell nixpkgs#awscli --command aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
+        nix shell nixpkgs#awscli --command aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
 
     - name: Publish dev shell closure to R2 cache
+      env:
+        R2_BUCKET_NAME: challenges-nix-cache
+        R2_ENDPOINT: ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
       run: |
         set -euo pipefail
-        nix copy --to "s3://${R2_BUCKET_NAME}?profile=${AWS_PROFILE_NAME}&endpoint=${R2_ENDPOINT}" '${{ steps.build-dev-shell.outputs.path }}'
+        nix copy --to "s3://${R2_BUCKET_NAME}?endpoint=${R2_ENDPOINT}" '${{ steps.build-dev-shell.outputs.path }}'
 
     - name: Check cache availability from public domain
+      env:
+        R2_PUBLIC_CACHE_DOMAIN: nix-cache.challenges.pwn.college
       run: |
         set -euo pipefail
         nix path-info --store "https://${R2_PUBLIC_CACHE_DOMAIN}" '${{ steps.build-dev-shell.outputs.path }}' >/dev/null
