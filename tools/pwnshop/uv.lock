@@ -297,7 +297,6 @@ dependencies = [
     { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "click", version = "8.3.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "jinja2" },
-    { name = "pyastyle" },
     { name = "rich" },
 ]
 
@@ -306,15 +305,8 @@ requires-dist = [
     { name = "black" },
     { name = "click" },
     { name = "jinja2" },
-    { name = "pyastyle" },
     { name = "rich" },
 ]
-
-[[package]]
-name = "pyastyle"
-version = "1.1.5"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/99/b1/c5f00383ef9d2dda1cecace84d152686442dd4c4ae97d1c4a3b83436f653/pyastyle-1.1.5.zip", hash = "sha256:89d6f0432cbc920e6649d9d7a50ba632c8305b28e07c9a9cf4346ef1b00369e3", size = 343648, upload-time = "2015-02-23T10:57:17.992Z" }
 
 [[package]]
 name = "pygments"
