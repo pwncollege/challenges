@@ -14,6 +14,10 @@ concurrency:
   group: publish-nix-cache-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   publish-dev-shell-cache:
     runs-on: ubuntu-latest
@@ -26,12 +30,10 @@ jobs:
     - name: Build dev shell
       id: build-dev-shell
       run: |
-        set -euo pipefail
         printf 'path=%s\n' "$(nix build --no-link --print-out-paths .#devShells.x86_64-linux.default)" >> "${GITHUB_OUTPUT}"
 
     - name: Sign dev shell closure
       run: |
-        set -euo pipefail
         nix store sign --recursive --key-file <(echo '${{ secrets.NIX_CACHE_PRIVATE_KEY }}') '${{ steps.build-dev-shell.outputs.path }}'
 
     - name: Configure AWS credentials
@@ -39,7 +41,6 @@ jobs:
         AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
-        set -euo pipefail
         nix shell nixpkgs#awscli --command aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
         nix shell nixpkgs#awscli --command aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
         nix shell nixpkgs#awscli --command aws configure set region auto
@@ -49,7 +50,6 @@ jobs:
         R2_BUCKET_NAME: challenges-nix-cache
         R2_ENDPOINT: ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
       run: |
-        set -euo pipefail
         nix copy --to "s3://${R2_BUCKET_NAME}?endpoint=${R2_ENDPOINT}" '${{ steps.build-dev-shell.outputs.path }}'
         printf 'StoreDir: /nix/store\nPriority: 50\n' | nix shell nixpkgs#awscli --command \
           aws s3 cp - "s3://${R2_BUCKET_NAME}/nix-cache-info" \
@@ -61,5 +61,4 @@ jobs:
       env:
         R2_PUBLIC_CACHE_DOMAIN: nix-cache.challenges.pwn.college
       run: |
-        set -euo pipefail
         nix path-info --store "https://${R2_PUBLIC_CACHE_DOMAIN}" '${{ steps.build-dev-shell.outputs.path }}' >/dev/null
