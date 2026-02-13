@@ -13,6 +13,3 @@ runs:
         docker system df
         docker system df -v
         echo "::endgroup::"
-        echo "::group::pwn.college runtime storage contents"
-        sudo sh -c 'du -sh /var/lib/pwn.college/docker/* 2>/dev/null || true'
-        echo "::endgroup::"
