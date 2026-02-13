@@ -145,7 +145,7 @@ def run_challenge(
     flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
     privileged = (
         yaml.safe_load(challenge_yml.read_text()).get("privileged")
-        if (challenge_yml := challenge_path / "challenge.yml").exists()
+        if (challenge_yml := challenge_path / "challenge.yml").is_file()
         else False
     )
     runtime = "kata" if privileged else os.environ.get("PWN_CHALLENGE_RUNTIME", "runc")
