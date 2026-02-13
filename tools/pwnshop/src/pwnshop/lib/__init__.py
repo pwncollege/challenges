@@ -99,8 +99,8 @@ def render(template: pathlib.Path) -> str:
             logger.debug("formatting %s as python with black", template)
             return black.format_str(rendered, mode=black.FileMode(line_length=120))
         if ".c" in template.suffixes:
-            logger.debug("formatting %s as C with astyle", template)
-            return re.sub("\n{2,}", "\n\n", pyastyle.format(rendered, "--style=allman"))
+            logger.debug("formatting %s as C with clang-format", template)
+            return subprocess.check_output(["clang-format", "-style={BasedOnStyle: LLVM, BreakBeforeBraces: Allman, ColumnLimit: 120}"], input=rendered, text=True)
     except black.parsing.InvalidInput as error:
         logger.warning("template %s does not format properly: %s", template, error)
     return rendered

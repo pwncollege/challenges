@@ -62,6 +62,7 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
+              clang-tools
               docker
               git
               git-crypt
