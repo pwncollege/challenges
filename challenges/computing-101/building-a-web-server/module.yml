@@ -1,0 +1,52 @@
+name: Building a Web Server
+privileged: true
+challenges:
+- id: exit
+  name: Exit
+- id: socket
+  name: Socket
+- id: bind
+  name: Bind
+- id: listen
+  name: Listen
+- id: accept
+  name: Accept
+- id: static-response
+  name: Static Response
+- id: dynamic-response
+  name: Dynamic Response
+- id: iterative-get-server
+  name: Iterative GET Server
+- id: concurrent-get-server
+  name: Concurrent GET Server
+- id: concurrent-post-server
+  name: Concurrent POST Server
+- id: web-server
+  name: Web Server
+resources:
+- name: "Building a Web Server: Introduction"
+  type: lecture
+  video: 4S78xEhxh7k
+  playlist: PL-ymxv0nOtqqYlFBiJ_gMff9zHfHMNCtG
+  slides: 1U33Vcbv2nVoufatHhmIK4XKRzyXZCujR45paGABblnk
+- name: "Building a Web Server: Linux Processes"
+  type: lecture
+  video: nEJiM1ryJQw
+  playlist: PL-ymxv0nOtqqYlFBiJ_gMff9zHfHMNCtG
+  slides: 1l0VHGTYtAk2FzWY4c-m5e8yTS1hCnGit2ve7y7BAlyg
+- name: "Building a Web Server: Network System Calls"
+  type: lecture
+  video: Q1SvbIBCx1E
+  playlist: PL-ymxv0nOtqqYlFBiJ_gMff9zHfHMNCtG
+  slides: 1MxT1qcwZZHSkaaeYIKKp7Qg0IaespmlrqhZDnWkwxFo
+- name: "Building a Web Server: HTTP"
+  type: lecture
+  video: 0G0aL8KTeB4
+  playlist: PL-ymxv0nOtqqYlFBiJ_gMff9zHfHMNCtG
+  slides: 1_-CxrxPUf9D_6tsueggaaOt27pQ-I7hVe4YIMz1PWA8
+- name: "Building a Web Server: Multiprocessing"
+  type: lecture
+  video: 9jH2Le-MWuI
+  playlist: PL-ymxv0nOtqqYlFBiJ_gMff9zHfHMNCtG
+  slides: 1tycdciuY8aMmBGj98qUMq0-ubClkqeT10QNIT0hE9kU
+

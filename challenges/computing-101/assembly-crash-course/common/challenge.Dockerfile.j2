@@ -1,0 +1,2 @@
+{%- extends "computing-101/common/Dockerfile.j2" -%}
+{%- block additional_packages %}{{ super() }} python3-unicorn{% endblock -%}

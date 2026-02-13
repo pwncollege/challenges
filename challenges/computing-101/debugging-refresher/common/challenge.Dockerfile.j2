@@ -1,0 +1,16 @@
+{%- extends "computing-101/common/Dockerfile.j2" -%}
+{%- block additional_packages %}{{ super() }} build-essential{% endblock -%}
+{%- block setup %}
+RUN <<'EOF_BUILD'
+set -eu
+for src in /challenge/*.c; do
+    [ -f "$src" ] || continue
+    out="/challenge/$(basename "$src" .c)"
+    gcc -Wl,-z,relro,-z,now -O0 -masm=intel -w "$src" -o "$out"
+    chmod 755 "$out"
+done
+rm -f /challenge/*.c
+[ ! -f /challenge/.setup ] || /challenge/.setup
+rm -f /challenge/Dockerfile /challenge/.setup
+EOF_BUILD
+{% endblock -%}
