@@ -39,7 +39,7 @@ jobs:
       run: |
         set -euo pipefail
         nix_cache_private_key="${RUNNER_TEMP}/nix-cache-private-key"
-        printf '%s\n' '${{ secrets.NIX_CACHE_PRIVATE_KEY }}' > "${nix_cache_private_key}"
+        echo '${{ secrets.NIX_CACHE_PRIVATE_KEY }}' > "${nix_cache_private_key}"
         chmod 600 "${nix_cache_private_key}"
         nix store sign --recursive --key-file "${nix_cache_private_key}" '${{ steps.build-dev-shell.outputs.path }}'
 
