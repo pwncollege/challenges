@@ -23,6 +23,9 @@ runs:
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
         JOBS=$(( $(nproc) * 2 ))
+        if [ -n "$MODIFIED_SINCE" ]; then
+          git fetch --no-tags --depth=1 origin "$MODIFIED_SINCE" >/dev/null 2>&1 || true
+        fi
         if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
           echo "::group::Validating dojo.yml"
           ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
