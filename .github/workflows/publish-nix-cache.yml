@@ -44,7 +44,7 @@ jobs:
         nix shell nixpkgs#awscli --command aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
         nix shell nixpkgs#awscli --command aws configure set region auto
 
-    - name: Publish nix-cache-info (priority)
+    - name: Publish dev shell closure to R2 cache
       env:
         R2_BUCKET_NAME: challenges-nix-cache
         R2_ENDPOINT: ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
@@ -61,13 +61,6 @@ jobs:
           --content-type text/plain \
           --endpoint-url "https://${R2_ENDPOINT}" \
           >/dev/null
-
-    - name: Publish dev shell closure to R2 cache
-      env:
-        R2_BUCKET_NAME: challenges-nix-cache
-        R2_ENDPOINT: ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-      run: |
-        set -euo pipefail
         nix copy --to "s3://${R2_BUCKET_NAME}?endpoint=${R2_ENDPOINT}" '${{ steps.build-dev-shell.outputs.path }}'
 
     - name: Check cache availability from public domain
