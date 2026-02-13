@@ -19,49 +19,42 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      R2_BUCKET_NAME: challenges-nix-cache
-      R2_PUBLIC_CACHE_DOMAIN: nix-cache.challenges.pwn.college
-      R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
     steps:
     - uses: actions/checkout@v4
     - uses: DeterminateSystems/nix-installer-action@main
     - uses: DeterminateSystems/magic-nix-cache-action@main
+
     - name: Build dev shell
       id: build-dev-shell
       run: |
         set -euo pipefail
         printf 'path=%s\n' "$(nix build --no-link --print-out-paths .#devShells.x86_64-linux.default)" >> "${GITHUB_OUTPUT}"
 
-    - name: Publish dev shell closure to R2 cache
-      env:
-        R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
-        R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
-        R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-        NIX_CACHE_PRIVATE_KEY: ${{ secrets.NIX_CACHE_PRIVATE_KEY }}
+    - name: Sign dev shell closure
       run: |
         set -euo pipefail
+        nix store sign --recursive --key-file <(echo '${{ secrets.NIX_CACHE_PRIVATE_KEY }}') '${{ steps.build-dev-shell.outputs.path }}'
 
-        aws_dir="${HOME}/.aws"
-        mkdir -p "${aws_dir}"
-        {
-          printf '%s\n' '[default]'
-          printf '%s\n' "aws_access_key_id=${R2_ACCESS_KEY}"
-          printf '%s\n' "aws_secret_access_key=${R2_SECRET_KEY}"
-        } > "${aws_dir}/credentials"
-        {
-          printf '%s\n' '[default]'
-          printf '%s\n' 'region = auto'
-        } > "${aws_dir}/config"
-        chmod 600 "${aws_dir}/credentials" "${aws_dir}/config"
+    - name: Configure AWS credentials
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
+      run: |
+        set -euo pipefail
+        nix shell nixpkgs#awscli --command aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
+        nix shell nixpkgs#awscli --command aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
 
-        signing_key_file="${RUNNER_TEMP}/nix-cache-private-key"
-        printf '%s\n' "${NIX_CACHE_PRIVATE_KEY}" > "${signing_key_file}"
-        chmod 600 "${signing_key_file}"
-
-        nix copy --to "s3://${R2_BUCKET_NAME}?endpoint=${R2_ENDPOINT}&profile=default&secret-key=${signing_key_file}" '${{ steps.build-dev-shell.outputs.path }}'
+    - name: Publish dev shell closure to R2 cache
+      env:
+        R2_BUCKET_NAME: challenges-nix-cache
+        R2_ENDPOINT: ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      run: |
+        set -euo pipefail
+        nix copy --to "s3://${R2_BUCKET_NAME}?endpoint=${R2_ENDPOINT}" '${{ steps.build-dev-shell.outputs.path }}'
 
     - name: Check cache availability from public domain
+      env:
+        R2_PUBLIC_CACHE_DOMAIN: nix-cache.challenges.pwn.college
       run: |
         set -euo pipefail
         nix path-info --store "https://${R2_PUBLIC_CACHE_DOMAIN}" '${{ steps.build-dev-shell.outputs.path }}' >/dev/null
