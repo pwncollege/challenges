@@ -33,6 +33,8 @@ jobs:
         challenges: ${{ fromJson(needs.determine-modified-challenges.outputs.challenges) }}
     steps:
     - uses: actions/checkout@v4
+    - uses: DeterminateSystems/determinate-nix-action@v3.14.0
+    - uses: DeterminateSystems/flakehub-cache-action@v3.15.2
 
     - name: Set up Docker storage
       uses: ./.github/actions/setup-docker-storage

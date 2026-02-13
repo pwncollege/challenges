@@ -11,29 +11,17 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install Nix
-      uses: DeterminateSystems/determinate-nix-action@v3
-
-    - name: Enable Magic Nix Cache
-      uses: DeterminateSystems/magic-nix-cache-action@v13
-
     - name: Remove encrypted directories
       shell: 'nix develop -c bash -euo pipefail {0}'
-      working-directory: ${{ github.workspace }}
       run: |
         git crypt status -e | sed -e "s/ *encrypted: //" | xargs -r dirname | xargs -r rm -rf
 
     - name: Test challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
-      working-directory: ${{ github.workspace }}
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
-        if [ -n "$MODIFIED_SINCE" ]; then
-          git fetch --prune --unshallow || true
-          git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
-        fi
         JOBS=$(( $(nproc) * 2 ))
         if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
           echo "::group::Validating dojo.yml"
