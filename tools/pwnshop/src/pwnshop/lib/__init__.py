@@ -7,6 +7,7 @@ import random
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from typing import Iterable, Iterator, List, Optional, Sequence
 
@@ -89,9 +90,9 @@ def _clang_format(contents: str, *, assume_filename: str) -> str:
         clang_format = override
     elif os.environ.get("IN_NIX_SHELL"):
         # When running under Nix, prefer the Nix-provided clang-format (in /nix/store)
-        # over any venv/uv-provided wrapper. On NixOS, binaries from manylinux wheels
+        # over any venv-provided wrapper. On NixOS, binaries from manylinux wheels
         # typically won't run without nix-ld.
-        clang_format = _which_prefer_nix_store("clang-format")
+        clang_format = _which_ignoring_prefix("clang-format", ignore_prefix=sys.prefix)
     else:
         clang_format = shutil.which("clang-format")
 
@@ -111,8 +112,8 @@ def _clang_format(contents: str, *, assume_filename: str) -> str:
     return proc.stdout
 
 
-def _which_prefer_nix_store(exe: str) -> Optional[str]:
-    best_non_nix = None
+def _which_ignoring_prefix(exe: str, *, ignore_prefix: str) -> Optional[str]:
+    ignore_prefix_real = os.path.realpath(ignore_prefix)
     for directory in os.environ.get("PATH", "").split(os.pathsep):
         if not directory:
             continue
@@ -120,11 +121,10 @@ def _which_prefer_nix_store(exe: str) -> Optional[str]:
         if not (os.path.isfile(candidate) and os.access(candidate, os.X_OK)):
             continue
         candidate_real = os.path.realpath(candidate)
-        if candidate_real.startswith("/nix/store/"):
-            return candidate
-        if best_non_nix is None:
-            best_non_nix = candidate
-    return best_non_nix
+        if candidate_real == ignore_prefix_real or candidate_real.startswith(ignore_prefix_real + os.sep):
+            continue
+        return candidate
+    return None
 
 
 def render(template: pathlib.Path) -> str:

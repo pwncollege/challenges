@@ -56,9 +56,6 @@
             text = ''
               set -euo pipefail
               root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-              # On NixOS, the PyPI clang-format wheel's embedded binary generally can't run
-              # (dynamic linker), so force the Nix-provided clang-format.
-              export PWN_CLANG_FORMAT='${pkgs.clang-tools}/bin/clang-format'
               exec "$root/pwnshop" "$@"
             '';
           };
@@ -76,8 +73,6 @@
             ];
             shellHook = ''
               export DOCKER_HOST="$(sudo ${pwn-challenge-runtime}/bin/pwn-challenge-runtime)"
-              # Ensure pwnshop uses a working clang-format under Nix (uv's wheel binary won't).
-              export PWN_CLANG_FORMAT='${pkgs.clang-tools}/bin/clang-format'
             '';
           };
         }
