@@ -38,7 +38,7 @@ jobs:
     - name: Sign dev shell closure
       run: |
         set -euo pipefail
-        nix store sign --recursive --key-file <(printf '%s\n' '${{ secrets.NIX_CACHE_PRIVATE_KEY }}') '${{ steps.build-dev-shell.outputs.path }}'
+        nix store sign --recursive --key-file <(echo '${{ secrets.NIX_CACHE_PRIVATE_KEY }}') '${{ steps.build-dev-shell.outputs.path }}'
 
     - name: Configure AWS credentials
       env:
