@@ -21,8 +21,8 @@ jobs:
       contents: read
     steps:
     - uses: actions/checkout@v4
-    - uses: DeterminateSystems/nix-installer-action@main
-    - uses: DeterminateSystems/magic-nix-cache-action@main
+    - uses: DeterminateSystems/determinate-nix-action@v3.14.0
+    - uses: DeterminateSystems/flakehub-cache-action@v3.15.2
 
     - name: Build dev shell
       id: build-dev-shell
@@ -43,6 +43,7 @@ jobs:
         set -euo pipefail
         nix shell nixpkgs#awscli --command aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
         nix shell nixpkgs#awscli --command aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
+        nix shell nixpkgs#awscli --command aws configure set region auto
 
     - name: Publish dev shell closure to R2 cache
       env:
