@@ -281,10 +281,22 @@ def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = Non
 
     relative_lookup = {path.as_posix(): path for path in challenge_dirs}
     logger.debug("filtering by git diff --name-only --relative %s", modified_since)
-    diff_output = subprocess.check_output(
-        ["git", "diff", "--name-only", "--relative", modified_since],
-        cwd=directory,
-        text=True,
+    # Use a commit-to-commit diff as the baseline to avoid being confused by later
+    # working tree mutations (e.g. CI deleting encrypted directories before testing).
+    # Then union with a working tree diff so local uncommitted changes are still included.
+    diff_output = "\n".join(
+        [
+            subprocess.check_output(
+                ["git", "diff", "--name-only", "--relative", modified_since, "HEAD", "--", "."],
+                cwd=directory,
+                text=True,
+            ),
+            subprocess.check_output(
+                ["git", "diff", "--name-only", "--relative", "HEAD", "--", "."],
+                cwd=directory,
+                text=True,
+            ),
+        ]
     )
     affected = set()
     for line in diff_output.splitlines():
