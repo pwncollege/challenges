@@ -1,9 +1,9 @@
-name: Report docker storage
-description: Emit disk and Docker storage usage.
+name: Report runtime storage
+description: Emit disk and runtime docker usage.
 runs:
   using: composite
   steps:
-    - name: Report docker storage
+    - name: Report runtime storage
       shell: 'nix develop -c bash -euo pipefail {0}'
       run: |
         echo "::group::Disk usage"

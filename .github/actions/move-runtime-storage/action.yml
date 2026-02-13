@@ -1,10 +1,10 @@
-name: Setup docker storage
+name: Move runtime storage
 description: Move pwn.college challenge runtime storage to /mnt for more space.
 runs:
   using: composite
   steps:
-    - name: Set up Docker storage
-      shell: bash
+    - name: Move storage
+      shell: 'nix develop -c bash -euo pipefail {0}'
       run: |
         echo "::group::Disk usage"
         df -h
