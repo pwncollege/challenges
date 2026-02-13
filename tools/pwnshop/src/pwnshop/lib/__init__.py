@@ -14,62 +14,15 @@ from typing import Iterable, Iterator, List, Optional, Sequence
 
 import black
 import jinja2
-import pyastyle
+import yaml
 
 logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
 
-SECCOMP_URL = "https://raw.githubusercontent.com/moby/profiles/master/seccomp/default.json"
-
-
-def _create_seccomp() -> str:
-    seccomp = json.loads(urllib.request.urlopen(SECCOMP_URL).read())
-
-    READ_IMPLIES_EXEC = 0x0400000
-    ADDR_NO_RANDOMIZE = 0x0040000
-
-    existing_personality_values = []
-    for syscalls in seccomp["syscalls"]:
-        if "personality" not in syscalls["names"]:
-            continue
-        if syscalls["action"] != "SCMP_ACT_ALLOW":
-            continue
-        assert len(syscalls["args"]) == 1
-        arg = syscalls["args"][0]
-        assert list(arg.keys()) == ["index", "value", "op"]
-        assert arg["index"] == 0, arg
-        assert arg["op"] == "SCMP_CMP_EQ"
-        existing_personality_values.append(arg["value"])
-
-    new_personality_values = []
-    for new_flag in [READ_IMPLIES_EXEC, ADDR_NO_RANDOMIZE]:
-        for value in [0, *existing_personality_values]:
-            new_value = value | new_flag
-            if new_value not in existing_personality_values:
-                new_personality_values.append(new_value)
-                existing_personality_values.append(new_value)
-
-    for new_value in new_personality_values:
-        seccomp["syscalls"].append({
-            "names": ["personality"],
-            "action": "SCMP_ACT_ALLOW",
-            "args": [
-                {
-                    "index": 0,
-                    "value": new_value,
-                    "op": "SCMP_CMP_EQ",
-                },
-            ],
-        })
-
-    seccomp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", prefix="pwnshop-seccomp-", delete=False)
-    json.dump(seccomp, seccomp_file)
-    seccomp_file.close()
-    return seccomp_file.name
-
-
-SECCOMP_PATH = _create_seccomp()
+clang_format = shutil.which("clang-format")
+if not clang_format:
+    logger.warning("clang-format not found; C templates will not be formatted")
 
 
 class _NoSelfExtendLoader(jinja2.FileSystemLoader):
@@ -151,9 +104,9 @@ def render(template: pathlib.Path) -> str:
         if ".py" in template.suffixes or "python" in rendered.splitlines()[0]:
             logger.debug("formatting %s as python with black", template)
             return black.format_str(rendered, mode=black.FileMode(line_length=120))
-        if ".c" in template.suffixes:
-            logger.debug("formatting %s as C with astyle", template)
-            return re.sub("\n{2,}", "\n\n", pyastyle.format(rendered, "--style=allman"))
+        if ".c" in template.suffixes and clang_format:
+            logger.debug("formatting %s as C with clang-format", template)
+            return subprocess.check_output([clang_format], input=rendered, text=True)
     except black.parsing.InvalidInput as error:
         logger.warning("template %s does not format properly: %s", template, error)
     return rendered
@@ -189,9 +142,27 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
 
 @contextlib.contextmanager
 def run_challenge(
-    challenge_image: str, *, volumes: Optional[Sequence[pathlib.Path]] = None
+    challenge_path: pathlib.Path,
+    challenge_image: str,
+    *,
+    volumes: Optional[Sequence[pathlib.Path]] = None,
 ) -> Iterator[tuple[str, str]]:
     flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
+    privileged = (
+        yaml.safe_load(challenge_yml.read_text()).get("privileged")
+        if (challenge_yml := challenge_path / "challenge.yml").is_file()
+        else False
+    )
+    runtime = "kata" if privileged else os.environ.get("PWN_CHALLENGE_RUNTIME", "runc")
+    runtime_options = [
+        f"--runtime={runtime}",
+        "--device=/dev/kvm",
+        "--device=/dev/net/tun",
+        "--cap-add=SYS_PTRACE",
+        "--sysctl=net.ipv4.ip_unprivileged_port_start=1024",
+    ]
+    if privileged:
+        runtime_options.extend(["--cap-add=SYS_ADMIN", "--cap-add=NET_ADMIN"])
     env_options = []
     for key, value in {
         "FLAG": flag,
@@ -200,6 +171,7 @@ def run_challenge(
     }.items():
         env_options.extend(["--env", f"{key}={value}"])
     logger.info("starting container for image %s", challenge_image)
+    logger.debug("container runtime options for %s: %s", challenge_path, runtime_options)
     if volumes:
         logger.debug("mounting volumes: %s", volumes)
     container = (
@@ -212,10 +184,7 @@ def run_challenge(
                 "--detach",
                 "--init",
                 "--user=0:0",
-                "--device=/dev/kvm",
-                "--runtime=" + os.environ.get("PWN_CHALLENGE_RUNTIME", "runc"),
-                "--cap-add=SYS_PTRACE",
-                f"--security-opt=seccomp={SECCOMP_PATH}",
+                *runtime_options,
                 *env_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
                 challenge_image,

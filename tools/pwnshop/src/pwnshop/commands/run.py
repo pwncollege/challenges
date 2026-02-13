@@ -38,5 +38,5 @@ def run_command(challenge_path, user, volumes, command):
         raise click.ClickException(str(error)) from error
     resolved_volumes = [path.resolve() for path in volumes]
     logger.info("running %s as uid=%d, command=%s", challenge_path, user, list(command))
-    with lib.run_challenge(image_id, volumes=resolved_volumes) as (container, flag):
+    with lib.run_challenge(challenge_path, image_id, volumes=resolved_volumes) as (container, flag):
         subprocess.run(["docker", "exec", f"--user={user}", "-it", container, *command])
