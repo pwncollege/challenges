@@ -1,4 +1,4 @@
-{%- extends "common/flask.py.j2" -%}
+{%- extends "../../common/flask.py.j2" -%}
 
 {% block setup %}
   {{- super() -}}
@@ -14,7 +14,7 @@ import tempfile
 {% endblock %}
 
 {% block handlers %}
-{% include 'common/temporarydb.py.j2' %}
+{% include './temporarydb.py.j2' %}
 db.execute("""CREATE TABLE posts AS SELECT "First Post!" AS content""")
 
 @app.route("/", methods=["POST"])

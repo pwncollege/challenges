@@ -1,8 +1,8 @@
-{%- extends "common/flask.py.j2" -%}
+{%- extends "../../common/flask.py.j2" -%}
 
 {% block setup %}
   {{- super() -}}
-  {%- from 'common/random_names.j2' import generate_names -%}
+  {%- from '../../common/random_names.j2' import generate_names -%}
   {{- generate_names(challenge, random) -}}
   {%- set challenge.flask_host = "challenge.localhost" -%}
   {%- set challenge.service_name = "pwnpost" -%}
@@ -14,7 +14,7 @@ import tempfile
 {% endblock %}
 
 {% block handlers %}
-{% include 'common/temporarydb.py.j2' %}
+{% include './temporarydb.py.j2' %}
 db.execute("""CREATE TABLE posts AS SELECT "First Post!" AS content""")
 
 @app.route("/{{challenge.endpoint_challenge}}", methods=["POST"])
