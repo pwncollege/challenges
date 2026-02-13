@@ -12,7 +12,6 @@ from typing import Iterable, Iterator, List, Optional, Sequence
 
 import black
 import jinja2
-import pyastyle
 
 logger = logging.getLogger(__name__)
 
