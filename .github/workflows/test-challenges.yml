@@ -37,12 +37,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Set up Docker storage
-      uses: ./.github/actions/setup-docker-storage
-
-    - name: Set up Docker
-      uses: docker/setup-buildx-action@v3
+    - uses: DeterminateSystems/determinate-nix-action@v3.14.0
+    - uses: DeterminateSystems/flakehub-cache-action@v3.15.2
+    - uses: ./.github/actions/setup-challenge-runtime
 
     - name: Test challenges
       uses: ./.github/actions/test-challenges
@@ -50,6 +47,6 @@ jobs:
         challenges: ${{ matrix.challenges }}
         modified_since_ref: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
 
-    - name: Report docker storage
+    - name: Report runtime storage
       if: always()
-      uses: ./.github/actions/report-docker-storage
+      uses: ./.github/actions/report-runtime-storage

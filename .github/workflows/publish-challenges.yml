@@ -33,12 +33,9 @@ jobs:
         challenges: ${{ fromJson(needs.determine-modified-challenges.outputs.challenges) }}
     steps:
     - uses: actions/checkout@v4
-
-    - name: Set up Docker storage
-      uses: ./.github/actions/setup-docker-storage
-
-    - name: Set up Docker
-      uses: docker/setup-buildx-action@v3
+    - uses: DeterminateSystems/determinate-nix-action@v3.14.0
+    - uses: DeterminateSystems/flakehub-cache-action@v3.15.2
+    - uses: ./.github/actions/setup-challenge-runtime
 
     - name: Install uv
       uses: astral-sh/setup-uv@v7
@@ -55,6 +52,7 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y rclone
 
     - name: Publish challenges
+      shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
         R2_BUCKET_NAME: challenges-registry
@@ -64,8 +62,7 @@ jobs:
         RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
         RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
-        set -euo pipefail
-        containerd_blobs_dir="/var/lib/containerd/io.containerd.content.v1.content/blobs"
+        containerd_blobs_dir="$(docker info --format '{{.DockerRootDir}}')/containerd/daemon/io.containerd.content.v1.content/blobs"
         publish_blobs_dir="/mnt/publish/blobs"
         publish_manifests_dir="/mnt/publish/manifests"
         sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
@@ -106,6 +103,6 @@ jobs:
         DOJO_TOKEN: ${{ secrets.DOJO_TOKEN }}
       run: ./tools/dojo/update-dojo --registry challenges.pwn.college "$CHALLENGES_DIR/dojo.yml"
 
-    - name: Report docker storage
+    - name: Report runtime storage
       if: always()
-      uses: ./.github/actions/report-docker-storage
+      uses: ./.github/actions/report-runtime-storage
