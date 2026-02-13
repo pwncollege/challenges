@@ -63,9 +63,7 @@
               uv
             ];
             shellHook = ''
-              if [ -z "''${SKIP_PWN_CHALLENGE_RUNTIME:-}" ]; then
-                export DOCKER_HOST="$(sudo ${pwn-challenge-runtime}/bin/pwn-challenge-runtime)"
-              fi
+              export DOCKER_HOST="$(sudo ${pwn-challenge-runtime}/bin/pwn-challenge-runtime)"
             '';
           };
         }

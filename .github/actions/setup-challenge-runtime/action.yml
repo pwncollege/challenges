@@ -1,0 +1,29 @@
+name: Setup challenge runtime
+description: Prepare the host for the pwn.college challenge runtime.
+runs:
+  using: composite
+  steps:
+    - name: Setup challenge runtime
+      shell: bash
+      run: |
+        echo "::group::Disk usage"
+        df -h
+        echo "::endgroup::"
+        src="/var/lib/pwn.college"
+        dst="/mnt/pwn.college"
+
+        sudo mkdir -p "$dst"
+
+        if [ -L "$src" ] && [ "$(readlink -f "$src")" = "$dst" ]; then
+          exit 0
+        fi
+
+        if [ -e "$src" ] && [ ! -L "$src" ]; then
+          echo "Error: $src exists and is not a symlink; refusing to overwrite." >&2
+          exit 1
+        fi
+
+        if [ -L "$src" ]; then
+          sudo rm -f "$src"
+        fi
+        sudo ln -s "$dst" "$src"
