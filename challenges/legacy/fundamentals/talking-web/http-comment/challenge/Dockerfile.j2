@@ -1,3 +1,77 @@
-{% set challenge_image = "pwncollege/challenge-legacy:latest" %}
-{% set challenge_path = "fundamentals-dojo/talking-web/http-comment" %}
-{% include "common/Dockerfile.j2" %}
+# syntax=docker/dockerfile:1
+
+ARG CHALLENGE_IMAGE="pwncollege/challenge-legacy:latest"
+FROM "${CHALLENGE_IMAGE}"
+
+# Save the base image's .init if it exists (will be run later)
+RUN if [ -x /challenge/.init ]; then mv /challenge/.init /challenge/.init.base; fi
+
+# https://github.com/pwncollege/official-dojos
+WORKDIR /opt/dojos
+
+ADD https://github.com/pwncollege/fundamentals-dojo.git ./fundamentals-dojo
+
+WORKDIR /
+
+COPY --chmod=755 <<'EOF' /challenge/.init
+#!/bin/bash
+set -eou pipefail
+
+# Add challenge.localhost to /etc/hosts for Flask server binding
+echo "127.0.0.1 challenge.localhost" >> /etc/hosts
+
+if [ ! -d "$CHALLENGE_PATH" ]; then
+    echo "[*] Challenge path $CHALLENGE_PATH does not exist!"
+    exit 1
+fi
+
+rm -f /challenge/.init
+
+threshold=$((10 * 1024 * 1024))  # 10 MiB
+
+find -L "$CHALLENGE_PATH" \
+    -mindepth 1 -maxdepth 1 ! -name '_*' \
+    -size -$((threshold + 1))c \
+    -exec cp -aL {} /challenge \;
+
+find -L "$CHALLENGE_PATH" \
+    -mindepth 1 -maxdepth 1 ! -name '_*' \
+    -type f -size +${threshold}c \
+    -exec ln -sf {} /challenge/ \;
+
+instance=$(shopt -s nullglob; set -- "$CHALLENGE_PATH"/_*/; printf '%s' "${1:-}")
+if [ -n "$instance" ]; then
+    cp -aL "$instance"/. /challenge
+fi
+
+chown -R 0:0 /challenge
+find -L /challenge -exec chmod 4755 {} \;
+
+# Some legacy challenges expect this to exist (e.g. legacy/linux-luminarium/processes/ps)
+mkdir -p /run/dojo/var/root
+echo "Legacy challenge unpacked." > /run/dojo/var/root/init.log
+
+# Create a user for uid 1000 (used by test runner)
+if ! getent passwd 1000 >/dev/null 2>&1; then
+    echo "hacker:x:1000:1000::/home/hacker:/bin/bash" >> /etc/passwd
+    echo "hacker:x:1000:" >> /etc/group
+    mkdir -p /home/hacker
+    chown 1000:1000 /home/hacker
+fi
+
+# Run the base image's .init if it was saved (e.g., for program-misuse challenges)
+# Use set +e because the base .init may try to rm files that don't exist
+if [ -x /challenge/.init.base ]; then
+    set +e
+    /challenge/.init.base
+    set -e
+fi
+
+# Run the challenge-specific .init if one was copied from the dojo
+if [ -x /challenge/.init ]; then
+    exec /challenge/.init
+fi
+EOF
+
+ARG CHALLENGE_PATH="/opt/dojos/fundamentals-dojo/talking-web/http-comment"
+ENV CHALLENGE_PATH="${CHALLENGE_PATH}"
