@@ -151,7 +151,20 @@ def run_challenge(
         if (challenge_yml := challenge_path / "challenge.yml").is_file()
         else False
     )
-    runtime = "kata" if privileged else os.environ.get("PWN_CHALLENGE_RUNTIME", "runc")
+    default_runtime = "kata" if privileged else "runc"
+    runtime = os.environ.get("PWN_CHALLENGE_RUNTIME", default_runtime)
+    if runtime != "runc":
+        try:
+            available = subprocess.check_output(
+                ["docker", "info", "--format", "{{json .Runtimes}}"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+        except subprocess.CalledProcessError:
+            available = ""
+        if f'"{runtime}"' not in available:
+            logger.warning("runtime %s not available, falling back to runc", runtime)
+            runtime = "runc"
     runtime_options = [
         f"--runtime={runtime}",
         "--device=/dev/kvm",
@@ -161,6 +174,8 @@ def run_challenge(
     ]
     if privileged:
         runtime_options.extend(["--cap-add=SYS_ADMIN", "--cap-add=NET_ADMIN"])
+        if runtime != "kata":
+            runtime_options.append("--security-opt=seccomp=unconfined")
     env_options = []
     for key, value in {
         "FLAG": flag,
