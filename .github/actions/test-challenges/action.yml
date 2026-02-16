@@ -20,60 +20,46 @@ runs:
       with:
         fetch-depth: 0
 
-    - name: Unlock git-crypt
-      if: ${{ inputs.gpg_private_key != '' }}
+    - name: Manage encrypted files
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
-      run: |
-        # This keeps the unlock surface area as small as possible.
-        git crypt status -e \
-          | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
-          | sort -u \
-          | while IFS= read -r p; do
-              case "$p" in
-                "$CHALLENGES_DIR"/*) ;;
-                *) rm -f "$p" ;;
-              esac
-            done
-
-        printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
-        git crypt unlock
-
-    - name: Test challenges
-      shell: 'nix develop -c bash -euo pipefail {0}'
-      env:
-        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
-        HAS_GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key != '' }}
+        TARGETS_FILE: ${{ runner.temp }}/pwnshop-targets.txt
       run: |
-        JOBS=$(( $(nproc) * 2 ))
-        if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
-          echo "::group::Validating dojo.yml"
-          ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
-          echo "::endgroup::"
-        fi
-        echo "::group::Challenges to be tested"
-        mapfile -t CHALLENGES < <(
-          ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE" \
-            | while IFS= read -r line; do
-                [ -n "$line" ] || continue
-                # Filter out any wrapper/tooling noise; keep only valid challenge dirs.
-                if [ -d "$CHALLENGES_DIR/$line/challenge" ]; then
-                  echo "$line"
-                fi
-              done
-        )
-        printf '%s\n' "${CHALLENGES[@]}"
-        echo "::endgroup::"
-        if [ "${#CHALLENGES[@]}" -eq 0 ]; then
-          echo "No challenges selected for testing."
-          exit 0
-        fi
+        : >"$TARGETS_FILE"
 
-        if [ "$HAS_GPG_PRIVATE_KEY" != "true" ]; then
-          # No key available: remove encrypted files so private content cannot be used even accidentally.
+        # Compute the exact challenge directories we intend to test before mutating the working tree.
+        ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE" \
+          | while IFS= read -r line; do
+              [ -n "$line" ] || continue
+              # Filter out any wrapper/tooling noise; keep only valid challenge dirs.
+              if [ -d "$CHALLENGES_DIR/$line/challenge" ]; then
+                printf '%s/%s\n' "$CHALLENGES_DIR" "$line"
+              fi
+            done \
+          | sort -u >"$TARGETS_FILE"
+
+        if [ -n "$GPG_PRIVATE_KEY" ]; then
+          # Prune encrypted files outside the group, then unlock remaining encrypted files.
+          # This keeps the unlock surface area as small as possible.
+          git crypt status -e \
+            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+            | sort -u \
+            | while IFS= read -r p; do
+                [ -n "$p" ] || continue
+                case "$p" in
+                  "$CHALLENGES_DIR"/*) ;;
+                  *) rm -f "$p" ;;
+                esac
+              done
+
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          git crypt unlock
+        else
+          # No key: remove encrypted files so private content cannot be used even accidentally.
+          # Targets were computed above, so this won't affect which challenges we test.
           git crypt status -e \
             | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
             | sort -u \
@@ -83,11 +69,26 @@ runs:
               done
         fi
 
-        args=()
-        for challenge in "${CHALLENGES[@]}"; do
-          args+=("$CHALLENGES_DIR/$challenge")
-        done
+    - name: Test challenges
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
+        TARGETS_FILE: ${{ runner.temp }}/pwnshop-targets.txt
+      run: |
+        JOBS=$(( $(nproc) * 2 ))
+        if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
+          echo "::group::Validating dojo.yml"
+          ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
+          echo "::endgroup::"
+        fi
+        echo "::group::Challenges to be tested"
+        sed -e "s#^$CHALLENGES_DIR/##" "$TARGETS_FILE" || true
+        echo "::endgroup::"
+        if [ ! -s "$TARGETS_FILE" ]; then
+          echo "No challenges selected for testing."
+          exit 0
+        fi
 
         echo "::group::Testing challenges"
-        ./pwnshop test --silent-failures --jobs "$JOBS" "${args[@]}"
+        xargs -r -d '\n' ./pwnshop test --silent-failures --jobs "$JOBS" <"$TARGETS_FILE"
         echo "::endgroup::"
