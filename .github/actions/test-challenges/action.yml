@@ -8,10 +8,8 @@ inputs:
     description: Base ref challenges have been modified since.
     required: false
     default: ""
-  gpg_root_private_key:
-    description: >-
-      GPG private key used to unlock git-crypt so tests_private can be decrypted
-      on trusted runs (push to main, schedule, manual).
+  gpg_private_key:
+    description: GPG private key used to unlock git-crypt.
     required: false
     default: ""
 runs:
@@ -23,13 +21,22 @@ runs:
         fetch-depth: 0
 
     - name: Unlock git-crypt
-      if: ${{ inputs.gpg_root_private_key != '' }}
+      if: ${{ inputs.gpg_private_key != '' }}
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
-        GPG_ROOT_PRIVATE_KEY: ${{ inputs.gpg_root_private_key }}
+        GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
+        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
       run: |
-        printf '%s' "$GPG_ROOT_PRIVATE_KEY" | gpg --batch --import
+        printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
         git crypt unlock
+        # Limit decrypted tests_private to the specific group we're testing.
+        # git-crypt unlock is repo-wide, so we cleanup other groups to reduce exposure and work.
+        find challenges -type d -name tests_private -print0 | while IFS= read -r -d '' d; do
+          case "$d" in
+            "$CHALLENGES_DIR"/*) ;;
+            *) rm -rf "$d" ;;
+          esac
+        done
 
     - name: Test challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
