@@ -114,6 +114,13 @@ pkgs.writeShellApplication {
     install -d -m 0711 -o root -g root ${runRoot}
     install -d -m 0711 -o root -g root ${dataRoot}
 
+    # Kata's containerd runtimeType expects the kata shim binary (containerd-shim-kata-v2)
+    # to be discoverable by containerd. On some hosts (notably GitHub-hosted runners),
+    # the system containerd may not have the Nix store in PATH. Add a stable symlink
+    # into /usr/local/bin so the shim can always be found.
+    install -d -m 0755 -o root -g root /usr/local/bin
+    ln -sfn "${pkgs.kata-runtime}/bin/containerd-shim-kata-v2" /usr/local/bin/containerd-shim-kata-v2
+
     mkdir -p /run/systemd/system
     ln -sfn "${systemdSocketUnit}" "/run/systemd/system/$socket_unit"
     ln -sfn "${systemdServiceUnit}" "/run/systemd/system/$service_unit"
