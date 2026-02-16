@@ -27,16 +27,22 @@ runs:
         GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
       run: |
+        # Delete encrypted content outside the specific group before unlocking.
+        # This keeps the unlock surface area as small as possible.
+        git crypt status -e \
+          | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+          | grep -E '^challenges/' \
+          | xargs -r -n1 dirname \
+          | sort -u \
+          | while IFS= read -r d; do
+              case "$d" in
+                "$CHALLENGES_DIR"/*) ;;
+                *) rm -rf "$d" ;;
+              esac
+            done
+
         printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
         git crypt unlock
-        # Limit decrypted tests_private to the specific group we're testing.
-        # git-crypt unlock is repo-wide, so we cleanup other groups to reduce exposure and work.
-        find challenges -type d -name tests_private -print0 | while IFS= read -r -d '' d; do
-          case "$d" in
-            "$CHALLENGES_DIR"/*) ;;
-            *) rm -rf "$d" ;;
-          esac
-        done
 
     - name: Test challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
