@@ -41,7 +41,6 @@ let
 
     "runtimes" = {
       "kata" = {
-        # Use an absolute shim path so the host containerd doesn't need Nix store in PATH.
         "runtimeType" = "${pkgs.kata-runtime}/bin/containerd-shim-kata-v2";
         "options" = {
           "ConfigPath" = "${kataConfigToml}";
