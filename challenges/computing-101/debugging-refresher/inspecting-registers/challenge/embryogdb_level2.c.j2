@@ -1,0 +1,16 @@
+{% extends "common/base.c.j2" %}
+{% set iterations = 1 %}
+{% set initial_breakpoint = false %}
+{% set loop_breakpoint = true %}
+
+{% block level_text %}
+    puts("You can see the values for all your registers with `info registers`. Alternatively, you can also just print a particular");
+    puts("register's value with the `print` command, or `p` for short. For example, `p $rdi` will print the value of $rdi in");
+    puts("decimal. You can also print it's value in hex with `p/x $rdi`.\n");
+    puts("In order to solve this level, you must figure out the current random value of register r12 in hex.\n");
+{% endblock %}
+
+{% block after_correct %}
+        asm("mov r12, %0" : : "r"(correct));
+{% endblock %}
+
