@@ -62,9 +62,11 @@ jobs:
         RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
         RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
-        containerd_blobs_dir="$(docker info --format '{{.DockerRootDir}}')/containerd/daemon/io.containerd.content.v1.content/blobs"
-        publish_blobs_dir="/mnt/publish/blobs"
-        publish_manifests_dir="/mnt/publish/manifests"
+        docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
+        containerd_blobs_dir="$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs"
+        # Keep the publish staging area on the same filesystem as the containerd content store so we can hardlink blobs.
+        publish_blobs_dir="$docker_root_dir/publish/blobs"
+        publish_manifests_dir="$docker_root_dir/publish/manifests"
         sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
         while IFS= read -r line; do
           image_id="${line%% *}"
