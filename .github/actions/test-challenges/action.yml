@@ -8,6 +8,12 @@ inputs:
     description: Base ref challenges have been modified since.
     required: false
     default: ""
+  gpg_root_private_key:
+    description: >-
+      GPG private key used to unlock git-crypt so tests_private can be decrypted
+      on trusted runs (push to main, schedule, manual).
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -16,10 +22,14 @@ runs:
       with:
         fetch-depth: 0
 
-    - name: Remove encrypted directories
+    - name: Unlock git-crypt
+      if: ${{ inputs.gpg_root_private_key != '' }}
       shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        GPG_ROOT_PRIVATE_KEY: ${{ inputs.gpg_root_private_key }}
       run: |
-        git crypt status -e | sed -e "s/ *encrypted: //" | xargs -r dirname | xargs -r rm -rf
+        printf '%s' "$GPG_ROOT_PRIVATE_KEY" | gpg --batch --import
+        git crypt unlock
 
     - name: Test challenges
       shell: 'nix develop -c bash -euo pipefail {0}'

@@ -1,6 +1,8 @@
 name: Test Challenges
 
 on:
+  push:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -28,7 +30,7 @@ jobs:
 
   test-challenges:
     needs: determine-modified-challenges
-    if: ${{ needs.determine-modified-challenges.outputs.challenges != '[]' }}
+    if: ${{ github.event_name == 'pull_request' && needs.determine-modified-challenges.outputs.challenges != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -45,6 +47,38 @@ jobs:
       with:
         challenges: ${{ matrix.challenges }}
         modified_since_ref: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+
+    - name: Report runtime storage
+      if: always()
+      uses: ./.github/actions/report-runtime-storage
+
+  test-challenges-trusted:
+    needs: determine-modified-challenges
+    if: ${{ github.event_name != 'pull_request' && needs.determine-modified-challenges.outputs.challenges != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        challenges: ${{ fromJson(needs.determine-modified-challenges.outputs.challenges) }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/setup-nix
+    - uses: ./.github/actions/setup-challenge-runtime
+
+    - name: Ensure git-crypt key is available
+      run: |
+        if [ -z "${{ secrets.GPG_ROOT_PRIVATE_KEY }}" ]; then
+          echo "::error::secrets.GPG_ROOT_PRIVATE_KEY is not set; cannot unlock tests_private."
+          exit 1
+        fi
+
+    - name: Test challenges
+      uses: ./.github/actions/test-challenges
+      with:
+        challenges: ${{ matrix.challenges }}
+        modified_since_ref: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+        gpg_root_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
 
     - name: Report runtime storage
       if: always()
