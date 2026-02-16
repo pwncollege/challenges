@@ -211,7 +211,7 @@ def run_challenge(
         check=True,
     )
     logger.debug("flag written to /flag")
-    subprocess.check_call(
+    subprocess.run(
         [
             "docker",
             "exec",
@@ -220,7 +220,10 @@ def run_challenge(
             "/bin/sh",
             "-c",
             "[ ! -e /challenge/.init ] || /challenge/.init",
-        ]
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
     )
     logger.debug(".init completed (if present)")
     try:
