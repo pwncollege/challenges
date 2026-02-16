@@ -9,6 +9,7 @@ let
   jsonFormat = pkgs.formats.json { };
 
   kataKernel = import ./kernel.nix { inherit pkgs name; };
+  seccompProfile = import ./seccomp.nix { inherit pkgs name; };
 
   toSystemdUnit =
     unitFileName: sections:
@@ -32,6 +33,7 @@ let
     "exec-root" = runRoot;
     "pidfile" = "${runRoot}/dockerd.pid";
     "log-driver" = "journald";
+    "seccomp-profile" = "${seccompProfile}";
 
     "features" = {
       "containerd-snapshotter" = true;
@@ -39,7 +41,7 @@ let
 
     "runtimes" = {
       "kata" = {
-        "runtimeType" = "io.containerd.kata.v2";
+        "runtimeType" = "${pkgs.kata-runtime}/bin/containerd-shim-kata-v2";
         "options" = {
           "ConfigPath" = "${kataConfigToml}";
         };

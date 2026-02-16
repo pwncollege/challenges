@@ -38,18 +38,43 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Docker storage
-      uses: ./.github/actions/setup-docker-storage
+    - name: Determine trust
+      id: trust
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Trusted contexts:
+          // - Non-PR events (workflow_dispatch/schedule) are trusted.
+          // - PRs from the main repo (not a fork) are trusted; fork PRs are not.
+          let trusted = false;
+          if (context.eventName === "workflow_dispatch" || context.eventName === "schedule") {
+            trusted = true;
+          } else if (context.eventName === "pull_request") {
+            const pr = context.payload.pull_request;
+            const headRepo = pr?.head?.repo?.full_name;
+            const baseRepo = pr?.base?.repo?.full_name;
+            if (headRepo && baseRepo && headRepo === baseRepo) trusted = true;
+          }
+          core.setOutput("trusted", trusted ? "true" : "false");
 
-    - name: Set up Docker
-      uses: docker/setup-buildx-action@v3
+    - uses: ./.github/actions/setup-nix
+    - uses: ./.github/actions/setup-challenge-runtime
 
-    - name: Test challenges
+    - name: Test challenges (trusted)
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      uses: ./.github/actions/test-challenges
+      with:
+        challenges: ${{ matrix.challenges }}
+        modified_since_ref: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+        gpg_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
+
+    - name: Test challenges (untrusted)
+      if: ${{ steps.trust.outputs.trusted != 'true' }}
       uses: ./.github/actions/test-challenges
       with:
         challenges: ${{ matrix.challenges }}
         modified_since_ref: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
 
-    - name: Report docker storage
+    - name: Report runtime storage
       if: always()
-      uses: ./.github/actions/report-docker-storage
+      uses: ./.github/actions/report-runtime-storage
