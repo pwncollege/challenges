@@ -9,5 +9,6 @@ runs:
         echo "::group::Disk usage"
         df -h
         echo "::endgroup::"
+        sudo mkdir -p /mnt/pwn.college
         sudo ln -s /mnt/pwn.college /var/lib/pwn.college
         nix develop -c bash -lc 'echo DOCKER_HOST=$DOCKER_HOST'
