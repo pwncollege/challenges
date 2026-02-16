@@ -41,8 +41,8 @@ jobs:
         fi
         ./pwnshop build "$CHALLENGE_TARGET"
 
-    - name: Install rclone
-      run: sudo apt-get update && sudo apt-get install -y rclone
+    - name: Install rclone + skopeo
+      run: sudo apt-get update && sudo apt-get install -y rclone skopeo
 
     - name: Explore local blob staging and remote location
       shell: 'nix develop -c bash -euo pipefail {0}'
@@ -55,54 +55,54 @@ jobs:
         RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
         docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
-        containerd_blobs_dir="$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs"
 
-        echo "::group::Docker/containerd paths"
+        echo "::group::Docker info"
         echo "docker_root_dir=$docker_root_dir"
-        echo "containerd_blobs_dir=$containerd_blobs_dir"
-        echo "containerd_blobs_dir_dev=$(stat -c %d "$containerd_blobs_dir")"
-        df -T "$docker_root_dir" "$containerd_blobs_dir" || true
+        docker info --format 'Driver={{.Driver}} RootDir={{.DockerRootDir}}'
         echo "::endgroup::"
 
         echo "::group::Remote top-level prefixes"
         rclone lsf "r2:${R2_BUCKET_NAME}" --dirs-only --config /dev/null || true
         echo "::endgroup::"
 
-        publish_blobs_dir="$docker_root_dir/publish-explore/blobs"
-        publish_manifests_dir="$docker_root_dir/publish-explore/manifests"
-        sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
+        publish_root="/mnt/pwn.college/publish-explore"
+        publish_blobs_dir="$publish_root/blobs"
+        publish_manifests_dir="$publish_root/manifests"
+        oci_root="$publish_root/oci"
+        sudo mkdir -p "$publish_root"
+        sudo chown -R "$(id -u):$(id -g)" "$publish_root"
+        mkdir -p "$publish_blobs_dir" "$publish_manifests_dir" "$oci_root"
 
         while IFS= read -r line; do
           image_id="${line%% *}"
           challenge_slug="${line#* }"
-          stack=("$image_id")
-          while ((${#stack[@]})); do
-            digest="${stack[-1]}"
-            digest_path="${digest//:/\/}"
-            unset 'stack[-1]'
-            sudo mkdir -p "$publish_blobs_dir/${digest_path%%/*}"
-            if ! sudo ln "$containerd_blobs_dir/$digest_path" "$publish_blobs_dir/$digest_path" 2>ln.err; then
-              echo "hardlink failed for $digest_path: $(cat ln.err)" >&2
-              # Keep exploring even if hardlinks are unavailable.
-              sudo cp --reflink=auto "$containerd_blobs_dir/$digest_path" "$publish_blobs_dir/$digest_path" 2>/dev/null || true
-            fi
-            rm -f ln.err
-            mapfile -t -O "${#stack[@]}" stack < <(
-              sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string")' \
-                "$containerd_blobs_dir/$digest_path" 2>/dev/null
-            )
-          done
-          sudo mkdir -p "$publish_manifests_dir/$challenge_slug"
-          printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
+          image_tag="pwncollege-challenge:${challenge_slug//\//-}"
+          docker tag "$image_id" "$image_tag"
+
+          image_oci_dir="$oci_root/$challenge_slug"
+          mkdir -p "$image_oci_dir"
+
+          skopeo copy --insecure-policy "docker-daemon:$image_tag" "oci:$image_oci_dir:latest"
+          manifest_ref="$(jq -r '.manifests[0].digest' "$image_oci_dir/index.json")"
+          if [ -z "$manifest_ref" ] || [ "$manifest_ref" = "null" ]; then
+            echo "failed to resolve manifest digest for $challenge_slug (image_id=$image_id)" >&2
+            exit 1
+          fi
+
+          mkdir -p "$publish_manifests_dir/$challenge_slug"
+          printf '%s\n' "$manifest_ref" >"$publish_manifests_dir/$challenge_slug/latest"
+
+          cp -a -n "$image_oci_dir/blobs/." "$publish_blobs_dir/"
         done < <(
           docker image ls --filter "label=pwncollege.challenge" --no-trunc --quiet \
             | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
         )
 
         echo "::group::Local publish stats"
-        echo "blob_file_count=$(sudo find \"$publish_blobs_dir\" -type f | wc -l)"
-        sudo du -sh "$publish_blobs_dir" "$publish_manifests_dir" || true
-        first_blob_rel="$(sudo find "$publish_blobs_dir" -type f -print -quit | sed "s#^$publish_blobs_dir/##" || true)"
+        blob_file_count="$(find "$publish_blobs_dir" -type f | wc -l)"
+        echo "blob_file_count=$blob_file_count"
+        du -sh "$publish_blobs_dir" "$publish_manifests_dir" || true
+        first_blob_rel="$(find "$publish_blobs_dir" -type f -print -quit | sed "s#^$publish_blobs_dir/##" || true)"
         echo "first_blob_rel=$first_blob_rel"
         echo "::endgroup::"
 
@@ -167,8 +167,8 @@ jobs:
         modified_since_ref: ""
         gpg_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
 
-    - name: Install rclone
-      run: sudo apt-get update && sudo apt-get install -y rclone
+    - name: Install rclone + skopeo
+      run: sudo apt-get update && sudo apt-get install -y rclone skopeo
 
     - name: Publish challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
@@ -181,29 +181,36 @@ jobs:
         RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
         RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
-        docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
-        containerd_blobs_dir="$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs"
-        # Keep the publish staging area on the same filesystem as the containerd content store so we can hardlink blobs.
-        publish_blobs_dir="$docker_root_dir/publish/blobs"
-        publish_manifests_dir="$docker_root_dir/publish/manifests"
-        sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
+        publish_root="/mnt/pwn.college/publish"
+        publish_blobs_dir="$publish_root/blobs"
+        publish_manifests_dir="$publish_root/manifests"
+        oci_root="$publish_root/oci"
+        sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir" "$oci_root"
+        sudo chown -R "$(id -u):$(id -g)" "$publish_root"
         while IFS= read -r line; do
           image_id="${line%% *}"
           challenge_slug="${line#* }"
-          stack=("$image_id")
-          while ((${#stack[@]})); do
-            digest="${stack[-1]}"
-            digest_path="${digest//:/\/}"
-            unset 'stack[-1]'
-            sudo mkdir -p "$publish_blobs_dir/${digest_path%%/*}"
-            sudo ln "$containerd_blobs_dir/$digest_path" "$publish_blobs_dir/$digest_path" 2>/dev/null || continue
-            mapfile -t -O "${#stack[@]}" stack < <(
-              sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string")' \
-                "$containerd_blobs_dir/$digest_path" 2>/dev/null
-            )
-          done
+
+          image_tag="pwncollege-challenge:${challenge_slug//\//-}"
+          docker tag "$image_id" "$image_tag"
+
+          image_oci_dir="$oci_root/$challenge_slug"
+          mkdir -p "$image_oci_dir"
+
+          # Export into an OCI layout so we can upload a static registry (blobs/ + tag pointers in manifests/).
+          skopeo copy --insecure-policy "docker-daemon:$image_tag" "oci:$image_oci_dir:latest"
+
+          manifest_ref="$(jq -r '.manifests[0].digest' "$image_oci_dir/index.json")"
+          if [ -z "$manifest_ref" ] || [ "$manifest_ref" = "null" ]; then
+            echo "failed to resolve manifest digest for $challenge_slug (image_id=$image_id)" >&2
+            exit 1
+          fi
+
+          # Deduplicate blobs across all exported images.
+          cp -a -n "$image_oci_dir/blobs/." "$publish_blobs_dir/"
+
           sudo mkdir -p "$publish_manifests_dir/$challenge_slug"
-          printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
+          printf '%s\n' "$manifest_ref" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
         done < <(
           docker image ls --filter "label=pwncollege.challenge" --no-trunc --quiet \
             | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
