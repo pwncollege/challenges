@@ -27,7 +27,6 @@ runs:
         GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
       run: |
-        # Delete encrypted content outside the specific group before unlocking.
         # This keeps the unlock surface area as small as possible.
         git crypt status -e \
           | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
