@@ -46,6 +46,7 @@ jobs:
       with:
         challenges: ${{ matrix.challenges }}
         modified_since_ref: ""
+        gpg_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
 
     - name: Install rclone
       run: sudo apt-get update && sudo apt-get install -y rclone
