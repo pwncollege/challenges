@@ -1,0 +1,29 @@
+{% extends "common/base.c.j2" %}
+{% set iterations = 1 %}
+{% set initial_breakpoint = true %}
+{% set loop_breakpoint = false %}
+
+{% block win_pre %}
+    {
+        int *i = 0;
+        (*i)++;
+    }
+{% endblock %}
+
+{% block level_text %}
+    puts("As we demonstrated in the previous level, gdb has FULL control over the target process. Under normal circumstances, gdb");
+    puts("running as your regular user cannot attach to a privileged process. This is why gdb isn't a massive security issue which");
+    puts("would allow you to just immediately solve all the levels. Nevertheless, gdb is still an extremely powerful tool.\n");
+    puts("Running within this elevated instance of gdb gives you elevated control over the entire system. To clearly demonstrate");
+    puts("this, see what happens when you run the command `call (void)win()`.\n");
+    puts("Note that this will _not_ get you the flag (it seems that we broke the win function!), so you'll need to work a bit");
+    puts("harder to get this flag!\n");
+    puts("As it turns out, all of the levels other levels in module could be solved in this way.\n");
+    puts("GDB is very powerful!\n");
+{% endblock %}
+
+{% block pre_loop %}
+    exit(42);
+    breakpoint();
+{% endblock %}
+
