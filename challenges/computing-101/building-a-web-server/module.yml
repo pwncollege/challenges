@@ -1,5 +1,4 @@
 name: Building a Web Server
-privileged: true
 challenges:
 - id: exit
   name: Exit
@@ -49,4 +48,3 @@ resources:
   video: 9jH2Le-MWuI
   playlist: PL-ymxv0nOtqqYlFBiJ_gMff9zHfHMNCtG
   slides: 1tycdciuY8aMmBGj98qUMq0-ubClkqeT10QNIT0hE9kU
-

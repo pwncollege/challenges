@@ -78,9 +78,6 @@ def run_sandbox(target, *, privileged=True):
 
     libc = ctypes.CDLL("libc.so.6")
 
-    orig_euid = os.geteuid()
-    orig_egid = os.getegid()
-
     suid = os.geteuid() != os.getuid()
     os.setpgrp()
     os.seteuid(os.getuid())
@@ -101,19 +98,7 @@ def run_sandbox(target, *, privileged=True):
         CLONE_NEWPID |
         CLONE_NEWNET
     )
-    if unshare_result != 0:
-        # Some environments (including certain CI hosts) disable user namespaces.
-        # Fall back to running without namespace sandboxing.
-        try:
-            os.seteuid(orig_euid)
-        except PermissionError:
-            pass
-        try:
-            os.setegid(orig_egid)
-        except PermissionError:
-            pass
-        result.value = target()
-        os._exit(0)
+    assert unshare_result == 0
 
     pid = os.fork()
     if pid:
@@ -132,7 +117,8 @@ def run_sandbox(target, *, privileged=True):
     libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
 
     socket.sethostname("sandbox")
-    subprocess.run(["/sbin/ip", "link", "set", "dev", "lo", "up"])
+    # `ip` is provided by iproute2. Don't hardcode /sbin since it may not exist.
+    subprocess.run(["ip", "link", "set", "dev", "lo", "up"])
 
     # if not privileged:
     #     unshare_result = libc.unshare(

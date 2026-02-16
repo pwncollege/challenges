@@ -1,4 +1,5 @@
 {%- extends "computing-101/common/Dockerfile.j2" -%}
+{%- block additional_packages %}{{ super() }} iproute2{% endblock -%}
 {%- block after_setup -%}
 {{ super() }}
 RUN [ ! -f /challenge/run ] || chmod 4755 /challenge/run
