@@ -1,0 +1,2 @@
+[console_scripts]
+pwnshop = pwnshop:cli

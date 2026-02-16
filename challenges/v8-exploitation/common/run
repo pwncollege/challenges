@@ -1,0 +1,35 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/bash
+
+export PATH=/usr/bin:/bin
+
+if [ "$#" -ne 1 ]; then
+    echo "Error: No filename specified."
+    exit 1
+fi
+
+filename="$1"
+if [ ! -r "$filename" ]; then
+    echo "Error: File does not exist or is not readable."
+    exit 1
+fi
+
+run_challenge() {
+    local filename="$1"
+    tempfile=$(mktemp)
+    if [ ! -e "$tempfile" ]; then
+        echo "Error: Failed to create temporary file."
+        exit 1
+    fi
+
+    cp "$filename" "$tempfile"
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to copy the file to the temporary file."
+        exit 1
+    fi
+
+    chmod 644 "$tempfile"
+    /challenge/d8 "$tempfile"
+    rm "$tempfile"
+}
+
+su -s /bin/bash -c "$(declare -f run_challenge); run_challenge \"$filename\"" nobody
