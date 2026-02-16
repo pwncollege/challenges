@@ -225,6 +225,7 @@ def run_challenge(
         stderr=subprocess.DEVNULL,
         check=True,
     )
+    logger.debug(".init completed (if present)")
     try:
         yield container, flag
     finally:
