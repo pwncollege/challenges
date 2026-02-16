@@ -23,6 +23,7 @@ set -eu
 
 mount -o remount,rw /proc/sys
 echo coal > /proc/sys/kernel/core_pattern
+echo 2 > /proc/sys/fs/suid_dumpable
 mount -o remount,ro /proc/sys
 EOF
 
