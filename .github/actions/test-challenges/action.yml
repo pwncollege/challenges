@@ -51,14 +51,27 @@ runs:
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
         JOBS=$(( $(nproc) * 2 ))
+        LOG_ROOT="${RUNNER_TEMP:-/tmp}/pwnshop-logs/${{ inputs.challenges }}"
+        mkdir -p "$LOG_ROOT"
+
+        # Capture all stdout/stderr from pwnshop invocations to avoid leaking sensitive output
+        # (especially when tests_private is unlocked on trusted runs).
+        exec 3>&1 4>&2
+        exec >"$LOG_ROOT/pwnshop.log" 2>&1
+        cleanup() {
+          rc=$?
+          exec 1>&3 2>&4
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Challenge tests failed. Logs captured under $LOG_ROOT." >&2
+          fi
+          exit "$rc"
+        }
+        trap cleanup EXIT
         if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
-          echo "::group::Validating dojo.yml"
+          echo "Validating dojo.yml"
           ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
-          echo "::endgroup::"
         fi
-        echo "::group::Challenges to be tested"
+        echo "Challenges to be tested"
         ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
-        echo "::endgroup::"
-        echo "::group::Testing challenges"
-        ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
-        echo "::endgroup::"
+        echo "Testing challenges"
+        ./pwnshop test --jobs "$JOBS" --log-failures "$LOG_ROOT/failures" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
