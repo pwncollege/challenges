@@ -117,7 +117,6 @@ def run_sandbox(target, *, privileged=True):
     libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
 
     socket.sethostname("sandbox")
-    # `ip` is provided by iproute2. Don't hardcode /sbin since it may not exist.
     subprocess.run(["ip", "link", "set", "dev", "lo", "up"])
 
     # if not privileged:
