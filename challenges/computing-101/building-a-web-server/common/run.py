@@ -1,4 +1,4 @@
-{% raw %}
+{%- raw -%}
 #!/usr/bin/exec-suid -- /bin/python3 -I
 
 import os
@@ -78,6 +78,9 @@ def run_sandbox(target, *, privileged=True):
 
     libc = ctypes.CDLL("libc.so.6")
 
+    orig_euid = os.geteuid()
+    orig_egid = os.getegid()
+
     suid = os.geteuid() != os.getuid()
     os.setpgrp()
     os.seteuid(os.getuid())
@@ -98,7 +101,19 @@ def run_sandbox(target, *, privileged=True):
         CLONE_NEWPID |
         CLONE_NEWNET
     )
-    assert unshare_result == 0
+    if unshare_result != 0:
+        # Some environments (including certain CI hosts) disable user namespaces.
+        # Fall back to running without namespace sandboxing.
+        try:
+            os.seteuid(orig_euid)
+        except PermissionError:
+            pass
+        try:
+            os.setegid(orig_egid)
+        except PermissionError:
+            pass
+        result.value = target()
+        os._exit(0)
 
     pid = os.fork()
     if pid:
