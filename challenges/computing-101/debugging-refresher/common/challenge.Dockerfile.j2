@@ -7,7 +7,8 @@ for src in /challenge/*.c; do
     [ -f "$src" ] || continue
     out="/challenge/$(basename "$src" .c)"
     gcc -Wl,-z,relro,-z,now -O0 -masm=intel -w "$src" -o "$out"
-    chmod 755 "$out"
+    # These challenges rely on launching an elevated gdb instance via setuid.
+    chmod 4755 "$out"
 done
 rm -f /challenge/*.c
 [ ! -f /challenge/.setup ] || /challenge/.setup
