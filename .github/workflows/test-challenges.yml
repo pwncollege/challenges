@@ -47,9 +47,9 @@ jobs:
           // - Non-PR events (workflow_dispatch/schedule) are trusted.
           // - PRs from the main repo (not a fork) are trusted; fork PRs are not.
           let trusted = false;
-          if (context.eventName !== "pull_request") {
+          if (context.eventName === "workflow_dispatch" || context.eventName === "schedule") {
             trusted = true;
-          } else {
+          } else if (context.eventName === "pull_request") {
             const pr = context.payload.pull_request;
             const headRepo = pr?.head?.repo?.full_name;
             const baseRepo = pr?.base?.repo?.full_name;
