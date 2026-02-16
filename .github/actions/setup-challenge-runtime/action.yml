@@ -9,5 +9,17 @@ runs:
         echo "::group::Disk usage"
         df -h
         echo "::endgroup::"
-        sudo ln -s /mnt/pwn.college /var/lib/pwn.college
-        nix develop -c bash -lc 'echo DOCKER_HOST=$DOCKER_HOST'
+        # Use /mnt for challenge runtime storage (more space on GitHub-hosted runners).
+        sudo mkdir -p /mnt/pwn.college
+        if [ ! -e /var/lib/pwn.college ]; then
+          sudo ln -s /mnt/pwn.college /var/lib/pwn.college
+        fi
+
+        # Ensure the devshell shellHook successfully starts the runtime and produces DOCKER_HOST.
+        DOCKER_HOST="$(nix develop -c bash -lc 'echo -n "$DOCKER_HOST"')"
+        if [ -z "$DOCKER_HOST" ]; then
+          echo "::error::DOCKER_HOST is empty after nix develop; challenge runtime did not start correctly"
+          exit 1
+        fi
+        echo "DOCKER_HOST=$DOCKER_HOST" >> "$GITHUB_ENV"
+        echo "DOCKER_HOST=$DOCKER_HOST"
