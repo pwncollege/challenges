@@ -25,24 +25,8 @@ runs:
       env:
         GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
-        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
-        TARGETS_FILE: ${{ runner.temp }}/pwnshop-targets.txt
       run: |
-        : >"$TARGETS_FILE"
-
-        # Compute the exact challenge directories we intend to test before mutating the working tree.
-        ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE" \
-          | while IFS= read -r line; do
-              [ -n "$line" ] || continue
-              # Filter out any wrapper/tooling noise; keep only valid challenge dirs.
-              if [ -d "$CHALLENGES_DIR/$line/challenge" ]; then
-                printf '%s/%s\n' "$CHALLENGES_DIR" "$line"
-              fi
-            done \
-          | sort -u >"$TARGETS_FILE"
-
         if [ -n "$GPG_PRIVATE_KEY" ]; then
-          # Prune encrypted files outside the group, then unlock remaining encrypted files.
           # This keeps the unlock surface area as small as possible.
           git crypt status -e \
             | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
@@ -59,7 +43,6 @@ runs:
           git crypt unlock
         else
           # No key: remove encrypted files so private content cannot be used even accidentally.
-          # Targets were computed above, so this won't affect which challenges we test.
           git crypt status -e \
             | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
             | sort -u \
@@ -73,7 +56,7 @@ runs:
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
-        TARGETS_FILE: ${{ runner.temp }}/pwnshop-targets.txt
+        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
         JOBS=$(( $(nproc) * 2 ))
         if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
@@ -82,13 +65,9 @@ runs:
           echo "::endgroup::"
         fi
         echo "::group::Challenges to be tested"
-        sed -e "s#^$CHALLENGES_DIR/##" "$TARGETS_FILE" || true
+        ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"
-        if [ ! -s "$TARGETS_FILE" ]; then
-          echo "No challenges selected for testing."
-          exit 0
-        fi
 
         echo "::group::Testing challenges"
-        xargs -r -d '\n' ./pwnshop test --silent-failures --jobs "$JOBS" <"$TARGETS_FILE"
+        ./pwnshop test --silent-failures --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
         echo "::endgroup::"
