@@ -42,7 +42,6 @@ runs:
             done
 
         if [ -n "$GPG_PRIVATE_KEY" ]; then
-          # This keeps the unlock surface area as small as possible.
           printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
           git crypt unlock
         fi
