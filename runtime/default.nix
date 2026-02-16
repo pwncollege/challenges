@@ -41,7 +41,8 @@ let
 
     "runtimes" = {
       "kata" = {
-        "runtimeType" = "io.containerd.kata.v2";
+        # Use an absolute shim path so the host containerd doesn't need Nix store in PATH.
+        "runtimeType" = "${pkgs.kata-runtime}/bin/containerd-shim-kata-v2";
         "options" = {
           "ConfigPath" = "${kataConfigToml}";
         };
@@ -113,9 +114,6 @@ pkgs.writeShellApplication {
 
     install -d -m 0711 -o root -g root ${runRoot}
     install -d -m 0711 -o root -g root ${dataRoot}
-
-    install -d -m 0755 -o root -g root /usr/local/bin
-    ln -sfn "${pkgs.kata-runtime}/bin/containerd-shim-kata-v2" /usr/local/bin/containerd-shim-kata-v2
 
     mkdir -p /run/systemd/system
     ln -sfn "${systemdSocketUnit}" "/run/systemd/system/$socket_unit"
