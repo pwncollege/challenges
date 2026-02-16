@@ -280,9 +280,9 @@ def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = Non
         return challenges
 
     relative_lookup = {path.as_posix(): path for path in challenge_dirs}
-    logger.debug("filtering by git diff --name-only --relative %s..HEAD", modified_since)
+    logger.debug("filtering by git diff --name-only --relative %s", modified_since)
     diff_output = subprocess.check_output(
-        ["git", "diff", "--name-only", "--relative", modified_since, "HEAD", "--", "."],
+        ["git", "diff", "--name-only", "--relative", modified_since],
         cwd=directory,
         text=True,
     )
