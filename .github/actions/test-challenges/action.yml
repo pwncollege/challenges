@@ -30,13 +30,12 @@ runs:
         # This keeps the unlock surface area as small as possible.
         git crypt status -e \
           | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
-          | grep -E '^challenges/.*/tests_private/' \
-          | sed -e 's#/tests_private/.*#/tests_private#' \
+          | grep -E '^challenges/' \
           | sort -u \
-          | while IFS= read -r d; do
-              case "$d" in
+          | while IFS= read -r p; do
+              case "$p" in
                 "$CHALLENGES_DIR"/*) ;;
-                *) rm -rf "$d" ;;
+                *) rm -f "$p" ;;
               esac
             done
 
