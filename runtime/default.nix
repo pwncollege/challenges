@@ -41,7 +41,7 @@ let
 
     "runtimes" = {
       "kata" = {
-        "runtimeType" = "io.containerd.kata.v2";
+        "runtimeType" = "${pkgs.kata-runtime}/bin/containerd-shim-kata-v2";
         "options" = {
           "ConfigPath" = "${kataConfigToml}";
         };
