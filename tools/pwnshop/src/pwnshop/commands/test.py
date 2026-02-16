@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
     type=click.Path(path_type=pathlib.Path, file_okay=False, resolve_path=True),
     help="Write failure output to DIR/challenge/test.log files.",
 )
+@click.option("--silent-failures", is_flag=True, help="Do not print failing test output to stdout/stderr.")
 @click.argument(
     "targets",
     nargs=-1,
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
         resolve_path=False,
     ),
 )
-def test_command(targets, modified_since, jobs, require_tests, test_timeout, log_failures):
+def test_command(targets, modified_since, jobs, require_tests, test_timeout, log_failures, silent_failures):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
         if modified_since:
@@ -151,7 +152,7 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout, log
                             log_file = log_failures / challenge / f"{test_path}.log"
                             log_file.parent.mkdir(parents=True, exist_ok=True)
                             log_file.write_text(output)
-                        else:
+                        elif not silent_failures:
                             console.print(output.rstrip("\n"), markup=False)
                 if challenge in failed:
                     failed_count += 1
