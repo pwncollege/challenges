@@ -9,7 +9,8 @@ FROM ubuntu:24.04
 
 RUN apt update && \
     apt install -y --no-install-recommends \
-        man-db manpages manpages-dev manpages-posix manpages-posix-dev less && \
+        man-db manpages manpages-dev manpages-posix manpages-posix-dev less \
+        python3 && \
     yes | unminimize && \
     rm -rf /var/lib/apt/lists/*
 

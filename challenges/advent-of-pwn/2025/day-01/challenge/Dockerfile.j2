@@ -6,4 +6,7 @@ RUN ./generate_list.py > ./check-list && \
     chmod 4755 ./check-list
 
 FROM ubuntu:24.04
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 && \
+    rm -rf /var/lib/apt/lists/*
 COPY --from=builder /build/check-list /challenge/check-list
