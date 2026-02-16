@@ -11,13 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-
-    - name: Install Nix
-      uses: DeterminateSystems/determinate-nix-action@v3
-
-    - name: Enable Magic Nix Cache
-      uses: DeterminateSystems/magic-nix-cache-action@v13
-
+    - uses: ./.github/actions/setup-nix
     - name: nix fmt (must be clean)
       run: |
         set -euo pipefail

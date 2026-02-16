@@ -1,0 +1,15 @@
+name: Report runtime storage
+description: Report runtime storage.
+runs:
+  using: composite
+  steps:
+    - name: Report runtime storage
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      run: |
+        echo "::group::Disk usage"
+        df -h
+        echo "::endgroup::"
+        echo "::group::Docker system usage"
+        docker system df
+        docker system df -v
+        echo "::endgroup::"

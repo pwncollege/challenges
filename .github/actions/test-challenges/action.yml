@@ -8,6 +8,10 @@ inputs:
     description: Base ref challenges have been modified since.
     required: false
     default: ""
+  gpg_private_key:
+    description: GPG private key used to unlock git-crypt.
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -16,28 +20,38 @@ runs:
       with:
         fetch-depth: 0
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        cache-dependency-glob: tools/**
-
-    - name: Install git-crypt
-      shell: bash
+    - name: Manage encrypted files
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
+        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
       run: |
-        sudo apt-get update && sudo apt-get install -y git-crypt
+        encrypted_paths() {
+          git crypt status -e \
+            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+            | sort -u
+        }
 
-    - name: Remove encrypted directories
-      shell: bash
-      run: |
-        git crypt status -e | sed -e "s/ *encrypted: //" | xargs dirname | xargs rm -rf
+        if [ -n "$GPG_PRIVATE_KEY" ]; then
+          encrypted_paths | while IFS= read -r encrypted_path; do
+            case "$encrypted_path" in
+              "$CHALLENGES_DIR"/*) ;;
+              *) rm -f "$encrypted_path" ;;
+            esac
+          done
+
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          git crypt unlock
+        else
+          encrypted_paths | xargs -r rm -f
+        fi
 
     - name: Test challenges
-      shell: bash
+      shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
-        set -euo pipefail
         JOBS=$(( $(nproc) * 2 ))
         if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
           echo "::group::Validating dojo.yml"
@@ -47,6 +61,7 @@ runs:
         echo "::group::Challenges to be tested"
         ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"
+
         echo "::group::Testing challenges"
-        ./pwnshop test --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
+        ./pwnshop test --silent-failures --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
         echo "::endgroup::"
