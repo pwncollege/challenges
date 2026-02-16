@@ -58,6 +58,12 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout, log
             console.print(f"[yellow]No challenges found since {modified_since}[/]")
             return
         raise click.ClickException("No challenges found in provided targets.")
+
+    # In CI, avoid printing test stdout/stderr to the job log. Instead, write any failing
+    # test output to log files.
+    if log_failures is None and os.environ.get("GITHUB_ACTIONS", "").lower() in {"1", "true", "yes"}:
+        log_failures = pathlib.Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "pwnshop-failures"
+
     jobs = jobs or os.cpu_count() or 1
     failed: dict[pathlib.Path, list] = {}
     passed_count = failed_count = total_tests = failed_tests = 0
