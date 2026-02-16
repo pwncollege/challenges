@@ -1,0 +1,46 @@
+name: Runtime Smoke
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'runtime/**'
+      - '.github/actions/setup-challenge-runtime/**'
+      - 'flake.lock'
+      - 'flake.nix'
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime-smoke:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/setup-nix
+    - uses: ./.github/actions/setup-challenge-runtime
+
+    - name: Smoke test kata runtime
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if ! nix develop -c bash -lc '
+          set -euo pipefail
+
+          echo "DOCKER_HOST=$DOCKER_HOST"
+          command -v docker
+          docker version
+          docker info
+
+          docker pull alpine:3.20
+          docker run --rm alpine:3.20 true
+          docker run --rm --runtime=kata alpine:3.20 true
+        '; then
+          sudo systemctl status pwn-challenge-runtime.service --no-pager || true
+          sudo journalctl -u pwn-challenge-runtime.service --no-pager -n 200 || true
+          exit 1
+        fi
+

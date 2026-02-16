@@ -25,41 +25,9 @@ jobs:
       id: determine-modified-challenges
       uses: ./.github/actions/determine-modified-challenges
 
-  runtime-smoke:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/setup-nix
-    - uses: ./.github/actions/setup-challenge-runtime
-
-    - name: Smoke test kata runtime
-      shell: bash
-      run: |
-        set -euo pipefail
-
-        if ! nix develop -c bash -lc '
-          set -euo pipefail
-
-          echo "DOCKER_HOST=$DOCKER_HOST"
-          command -v docker
-          docker version
-          docker info
-
-          command -v containerd-shim-kata-v2 || true
-          ls -l /usr/local/bin/containerd-shim-kata-v2 || true
-
-          docker pull alpine:3.20
-          docker run --rm alpine:3.20 true
-          docker run --rm --runtime=kata alpine:3.20 true
-        '; then
-          sudo systemctl status pwn-challenge-runtime.service --no-pager || true
-          sudo journalctl -u pwn-challenge-runtime.service --no-pager -n 200 || true
-          exit 1
-        fi
-
 
   test-challenges:
-    needs: [determine-modified-challenges, runtime-smoke]
+    needs: determine-modified-challenges
     if: ${{ needs.determine-modified-challenges.outputs.challenges != '[]' }}
     runs-on: ubuntu-latest
     strategy:
