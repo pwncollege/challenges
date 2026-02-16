@@ -5,10 +5,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
     inputs:
-      challenge_group:
-        description: "Run publish/exploration for a single top-level challenge group (e.g. advent-of-pwn, web-security). Leave empty to use modified-challenges detection."
-        required: false
-        default: ""
+      challenge_target:
+        description: "Path to a single challenge (or a folder of challenges) to build for exploration, e.g. challenges/advent-of-pwn/2025/day-01."
+        required: true
+        default: challenges/advent-of-pwn/2025/day-01
       explore_only:
         description: "Run exploration only (no rclone copy)."
         type: boolean
@@ -21,24 +21,25 @@ concurrency:
 
 jobs:
   explore:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.challenge_group != '' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/setup-nix
     - uses: ./.github/actions/setup-challenge-runtime
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        cache-dependency-glob: tools/dojo/**
-
-    - name: Build/test challenge images
-      uses: ./.github/actions/test-challenges
-      with:
-        challenges: ${{ inputs.challenge_group }}
-        modified_since_ref: ""
-        gpg_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
+    - name: Build challenge image(s)
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGE_TARGET: ${{ inputs.challenge_target }}
+        GPG_PRIVATE_KEY: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
+      run: |
+        # Some targets include git-crypt'd tests; import key so builds that need them can proceed.
+        if [ -n "${GPG_PRIVATE_KEY:-}" ]; then
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          git crypt unlock || true
+        fi
+        ./pwnshop build "$CHALLENGE_TARGET"
 
     - name: Install rclone
       run: sudo apt-get update && sudo apt-get install -y rclone
@@ -128,7 +129,7 @@ jobs:
         echo "::endgroup::"
 
   determine-modified-challenges:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.challenge_group == '' }}
+    if: ${{ github.event_name != 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     outputs:
       challenges: ${{ steps.determine-modified-challenges.outputs.challenges }}
