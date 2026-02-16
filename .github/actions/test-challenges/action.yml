@@ -26,30 +26,25 @@ runs:
         GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
       run: |
+        # If we have a key, keep encrypted content for this group and delete everything else.
+        # If we don't, delete all encrypted files so private content can't be used accidentally.
+        git crypt status -e \
+          | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+          | sort -u \
+          | while IFS= read -r encrypted_path; do
+              [ -n "$encrypted_path" ] || continue
+              if [ -n "$GPG_PRIVATE_KEY" ]; then
+                case "$encrypted_path" in
+                  "$CHALLENGES_DIR"/*) continue ;;
+                esac
+              fi
+              rm -f "$encrypted_path"
+            done
+
         if [ -n "$GPG_PRIVATE_KEY" ]; then
           # This keeps the unlock surface area as small as possible.
-          git crypt status -e \
-            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
-            | sort -u \
-            | while IFS= read -r p; do
-                [ -n "$p" ] || continue
-                case "$p" in
-                  "$CHALLENGES_DIR"/*) ;;
-                  *) rm -f "$p" ;;
-                esac
-              done
-
           printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
           git crypt unlock
-        else
-          # No key: remove encrypted files so private content cannot be used even accidentally.
-          git crypt status -e \
-            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
-            | sort -u \
-            | while IFS= read -r p; do
-                [ -n "$p" ] || continue
-                rm -f "$p"
-              done
         fi
 
     - name: Test challenges
