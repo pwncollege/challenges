@@ -211,7 +211,13 @@ def run_challenge(
         check=True,
     )
     logger.debug("flag written to /flag")
-    subprocess.check_call(
+    # Many challenges start background services in `.init` (e.g. Flask) which can be noisy.
+    # Redirect `.init` output to a file inside the container so CI stays clean.
+    #
+    # Note: piping `docker exec` output to the host can cause backgrounded services to inherit
+    # a pipe and later die or block when the pipe closes/fills. A file avoids that.
+    init_log = "/tmp/pwnshop-init.log"
+    init_run = subprocess.run(
         [
             "docker",
             "exec",
@@ -219,10 +225,36 @@ def run_challenge(
             container,
             "/bin/sh",
             "-c",
-            "[ ! -e /challenge/.init ] || /challenge/.init",
-        ]
+            (
+                f"rm -f {init_log}; "
+                "if [ -e /challenge/.init ]; then "
+                f"/challenge/.init >{init_log} 2>&1; "
+                "fi"
+            ),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
     )
-    logger.debug(".init completed (if present)")
+    if init_run.returncode != 0:
+        init_out = subprocess.run(
+            ["docker", "exec", "--user=0:0", container, "/bin/sh", "-c", f"cat {init_log} 2>/dev/null || true"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        ).stdout
+        raise RuntimeError(f"Challenge init failed for {challenge_path} (rc={init_run.returncode}).\n{init_out or ''}")
+    if logger.isEnabledFor(logging.DEBUG):
+        init_out = subprocess.run(
+            ["docker", "exec", "--user=0:0", container, "/bin/sh", "-c", f"cat {init_log} 2>/dev/null || true"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        ).stdout
+        if init_out:
+            logger.debug(".init output for %s:\n%s", challenge_path, init_out.rstrip("\n"))
+        else:
+            logger.debug(".init completed (if present)")
     try:
         yield container, flag
     finally:
