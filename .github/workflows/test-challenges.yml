@@ -51,14 +51,6 @@ jobs:
       if: always()
       uses: ./.github/actions/report-runtime-storage
 
-    - name: Ensure git-crypt key is available
-      if: ${{ github.event_name != 'pull_request' }}
-      run: |
-        if [ -z "${{ secrets.GPG_ROOT_PRIVATE_KEY }}" ]; then
-          echo "::error::secrets.GPG_ROOT_PRIVATE_KEY is not set; cannot unlock tests_private."
-          exit 1
-        fi
-
     - name: Test challenges (trusted)
       if: ${{ github.event_name != 'pull_request' }}
       uses: ./.github/actions/test-challenges
