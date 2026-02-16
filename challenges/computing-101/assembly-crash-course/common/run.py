@@ -1,4 +1,4 @@
-{% raw %}
+{%- raw -%}
 #!/usr/bin/exec-suid --real -- /bin/python3 -I
 
 import os
@@ -25,7 +25,6 @@ from capstone import *
 pwnlib.context.context.update(arch="amd64")
 builtin_print = print
 print = lambda text: builtin_print(re.sub("\n{2,}", "\n\n", textwrap.dedent(str(text))))
-
 {% endraw %}
 level = {{ level }}
 {% raw %}
