@@ -26,24 +26,14 @@ runs:
         GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
       run: |
-        encrypted_paths() {
-          git crypt status -e \
-            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
-            | sort -u
-        }
-
         if [ -n "$GPG_PRIVATE_KEY" ]; then
-          encrypted_paths | while IFS= read -r encrypted_path; do
-            case "$encrypted_path" in
-              "$CHALLENGES_DIR"/*) ;;
-              *) rm -f "$encrypted_path" ;;
-            esac
-          done
-
           printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
           git crypt unlock
         else
-          encrypted_paths | xargs -r rm -f
+          git crypt status -e \
+            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+            | sort -u \
+            | xargs -r rm -f
         fi
 
     - name: Test challenges
