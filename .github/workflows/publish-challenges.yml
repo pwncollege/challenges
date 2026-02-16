@@ -4,13 +4,131 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      challenge_group:
+        description: "Run publish/exploration for a single top-level challenge group (e.g. advent-of-pwn, web-security). Leave empty to use modified-challenges detection."
+        required: false
+        default: ""
+      explore_only:
+        description: "Run exploration only (no rclone copy)."
+        type: boolean
+        required: false
+        default: true
 
 concurrency:
   group: publish-challenges-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  explore:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.challenge_group != '' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/setup-nix
+    - uses: ./.github/actions/setup-challenge-runtime
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        cache-dependency-glob: tools/dojo/**
+
+    - name: Build/test challenge images
+      uses: ./.github/actions/test-challenges
+      with:
+        challenges: ${{ inputs.challenge_group }}
+        modified_since_ref: ""
+        gpg_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
+
+    - name: Install rclone
+      run: sudo apt-get update && sudo apt-get install -y rclone
+
+    - name: Explore local blob staging and remote location
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        R2_BUCKET_NAME: challenges-registry
+        RCLONE_CONFIG_R2_TYPE: s3
+        RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+        RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+        RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
+      run: |
+        docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
+        containerd_blobs_dir="$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs"
+
+        echo "::group::Docker/containerd paths"
+        echo "docker_root_dir=$docker_root_dir"
+        echo "containerd_blobs_dir=$containerd_blobs_dir"
+        echo "containerd_blobs_dir_dev=$(stat -c %d "$containerd_blobs_dir")"
+        df -T "$docker_root_dir" "$containerd_blobs_dir" || true
+        echo "::endgroup::"
+
+        echo "::group::Remote top-level prefixes"
+        rclone lsf "r2:${R2_BUCKET_NAME}" --dirs-only --config /dev/null || true
+        echo "::endgroup::"
+
+        publish_blobs_dir="$docker_root_dir/publish-explore/blobs"
+        publish_manifests_dir="$docker_root_dir/publish-explore/manifests"
+        sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
+
+        while IFS= read -r line; do
+          image_id="${line%% *}"
+          challenge_slug="${line#* }"
+          stack=("$image_id")
+          while ((${#stack[@]})); do
+            digest="${stack[-1]}"
+            digest_path="${digest//:/\/}"
+            unset 'stack[-1]'
+            sudo mkdir -p "$publish_blobs_dir/${digest_path%%/*}"
+            if ! sudo ln "$containerd_blobs_dir/$digest_path" "$publish_blobs_dir/$digest_path" 2>ln.err; then
+              echo "hardlink failed for $digest_path: $(cat ln.err)" >&2
+              # Keep exploring even if hardlinks are unavailable.
+              sudo cp --reflink=auto "$containerd_blobs_dir/$digest_path" "$publish_blobs_dir/$digest_path" 2>/dev/null || true
+            fi
+            rm -f ln.err
+            mapfile -t -O "${#stack[@]}" stack < <(
+              sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string")' \
+                "$containerd_blobs_dir/$digest_path" 2>/dev/null
+            )
+          done
+          sudo mkdir -p "$publish_manifests_dir/$challenge_slug"
+          printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
+        done < <(
+          docker image ls --filter "label=pwncollege.challenge" --no-trunc --quiet \
+            | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
+        )
+
+        echo "::group::Local publish stats"
+        echo "blob_file_count=$(sudo find \"$publish_blobs_dir\" -type f | wc -l)"
+        sudo du -sh "$publish_blobs_dir" "$publish_manifests_dir" || true
+        first_blob_rel="$(sudo find "$publish_blobs_dir" -type f -print -quit | sed "s#^$publish_blobs_dir/##" || true)"
+        echo "first_blob_rel=$first_blob_rel"
+        echo "::endgroup::"
+
+        echo "::group::Remote existence checks (one sample blob)"
+        if [ -n "$first_blob_rel" ]; then
+          rclone lsjson "r2:${R2_BUCKET_NAME}/blobs/$first_blob_rel" --config /dev/null || true
+          rclone lsjson "r2:${R2_BUCKET_NAME}/$first_blob_rel" --config /dev/null || true
+          rclone lsjson "r2:${R2_BUCKET_NAME}/v2/blobs/$first_blob_rel" --config /dev/null || true
+          rclone lsjson "r2:${R2_BUCKET_NAME}/oci/blobs/$first_blob_rel" --config /dev/null || true
+        fi
+        echo "::endgroup::"
+
+        if [ "${{ inputs.explore_only }}" = "true" ]; then
+          echo "explore_only=true: skipping rclone copy"
+          exit 0
+        fi
+
+        echo "::group::rclone blobs (dry run)"
+        rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --dry-run --ignore-existing --config /dev/null --stats-one-line --stats-log-level NOTICE
+        echo "::endgroup::"
+
+        echo "::group::rclone manifests (dry run)"
+        rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests" --dry-run --config /dev/null --stats-one-line --stats-log-level NOTICE
+        echo "::endgroup::"
+
   determine-modified-challenges:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.challenge_group == '' }}
     runs-on: ubuntu-latest
     outputs:
       challenges: ${{ steps.determine-modified-challenges.outputs.challenges }}
