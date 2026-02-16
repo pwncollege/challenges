@@ -30,7 +30,6 @@ runs:
         # This keeps the unlock surface area as small as possible.
         git crypt status -e \
           | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
-          | grep -E '^challenges/' \
           | sort -u \
           | while IFS= read -r p; do
               case "$p" in
