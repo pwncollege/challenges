@@ -46,6 +46,7 @@ runs:
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
+        HAS_GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key != '' }}
       run: |
         JOBS=$(( $(nproc) * 2 ))
         if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
@@ -54,8 +55,39 @@ runs:
           echo "::endgroup::"
         fi
         echo "::group::Challenges to be tested"
-        ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
+        mapfile -t CHALLENGES < <(
+          ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE" \
+            | while IFS= read -r line; do
+                [ -n "$line" ] || continue
+                # Filter out any wrapper/tooling noise; keep only valid challenge dirs.
+                if [ -d "$CHALLENGES_DIR/$line/challenge" ]; then
+                  echo "$line"
+                fi
+              done
+        )
+        printf '%s\n' "${CHALLENGES[@]}"
         echo "::endgroup::"
+        if [ "${#CHALLENGES[@]}" -eq 0 ]; then
+          echo "No challenges selected for testing."
+          exit 0
+        fi
+
+        if [ "$HAS_GPG_PRIVATE_KEY" != "true" ]; then
+          # No key available: remove encrypted files so private content cannot be used even accidentally.
+          git crypt status -e \
+            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+            | sort -u \
+            | while IFS= read -r p; do
+                [ -n "$p" ] || continue
+                rm -f "$p"
+              done
+        fi
+
+        args=()
+        for challenge in "${CHALLENGES[@]}"; do
+          args+=("$CHALLENGES_DIR/$challenge")
+        done
+
         echo "::group::Testing challenges"
-        ./pwnshop test --silent-failures --jobs "$JOBS" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
+        ./pwnshop test --silent-failures --jobs "$JOBS" "${args[@]}"
         echo "::endgroup::"
