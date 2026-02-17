@@ -169,11 +169,35 @@ pkgs.writeShellApplication {
 
     systemctl daemon-reload
     systemctl enable --runtime --now "$containerd_unit" >/dev/null 2>&1 || true
+
+    containerd_ready="false"
+    for _ in $(seq 1 120); do
+      if [ -S ${containerdSockPath} ] && timeout 1 ctr --address ${containerdSockAddr} version >/dev/null 2>&1; then
+        containerd_ready="true"
+        break
+      fi
+      sleep 0.25
+    done
+    if [ "$containerd_ready" != "true" ]; then
+      echo "Error: containerd not reachable at ${containerdSockAddr}" >&2
+      systemctl status "$containerd_unit" --no-pager || true
+      exit 1
+    fi
+
     systemctl enable --runtime --now "$socket_unit" >/dev/null 2>&1 || true
     systemctl try-restart "$service_unit" >/dev/null 2>&1 || true
 
-    if ! DOCKER_HOST="$host" docker info >/dev/null 2>&1; then
+    docker_ready="false"
+    for _ in $(seq 1 120); do
+      if DOCKER_HOST="$host" docker info >/dev/null 2>&1; then
+        docker_ready="true"
+        break
+      fi
+      sleep 0.25
+    done
+    if [ "$docker_ready" != "true" ]; then
       echo "Error: dockerd not reachable at $host" >&2
+      systemctl status "$service_unit" --no-pager || true
       exit 1
     fi
 
