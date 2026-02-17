@@ -11,3 +11,6 @@ modules:
 - id: hello-hackers
 - id: control-flow
 - id: assembly-assortment
+- id: assembly-crash-course
+- id: building-a-web-server
+- id: debugging-refresher

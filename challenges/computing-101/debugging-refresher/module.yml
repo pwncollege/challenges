@@ -1,0 +1,36 @@
+name: Debugging Refresher
+challenges:
+- id: debugging-programs
+  name: Debugging Programs
+- id: inspecting-registers
+  name: Inspecting Registers
+- id: examining-memory
+  name: Examining Memory
+- id: setting-breakpoints
+  name: Setting Breakpoints
+- id: gdb-scripting
+  name: GDB Scripting
+- id: modifying-data
+  name: Modifying Data
+- id: modifying-execution
+  name: Modifying Execution
+  progression_locked: true
+- id: broken-functions
+  name: Broken Functions
+  progression_locked: true
+resources:
+- name: Robert's GDB Walkthrough
+  type: lecture
+  video: r185fCzdw8Y
+  playlist: PL-ymxv0nOtqqQzEncNuE6jetlJAiBUda-
+- name: GDB Help
+  type: markdown
+  content: |
+    There are a number of good gdb crash courses / reference manuals:
+
+    - [GDB's documentation](https://sourceware.org/gdb/onlinedocs/gdb/index.html)
+    - [Tudor's gdb crash course](https://web.archive.org/web/20250101052732/https://users.umiacs.umd.edu/~tdumitra/courses/ENEE757/Fall15/misc/gdb_tutorial.html)
+    - [gdb debugging full example](https://www.brendangregg.com/blog/2016-08-09/gdb-example-ncurses.html)
+    - [pwndbg: a gdb extension (feature list)](https://pwndbg.re/stable/features/)
+    - [gef: another gdb extension (feature list)](https://hugsy.github.io/gef/commands/aliases/)
+    - The course [Debuggers 1012: Introductory GDB](https://ost2.fyi/Dbg1012) from OpenSecurityTraining2.

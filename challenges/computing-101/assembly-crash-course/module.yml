@@ -1,0 +1,123 @@
+name: Assembly Crash Course
+
+resources:
+- name: "(review) Computer Architecture"
+  type: lecture
+  video: o_kSgUPJk4c
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1sVyPL92gbzg_it9aIeC-CjXtF2tpvAmZTKjWc-SlU0c
+- name: "(review) Assembly"
+  type: lecture
+  video: TdTOH1GfrWg
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1sBB34ZUVjT3MDjYvGiZU3z6CTLGvO1hHEdHliPUJ0iw
+- name: "(review) Data"
+  type: lecture
+  video: 21MvbpgssU8
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1SeyZbM_qCDz4t03KDZ8Q0qi1GzsSSSJAkO-KeVlAL7w
+- name: "(review) Registers"
+  type: lecture
+  video: IWbIZerH930
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1U8Rsz7FNTmy-3wGtPB-YCyanIIbox1J90adze9-1cfo
+- name: "(review) Memory"
+  type: lecture
+  video: HahXfnOsSUU
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1lbPbd-jLj7VS7M-ntGhpv4_8WqSfqzLBNWG68_BIRL0
+- name: "Control Flow"
+  type: lecture
+  video: 0a8NlF7z7Ro
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1wX5TH6DQjXw4GJo_T6I9GF7bhC689T52HSHaMUCmj1E
+- name: "(review) System Calls"
+  type: lecture
+  video: vspq0u2tvhU
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1vEuZ1PW8Wvm88INmWbjoKY8srEKSkv2g4o-V42BsN9Y
+- name: "Building Programs"
+  type: lecture
+  video: IITocH-WGH4
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1Y35BuIvvG8k3txjcsMXjygzsP7rDaNpbDHz3TMO91Fo
+- name: Tip - Debugging Your Assembly
+  type: markdown
+  content: |
+      These challenges are written in Python and run your assembly code in an emulator.
+      This means you cannot use the normal debugging tools such as `gdb` to debug the challenge. However, we have added a special debug functionality to these challenges.
+      If an `int3` instruction is executed by the challenge in your assembly code, the emulator will print out the current state of the registers and memory.
+      This can be extremely useful to reason about your code!
+- name: Further Reading
+  type: markdown
+  content: |
+    - An awesome intro series that covers some of the fundamentals from [LiveOverflow](https://www.youtube.com/watch?v=iyAyN3GFM7A&list=PLhixgUqwRTjxglIswKp9mpkfPNfHkzyeN&index=1).
+    - [`Ike: The Systems Hacking Handbook](https://ike.mahaloz.re/1_introduction/introduction.html), an excellent guide to Computer Organization.
+    - A [comprehensive assembly tutorial](https://github.com/mytechnotalent/Reverse-Engineering-Tutorial) for several architectures (amd64 is the relevant one here).
+    - The course ["Architecture 1001: x86-64 Assembly"](https://ost2.fyi/Arch1001) from OpenSecurityTraining2.
+    - A whole [x86_64 assembly book](https://open.umn.edu/opentextbooks/textbooks/733) to help you out!
+    - A [game](https://squallygame.com/) to teach you x86 assembly and one to [stress test your knowledge](https://oooverflow.io/zero-is-you/)!
+    - A [flowchart](https://soc.me/interfaces/x86-prefixes-and-escape-opcodes-flowchart) of x86 prefix and escape opcodes.
+    - An unofficial, but extremely detailed and useful [x86 reference](https://www.felixcloutier.com/x86/).
+
+challenges:
+- id: level-1
+  name: set-register
+- id: level-2-a
+  name: set-multiple-registers
+- id: level-2
+  name: add-to-register
+- id: level-3
+  name: linear-equation-registers
+- id: level-4
+  name: integer-division
+- id: level-5
+  name: modulo-operation
+- id: level-6-a
+  name: set-upper-byte
+- id: level-6
+  name: efficient-modulo
+- id: level-7
+  name: byte-extraction
+- id: level-8
+  name: bitwise-and
+- id: level-9
+  name: check-even
+- id: level-10-a
+  name: memory-read
+- id: level-10-b
+  name: memory-write
+- id: level-10
+  name: memory-increment
+- id: level-11-a
+  name: byte-access
+- id: level-11
+  name: memory-size-access
+- id: level-12
+  name: little-endian-write
+- id: level-13
+  name: memory-sum
+- id: level-14
+  name: stack-subtraction
+- id: level-15
+  name: swap-stack-values
+- id: level-16
+  name: average-stack-values
+- id: level-17-a
+  name: absolute-jump
+- id: level-17-b
+  name: relative-jump
+- id: level-17
+  name: jump-trampoline
+- id: level-18
+  name: conditional-jump
+- id: level-19
+  name: indirect-jump
+- id: level-20
+  name: average-loop
+- id: level-21
+  name: count-non-zero
+- id: level-22
+  name: string-lower
+- id: level-23
+  name: most-common-byte
