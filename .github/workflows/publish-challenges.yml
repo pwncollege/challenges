@@ -5,10 +5,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
     inputs:
-      challenge_target:
-        description: "Path to a single challenge (or a folder of challenges) to build for exploration, e.g. challenges/advent-of-pwn/2025/day-01."
+      image_ref:
+        description: "Image to pull for on-runner blob location exploration (e.g. busybox:latest, alpine:latest)."
         required: true
-        default: challenges/advent-of-pwn/2025/day-01
+        default: busybox:latest
       explore_only:
         description: "Run exploration only (no rclone copy)."
         type: boolean
@@ -25,31 +25,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: ./.github/actions/setup-nix
-    - uses: ./.github/actions/setup-challenge-runtime
 
-    - name: Build challenge image(s)
-      id: build
-      shell: 'nix develop -c bash -euo pipefail {0}'
+    - name: Pull image
+      id: pull
+      shell: bash -euo pipefail {0}
       env:
-        CHALLENGE_TARGET: ${{ inputs.challenge_target }}
-        GPG_PRIVATE_KEY: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
+        IMAGE_REF: ${{ inputs.image_ref }}
       run: |
-        # Some targets include git-crypt'd tests; import key so builds that need them can proceed.
-        if [ -n "${GPG_PRIVATE_KEY:-}" ]; then
-          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
-          git crypt unlock || true
-        fi
-        image_id="$(./pwnshop build "$CHALLENGE_TARGET" | tail -n 1)"
-        echo "Built image: $image_id"
+        docker pull "$IMAGE_REF"
+        image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE_REF")"
+        repo_digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE_REF" 2>/dev/null || true)"
+        echo "Pulled image: $IMAGE_REF"
+        echo "image_id=$image_id"
+        echo "repo_digest=$repo_digest"
         echo "image_id=$image_id" >>"$GITHUB_OUTPUT"
 
     - name: Explore blob locations on disk
-      shell: 'nix develop -c bash -euo pipefail {0}'
+      shell: bash -euo pipefail {0}
       env:
-        IMAGE_ID: ${{ steps.build.outputs.image_id }}
+        IMAGE_ID: ${{ steps.pull.outputs.image_id }}
+        IMAGE_REF: ${{ inputs.image_ref }}
       run: |
         docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
+        echo "::group::Inputs"
+        echo "image_ref=$IMAGE_REF"
+        echo "image_id=$IMAGE_ID"
+        echo "::endgroup::"
 
         echo "::group::Docker info"
         echo "docker_root_dir=$docker_root_dir"
@@ -62,29 +63,48 @@ jobs:
           exit 1
         fi
 
-        sha="${image_id#sha256:}"
-        if [ "$sha" = "$image_id" ]; then
+        sha_config="${image_id#sha256:}"
+        if [ "$sha_config" = "$image_id" ]; then
           echo "unexpected image id format: $image_id" >&2
           exit 1
         fi
 
-        echo "::group::Locate $image_id under DockerRootDir"
-        echo "sha=$sha"
+        # RepoDigests exist for pulled images; the digest portion may also exist in the on-disk blob stores.
+        repo_digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE_REF" 2>/dev/null || true)"
+        sha_manifest=""
+        if [[ "$repo_digest" == *@sha256:* ]]; then
+          sha_manifest="${repo_digest##*@sha256:}"
+        fi
+
+        echo "::group::Locate sha256 objects under DockerRootDir"
+        echo "sha_config=$sha_config"
+        echo "repo_digest=$repo_digest"
+        echo "sha_manifest=$sha_manifest"
 
         # Common storage locations across Docker/BuildKit/containerd setups.
         candidates=(
-          "$docker_root_dir/image/overlay2/imagedb/content/sha256/$sha"
-          "$docker_root_dir/buildkit/content/blobs/sha256/$sha"
-          "$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs/sha256/$sha"
+          "$docker_root_dir/image/overlay2/imagedb/content/sha256/$sha_config"
+          "$docker_root_dir/buildkit/content/blobs/sha256/$sha_config"
+          "$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs/sha256/$sha_config"
         )
+        if [ -n "$sha_manifest" ]; then
+          candidates+=(
+            "$docker_root_dir/buildkit/content/blobs/sha256/$sha_manifest"
+            "$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs/sha256/$sha_manifest"
+          )
+        fi
 
         for p in "${candidates[@]}"; do
           echo "--- $p"
           sudo ls -la "$p" 2>&1 || true
         done
 
-        echo "--- find $docker_root_dir -path '*/sha256/$sha'"
-        sudo find "$docker_root_dir" -maxdepth 8 -type f -path "*/sha256/$sha" -print 2>/dev/null | head -n 50 || true
+        echo "--- find $docker_root_dir -path '*/sha256/<digest>' (config)"
+        sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/sha256/$sha_config" -print 2>/dev/null | head -n 50 || true
+        if [ -n "$sha_manifest" ]; then
+          echo "--- find $docker_root_dir -path '*/sha256/<digest>' (manifest)"
+          sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/sha256/$sha_manifest" -print 2>/dev/null | head -n 50 || true
+        fi
         echo "::endgroup::"
 
         if [ "${{ inputs.explore_only }}" = "true" ]; then
