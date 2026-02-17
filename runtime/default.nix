@@ -36,6 +36,22 @@ let
             'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "default_memory"]'
       '';
 
+  systemdServiceCommon = {
+    Service = {
+      Restart = "on-failure";
+      TimeoutStartSec = 0;
+      Delegate = "yes";
+      KillMode = "process";
+      LimitNPROC = "infinity";
+      LimitCORE = "infinity";
+      TasksMax = "infinity";
+      OOMScoreAdjust = -500;
+    };
+  };
+
+  runtimePathEnv =
+    "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
   dockerDaemonJson = jsonFormat.generate "${name}-docker-daemon.json" {
     "data-root" = dockerDataDir;
     "exec-root" = dockerRunDir;
@@ -82,7 +98,7 @@ let
     };
   };
 
-  dockerSystemdServiceUnit = toSystemdUnit "${name}.service" {
+  dockerSystemdServiceUnit = toSystemdUnit "${name}.service" (lib.recursiveUpdate systemdServiceCommon {
     Unit = {
       Description = "pwn.college challenge runtime docker daemon";
       Requires = [ "${name}.socket" "${name}-containerd.service" ];
@@ -91,22 +107,14 @@ let
     Service = {
       Type = "notify";
       ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
-      Environment = "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-      Restart = "on-failure";
-      TimeoutStartSec = 0;
-      Delegate = "yes";
-      KillMode = "process";
-      LimitNPROC = "infinity";
-      LimitCORE = "infinity";
-      TasksMax = "infinity";
-      OOMScoreAdjust = -500;
+      Environment = runtimePathEnv;
     };
     Install = {
       WantedBy = "multi-user.target";
     };
-  };
+  });
 
-  containerdServiceUnit = toSystemdUnit "${name}-containerd.service" {
+  containerdServiceUnit = toSystemdUnit "${name}-containerd.service" (lib.recursiveUpdate systemdServiceCommon {
     Unit = {
       Description = "pwn.college challenge runtime containerd";
       After = "local-fs.target";
@@ -114,20 +122,12 @@ let
     Service = {
       Type = "simple";
       ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfigToml}";
-      Environment = "PATH=${pkgs.kata-runtime}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-      Restart = "on-failure";
-      TimeoutStartSec = 0;
-      Delegate = "yes";
-      KillMode = "process";
-      LimitNPROC = "infinity";
-      LimitCORE = "infinity";
-      TasksMax = "infinity";
-      OOMScoreAdjust = -500;
+      Environment = runtimePathEnv;
     };
     Install = {
       WantedBy = "multi-user.target";
     };
-  };
+  });
 
 in
 pkgs.writeShellApplication {
@@ -156,10 +156,8 @@ pkgs.writeShellApplication {
       exit 0
     fi
 
-    install -d -m 0711 -o root -g root ${dockerRunDir}
-    install -d -m 0711 -o root -g root ${dockerDataDir}
-    install -d -m 0711 -o root -g root ${containerdRunDir}
-    install -d -m 0711 -o root -g root ${containerdDataDir}
+    install -d -m 0711 -o root -g root \
+      ${dockerRunDir} ${dockerDataDir} ${containerdRunDir} ${containerdDataDir}
 
     mkdir -p /run/systemd/system
     ln -sfn "${dockerSystemdSocketUnit}" "/run/systemd/system/$socket_unit"
