@@ -143,12 +143,12 @@ pkgs.writeShellApplication {
     set -euo pipefail
 
     unit_base="${name}"
-    socket_unit="$unit_base-docker.socket"
-    service_unit="$unit_base-docker.service"
-    containerd_unit="$unit_base-containerd.service"
+    docker_socket_unit="$unit_base-docker.socket"
+    docker_service_unit="$unit_base-docker.service"
+    containerd_service_unit="$unit_base-containerd.service"
     host="unix://${dockerSockPath}"
 
-    current_execstart="$(systemctl show -p ExecStart "$service_unit" 2>/dev/null || true)"
+    current_execstart="$(systemctl show -p ExecStart "$docker_service_unit" 2>/dev/null || true)"
     want_cfg="--config-file=${dockerDaemonJson}"
 
     if [[ "$current_execstart" == *"$want_cfg"* ]] && DOCKER_HOST="$host" docker info >/dev/null 2>&1; then
@@ -160,17 +160,17 @@ pkgs.writeShellApplication {
       ${dockerRunDir} ${dockerDataDir} ${containerdRunDir} ${containerdDataDir}
 
     mkdir -p /run/systemd/system
-    ln -sfn "${dockerSystemdSocketUnit}" "/run/systemd/system/$socket_unit"
-    ln -sfn "${dockerSystemdServiceUnit}" "/run/systemd/system/$service_unit"
-    ln -sfn "${containerdServiceUnit}" "/run/systemd/system/$containerd_unit"
+    ln -sfn "${dockerSystemdSocketUnit}" "/run/systemd/system/$docker_socket_unit"
+    ln -sfn "${dockerSystemdServiceUnit}" "/run/systemd/system/$docker_service_unit"
+    ln -sfn "${containerdServiceUnit}" "/run/systemd/system/$containerd_service_unit"
 
     mkdir -p /nix/var/nix/gcroots
     ln -sfn "${dockerSystemdServiceUnit}" "/nix/var/nix/gcroots/$unit_base"
 
     systemctl daemon-reload
-    systemctl enable --runtime --now "$containerd_unit" >/dev/null
-    systemctl enable --runtime --now "$socket_unit" >/dev/null 2>&1 || true
-    systemctl try-restart "$service_unit" >/dev/null 2>&1 || true
+    systemctl enable --runtime --now "$containerd_service_unit" >/dev/null
+    systemctl enable --runtime --now "$docker_socket_unit" >/dev/null 2>&1 || true
+    systemctl try-restart "$docker_service_unit" >/dev/null 2>&1 || true
 
     docker_ready="false"
     for _ in $(seq 1 120); do
@@ -182,7 +182,7 @@ pkgs.writeShellApplication {
     done
     if [ "$docker_ready" != "true" ]; then
       echo "Error: dockerd not reachable at $host" >&2
-      systemctl status "$service_unit" --no-pager || true
+      systemctl status "$docker_service_unit" --no-pager || true
       exit 1
     fi
 
