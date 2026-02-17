@@ -47,6 +47,7 @@ jobs:
         IMAGE_REF: ${{ inputs.image_ref }}
       run: |
         docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
+        docker_driver="$(docker info --format '{{.Driver}}')"
         echo "::group::Inputs"
         echo "image_ref=$IMAGE_REF"
         echo "image_id=$IMAGE_ID"
@@ -54,7 +55,12 @@ jobs:
 
         echo "::group::Docker info"
         echo "docker_root_dir=$docker_root_dir"
+        echo "docker_driver=$docker_driver"
         docker info --format 'Driver={{.Driver}} RootDir={{.DockerRootDir}}'
+        echo "--- top-level docker_root_dir"
+        sudo ls -la "$docker_root_dir" || true
+        echo "--- docker_root_dir/image"
+        sudo ls -la "$docker_root_dir/image" || true
         echo "::endgroup::"
 
         image_id="${IMAGE_ID}"
@@ -83,7 +89,9 @@ jobs:
 
         # Common storage locations across Docker/BuildKit/containerd setups.
         candidates=(
+          "$docker_root_dir/image/$docker_driver/imagedb/content/sha256/$sha_config"
           "$docker_root_dir/image/overlay2/imagedb/content/sha256/$sha_config"
+          "$docker_root_dir/image/overlayfs/imagedb/content/sha256/$sha_config"
           "$docker_root_dir/buildkit/content/blobs/sha256/$sha_config"
           "$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs/sha256/$sha_config"
         )
@@ -99,11 +107,15 @@ jobs:
           sudo ls -la "$p" 2>&1 || true
         done
 
-        echo "--- find $docker_root_dir -path '*/sha256/<digest>' (config)"
-        sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/sha256/$sha_config" -print 2>/dev/null | head -n 50 || true
+        echo "--- find $docker_root_dir -path '*/imagedb/content/sha256/<digest>' (config)"
+        sudo find "$docker_root_dir/image" -maxdepth 10 -type f -path "*/imagedb/content/sha256/$sha_config" -print 2>/dev/null | head -n 50 || true
+        echo "--- find $docker_root_dir -path '*/blobs/sha256/<digest>' (config)"
+        sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/blobs/sha256/$sha_config" -print 2>/dev/null | head -n 50 || true
         if [ -n "$sha_manifest" ]; then
-          echo "--- find $docker_root_dir -path '*/sha256/<digest>' (manifest)"
-          sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/sha256/$sha_manifest" -print 2>/dev/null | head -n 50 || true
+          echo "--- find $docker_root_dir -path '*/imagedb/content/sha256/<digest>' (manifest)"
+          sudo find "$docker_root_dir/image" -maxdepth 10 -type f -path "*/imagedb/content/sha256/$sha_manifest" -print 2>/dev/null | head -n 50 || true
+          echo "--- find $docker_root_dir -path '*/blobs/sha256/<digest>' (manifest)"
+          sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/blobs/sha256/$sha_manifest" -print 2>/dev/null | head -n 50 || true
         fi
         echo "::endgroup::"
 
