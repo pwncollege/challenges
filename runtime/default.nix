@@ -172,18 +172,26 @@ pkgs.writeShellApplication {
     systemctl enable --runtime "$containerd_service_unit" >/dev/null 2>&1 || true
     if ! timeout 60 systemctl restart "$containerd_service_unit" >/dev/null; then
       echo "Error: failed to (re)start $containerd_service_unit" >&2
-      systemctl status "$containerd_service_unit" --no-pager || true
+      systemctl status "$containerd_service_unit" --no-pager >&2 || true
       exit 1
     fi
     systemctl enable --runtime --now "$docker_socket_unit" >/dev/null 2>&1 || true
     if ! timeout 60 systemctl restart "$docker_service_unit" >/dev/null 2>&1; then
       echo "Error: failed to (re)start $docker_service_unit" >&2
-      systemctl status "$docker_service_unit" --no-pager || true
+      systemctl status "$docker_service_unit" --no-pager >&2 || true
       exit 1
     fi
-    if ! DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
+    docker_ready="false"
+    for _ in $(seq 1 240); do
+      if DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
+        docker_ready="true"
+        break
+      fi
+      sleep 0.25
+    done
+    if [ "$docker_ready" != "true" ]; then
       echo "Error: dockerd not reachable at $docker_host" >&2
-      systemctl status "$docker_service_unit" --no-pager || true
+      systemctl status "$docker_service_unit" --no-pager >&2 || true
       exit 1
     fi
 
