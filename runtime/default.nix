@@ -2,9 +2,16 @@
 let
   name = "pwn-challenge-runtime";
 
-  dataRoot = "/var/lib/pwn.college/docker";
-  runRoot = "/run/pwn.college/docker";
-  sockPath = "${runRoot}/docker.sock";
+  dataDir = "/var/lib/pwn.college";
+  runDir = "/run/pwn.college";
+
+  dockerDataDir = "${dataDir}/docker";
+  dockerRunDir = "${runDir}/docker";
+  dockerSockPath = "${dockerRunDir}/docker.sock";
+
+  containerdDataDir = "${dataDir}/containerd";
+  containerdRunDir = "${runDir}/containerd";
+  containerdSockPath = "${containerdRunDir}/containerd.sock";
 
   jsonFormat = pkgs.formats.json { };
 
@@ -14,6 +21,24 @@ let
   toSystemdUnit =
     unitFileName: sections:
     pkgs.writeText unitFileName (lib.generators.toINI { listsAsDuplicateKeys = true; } sections);
+
+  systemdServiceCommon = {
+    Service = {
+      Type = "notify";
+      Environment = "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+      Restart = "on-failure";
+      TimeoutStartSec = 0;
+      Delegate = "yes";
+      KillMode = "process";
+      LimitNPROC = "infinity";
+      LimitCORE = "infinity";
+      TasksMax = "infinity";
+      OOMScoreAdjust = -500;
+    };
+    Install = {
+      WantedBy = "multi-user.target";
+    };
+  };
 
   kataConfigToml =
     pkgs.runCommand "${name}-kata-config.toml" { nativeBuildInputs = [ pkgs.gawk ]; }
@@ -29,11 +54,12 @@ let
       '';
 
   dockerDaemonJson = jsonFormat.generate "${name}-docker-daemon.json" {
-    "data-root" = dataRoot;
-    "exec-root" = runRoot;
-    "pidfile" = "${runRoot}/dockerd.pid";
+    "data-root" = dockerDataDir;
+    "exec-root" = dockerRunDir;
+    "pidfile" = "${dockerRunDir}/dockerd.pid";
     "log-driver" = "journald";
     "seccomp-profile" = "${seccompProfile}";
+    "containerd" = "${containerdSockPath}";
 
     "features" = {
       "containerd-snapshotter" = true;
@@ -49,12 +75,12 @@ let
     };
   };
 
-  systemdSocketUnit = toSystemdUnit "${name}.socket" {
+  dockerSystemdSocketUnit = toSystemdUnit "${name}-docker.socket" {
     Unit = {
       Description = "pwn.college challenge runtime docker socket";
     };
     Socket = {
-      ListenStream = sockPath;
+      ListenStream = dockerSockPath;
       SocketMode = "0666";
     };
     Install = {
@@ -62,35 +88,54 @@ let
     };
   };
 
-  systemdServiceUnit = toSystemdUnit "${name}.service" {
-    Unit = {
-      Description = "pwn.college challenge runtime docker daemon";
-      Requires = "${name}.socket";
-      After = "local-fs.target";
-    };
-    Service = {
-      Type = "notify";
-      ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
-      Environment = "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-      Restart = "on-failure";
-      TimeoutStartSec = 0;
-      Delegate = "yes";
-      KillMode = "process";
-      LimitNPROC = "infinity";
-      LimitCORE = "infinity";
-      TasksMax = "infinity";
-      OOMScoreAdjust = -500;
-    };
-    Install = {
-      WantedBy = "multi-user.target";
-    };
-  };
+  dockerSystemdServiceUnit = toSystemdUnit "${name}-docker.service" (
+    lib.recursiveUpdate systemdServiceCommon {
+      Unit = {
+        Description = "pwn.college challenge runtime docker daemon";
+        Requires = [
+          "${name}-docker.socket"
+          "${name}-containerd.service"
+        ];
+        After = [
+          "local-fs.target"
+          "${name}-containerd.service"
+        ];
+      };
+      Service = {
+        ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
+      };
+    }
+  );
+
+  containerdConfigToml = pkgs.writeText "${name}-containerd-config.toml" ''
+    version = 2
+    root = "${containerdDataDir}"
+    state = "${containerdRunDir}"
+
+    [grpc]
+      address = "${containerdSockPath}"
+  '';
+
+  containerdServiceUnit = toSystemdUnit "${name}-containerd.service" (
+    lib.recursiveUpdate systemdServiceCommon {
+      Unit = {
+        Description = "pwn.college challenge runtime containerd";
+        After = "local-fs.target";
+      };
+      Service = {
+        ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfigToml}";
+        NotifyAccess = "all";
+        TimeoutStartSec = 60;
+      };
+    }
+  );
 
 in
 pkgs.writeShellApplication {
   inherit name;
   runtimeInputs = with pkgs; [
     bash
+    containerd
     coreutils
     docker
     systemd
@@ -98,38 +143,52 @@ pkgs.writeShellApplication {
   text = ''
     set -euo pipefail
 
-    unit_base="${name}"
-    socket_unit="$unit_base.socket"
-    service_unit="$unit_base.service"
-    host="unix://${sockPath}"
+    docker_host="unix://${dockerSockPath}"
 
-    current_execstart="$(systemctl show -p ExecStart "$service_unit" 2>/dev/null || true)"
-    want_cfg="--config-file=${dockerDaemonJson}"
+    docker_socket_unit="${name}-docker.socket"
+    docker_service_unit="${name}-docker.service"
+    containerd_service_unit="${name}-containerd.service"
 
-    if [[ "$current_execstart" == *"$want_cfg"* ]] && DOCKER_HOST="$host" docker info >/dev/null 2>&1; then
-      echo "$host"
+    current_service_link="$(readlink -f "/run/systemd/system/$docker_service_unit" 2>/dev/null || true)"
+
+    if [[ "$current_service_link" == "${dockerSystemdServiceUnit}" ]] \
+      && DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
+      echo "$docker_host"
       exit 0
     fi
 
-    install -d -m 0711 -o root -g root ${runRoot}
-    install -d -m 0711 -o root -g root ${dataRoot}
+    install -d -m 0711 -o root -g root \
+      ${dockerRunDir} ${dockerDataDir} ${containerdRunDir} ${containerdDataDir}
 
     mkdir -p /run/systemd/system
-    ln -sfn "${systemdSocketUnit}" "/run/systemd/system/$socket_unit"
-    ln -sfn "${systemdServiceUnit}" "/run/systemd/system/$service_unit"
+    ln -sfn "${dockerSystemdSocketUnit}" "/run/systemd/system/$docker_socket_unit"
+    ln -sfn "${dockerSystemdServiceUnit}" "/run/systemd/system/$docker_service_unit"
+    ln -sfn "${containerdServiceUnit}" "/run/systemd/system/$containerd_service_unit"
 
     mkdir -p /nix/var/nix/gcroots
-    ln -sfn "${systemdServiceUnit}" "/nix/var/nix/gcroots/$unit_base"
+    ln -sfn "$0" "/nix/var/nix/gcroots/${name}"
 
     systemctl daemon-reload
-    systemctl enable --runtime --now "$socket_unit" >/dev/null 2>&1 || true
-    systemctl try-restart "$service_unit" >/dev/null 2>&1 || true
 
-    if ! DOCKER_HOST="$host" docker info >/dev/null 2>&1; then
-      echo "Error: dockerd not reachable at $host" >&2
+    restart_unit() {
+      local unit="$1"
+      systemctl enable --runtime "$unit" >/dev/null 2>&1 || true
+      if ! timeout 60 systemctl restart "$unit" >/dev/null 2>&1; then
+        echo "Error: failed to (re)start $unit" >&2
+        systemctl status "$unit" --no-pager >&2 || true
+        exit 1
+      fi
+    }
+
+    restart_unit "$containerd_service_unit"
+    restart_unit "$docker_socket_unit"
+    restart_unit "$docker_service_unit"
+    if ! timeout 60 env DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
+      echo "Error: dockerd not reachable at $docker_host" >&2
+      systemctl status "$docker_service_unit" --no-pager >&2 || true
       exit 1
     fi
 
-    echo "$host"
+    echo "$docker_host"
   '';
 }
