@@ -115,8 +115,8 @@ let
       After = "local-fs.target";
     };
     Service = {
-      NotifyAccess = "all";
       ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfigToml}";
+      NotifyAccess = "all";
       TimeoutStartSec = 60;
     };
   });
