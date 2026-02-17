@@ -69,7 +69,7 @@ let
       address = "${containerdSockPath}"
   '';
 
-  systemdSocketUnit = toSystemdUnit "${name}.socket" {
+  dockerSystemdSocketUnit = toSystemdUnit "${name}.socket" {
     Unit = {
       Description = "pwn.college challenge runtime docker socket";
     };
@@ -82,7 +82,7 @@ let
     };
   };
 
-  systemdServiceUnit = toSystemdUnit "${name}.service" {
+  dockerSystemdServiceUnit = toSystemdUnit "${name}.service" {
     Unit = {
       Description = "pwn.college challenge runtime docker daemon";
       Requires = [ "${name}.socket" "${name}-containerd.service" ];
@@ -162,12 +162,12 @@ pkgs.writeShellApplication {
     install -d -m 0711 -o root -g root ${containerdDataDir}
 
     mkdir -p /run/systemd/system
-    ln -sfn "${systemdSocketUnit}" "/run/systemd/system/$socket_unit"
-    ln -sfn "${systemdServiceUnit}" "/run/systemd/system/$service_unit"
+    ln -sfn "${dockerSystemdSocketUnit}" "/run/systemd/system/$socket_unit"
+    ln -sfn "${dockerSystemdServiceUnit}" "/run/systemd/system/$service_unit"
     ln -sfn "${containerdServiceUnit}" "/run/systemd/system/$containerd_unit"
 
     mkdir -p /nix/var/nix/gcroots
-    ln -sfn "${systemdServiceUnit}" "/nix/var/nix/gcroots/$unit_base"
+    ln -sfn "${dockerSystemdServiceUnit}" "/nix/var/nix/gcroots/$unit_base"
 
     systemctl daemon-reload
     systemctl enable --runtime --now "$containerd_unit" >/dev/null 2>&1 || true
