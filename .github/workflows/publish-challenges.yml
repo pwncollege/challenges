@@ -56,11 +56,18 @@ jobs:
         echo "::group::Docker info"
         echo "docker_root_dir=$docker_root_dir"
         echo "docker_driver=$docker_driver"
+        echo "DOCKER_HOST=${DOCKER_HOST-}"
+        echo "docker_context=$(docker context show 2>/dev/null || true)"
+        docker context inspect --format '{{json .Endpoints.docker.Host}}' "$(docker context show 2>/dev/null || true)" 2>/dev/null || true
         docker info --format 'Driver={{.Driver}} RootDir={{.DockerRootDir}}'
         echo "--- top-level docker_root_dir"
         sudo ls -la "$docker_root_dir" || true
-        echo "--- docker_root_dir/image"
-        sudo ls -la "$docker_root_dir/image" || true
+        echo "--- likely blob-store dirs under docker_root_dir"
+        sudo find "$docker_root_dir" -maxdepth 6 -type d \( -path "*/blobs/sha256" -o -path "*/content/blobs/sha256" -o -name "io.containerd.content.v1.content" \) -print 2>/dev/null || true
+        if [ -d "$docker_root_dir/buildkit/content/blobs/sha256" ]; then
+          echo "--- docker_root_dir/buildkit/content/blobs/sha256 (sample)"
+          sudo ls -la "$docker_root_dir/buildkit/content/blobs/sha256" | head -n 30 || true
+        fi
         echo "::endgroup::"
 
         image_id="${IMAGE_ID}"
@@ -111,11 +118,15 @@ jobs:
         sudo find "$docker_root_dir/image" -maxdepth 10 -type f -path "*/imagedb/content/sha256/$sha_config" -print 2>/dev/null | head -n 50 || true
         echo "--- find $docker_root_dir -path '*/blobs/sha256/<digest>' (config)"
         sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/blobs/sha256/$sha_config" -print 2>/dev/null | head -n 50 || true
+        echo "--- find $docker_root_dir -path '*sha256/<digest>' (config, any depth-limited match)"
+        sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/sha256/$sha_config" -print 2>/dev/null | head -n 50 || true
         if [ -n "$sha_manifest" ]; then
           echo "--- find $docker_root_dir -path '*/imagedb/content/sha256/<digest>' (manifest)"
           sudo find "$docker_root_dir/image" -maxdepth 10 -type f -path "*/imagedb/content/sha256/$sha_manifest" -print 2>/dev/null | head -n 50 || true
           echo "--- find $docker_root_dir -path '*/blobs/sha256/<digest>' (manifest)"
           sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/blobs/sha256/$sha_manifest" -print 2>/dev/null | head -n 50 || true
+          echo "--- find $docker_root_dir -path '*sha256/<digest>' (manifest, any depth-limited match)"
+          sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/sha256/$sha_manifest" -print 2>/dev/null | head -n 50 || true
         fi
         echo "::endgroup::"
 
