@@ -124,6 +124,7 @@ let
       NotifyAccess = "all";
       ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfigToml}";
       Environment = runtimePathEnv;
+      TimeoutStartSec = 60;
     };
     Install = {
       WantedBy = "multi-user.target";
@@ -169,7 +170,7 @@ pkgs.writeShellApplication {
     ln -sfn "${dockerSystemdServiceUnit}" "/nix/var/nix/gcroots/$unit_base"
 
     systemctl daemon-reload
-    systemctl enable --runtime --now "$containerd_unit" >/dev/null 2>&1 || true
+    systemctl enable --runtime --now "$containerd_unit" >/dev/null
     systemctl enable --runtime --now "$socket_unit" >/dev/null 2>&1 || true
     systemctl try-restart "$service_unit" >/dev/null 2>&1 || true
 
