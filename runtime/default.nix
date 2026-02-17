@@ -59,7 +59,7 @@ let
     "pidfile" = "${dockerRunDir}/dockerd.pid";
     "log-driver" = "journald";
     "seccomp-profile" = "${seccompProfile}";
-    "containerd" = "unix://${containerdSockPath}";
+    "containerd" = "${containerdSockPath}";
 
     "features" = {
       "containerd-snapshotter" = true;
@@ -148,8 +148,6 @@ pkgs.writeShellApplication {
     docker_socket_unit="${name}-docker.socket"
     docker_service_unit="${name}-docker.service"
     containerd_service_unit="${name}-containerd.service"
-    legacy_docker_socket_unit="${name}.socket"
-    legacy_docker_service_unit="${name}.service"
 
     current_service_link="$(readlink -f "/run/systemd/system/$docker_service_unit" 2>/dev/null || true)"
 
@@ -169,11 +167,6 @@ pkgs.writeShellApplication {
 
     mkdir -p /nix/var/nix/gcroots
     ln -sfn "${dockerSystemdServiceUnit}" "/nix/var/nix/gcroots/${name}"
-
-    # Best-effort migration from pre -docker.{socket,service} unit names.
-    systemctl stop "$legacy_docker_service_unit" >/dev/null 2>&1 || true
-    systemctl stop "$legacy_docker_socket_unit" >/dev/null 2>&1 || true
-    systemctl disable --runtime "$legacy_docker_socket_unit" >/dev/null 2>&1 || true
 
     systemctl daemon-reload
     systemctl enable --runtime "$containerd_service_unit" >/dev/null 2>&1 || true
