@@ -5,10 +5,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
     inputs:
-      image_ref:
-        description: "Image to pull for on-runner blob location exploration (e.g. busybox:latest, alpine:latest)."
+      challenge:
+        description: "Challenge to build for on-runner blob location exploration (group/slug, e.g. sql-playground/sql-where)."
         required: true
-        default: busybox:latest
+        default: sql-playground/sql-where
       explore_only:
         description: "Run exploration only (no rclone copy)."
         type: boolean
@@ -25,59 +25,85 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: ./.github/actions/setup-nix
-    - uses: ./.github/actions/setup-challenge-runtime
+    - name: Install Nix (no cache action)
+      uses: DeterminateSystems/determinate-nix-action@v3.14.0
+      with:
+        extra-conf: |
+          accept-flake-config = true
 
-    - name: Explore pwn-challenge-runtime blob store
-      shell: 'nix develop -c bash -euo pipefail {0}'
-      env:
-        IMAGE_REF: ${{ inputs.image_ref }}
+    - name: Setup challenge runtime mountpoint
+      shell: bash -euo pipefail {0}
       run: |
-        echo "::group::Runtime env"
-        echo "DOCKER_HOST=$DOCKER_HOST"
+        sudo mkdir -p /mnt/pwn.college
+        sudo ln -sfn /mnt/pwn.college /var/lib/pwn.college
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        cache-dependency-glob: tools/dojo/**
+
+    - name: Build 1 challenge and print containerd sha256 blob paths
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      run: |
+        echo "::group::Runtime + docker daemon"
+        echo "DOCKER_HOST=${DOCKER_HOST:-<unset>}"
+        for i in $(seq 1 60); do
+          docker info >/dev/null 2>&1 && break
+          sleep 1
+        done
         docker info --format 'Driver={{.Driver}} RootDir={{.DockerRootDir}}'
         echo "::endgroup::"
 
-        docker pull "$IMAGE_REF"
-        image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE_REF")"
-        repo_digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE_REF" 2>/dev/null || true)"
+        echo "::group::Manage encrypted files (no key in this workflow)"
+        git crypt status -e \
+          | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+          | sort -u \
+          | xargs -r rm -f
+        echo "::endgroup::"
+
+        echo "::group::Build one challenge"
+        challenge_dir="challenges/${{ inputs.challenge }}"
+        echo "challenge_dir=$challenge_dir"
+        image_id="$(./pwnshop build "$challenge_dir" | tail -n 1)"
+        echo "image_id=$image_id"
+        echo "::endgroup::"
 
         docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
-        echo "::group::Inputs"
-        echo "image_ref=$IMAGE_REF"
-        echo "image_id=$image_id"
-        echo "repo_digest=$repo_digest"
-        echo "docker_root_dir=$docker_root_dir"
-        echo "::endgroup::"
-
-        sha_config="${image_id#sha256:}"
-        sha_manifest=""
-        if [[ "$repo_digest" == *@sha256:* ]]; then
-          sha_manifest="${repo_digest##*@sha256:}"
-        fi
-
         containerd_blobs_dir="$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs"
-        echo "::group::Containerd blobs store"
+
+        echo "::group::Containerd content store (expected location)"
+        echo "docker_root_dir=$docker_root_dir"
+        echo "docker_root_dir_real=$(readlink -f "$docker_root_dir" || echo "$docker_root_dir")"
         echo "containerd_blobs_dir=$containerd_blobs_dir"
-        sudo ls -la "$containerd_blobs_dir" || true
-        sudo ls -la "$containerd_blobs_dir/sha256" 2>/dev/null | head -n 40 || true
+        echo "containerd_blobs_dir_real=$(readlink -f "$containerd_blobs_dir" || echo "$containerd_blobs_dir")"
+        sudo ls -la "$containerd_blobs_dir/sha256" | head -n 40 || true
         echo "::endgroup::"
 
-        echo "::group::Locate digests on disk"
-        echo "sha_config=$sha_config"
-        echo "sha_manifest=$sha_manifest"
-        echo "--- config"
-        sudo ls -la "$containerd_blobs_dir/sha256/$sha_config" 2>&1 || true
-        echo "--- manifest"
-        if [ -n "$sha_manifest" ]; then
-          sudo ls -la "$containerd_blobs_dir/sha256/$sha_manifest" 2>&1 || true
+        echo "::group::Verify at least one sha256 blob exists on disk for the built image"
+        mapfile -t layers < <(docker image inspect "$image_id" --format '{{range .RootFS.Layers}}{{println .}}{{end}}')
+        echo "layer_count=${#layers[@]}"
+        found="false"
+        for digest in "${layers[@]:0:8}"; do
+          digest_path="${digest//:/\/}"
+          blob_path="$containerd_blobs_dir/$digest_path"
+          echo "digest=$digest"
+          echo "blob_path=$blob_path"
+          echo "blob_path_real=$(sudo readlink -f "$blob_path" 2>/dev/null || echo "<missing>")"
+          if sudo test -f "$blob_path"; then
+            sudo stat -c 'FOUND %n (%s bytes)' "$blob_path"
+            sudo ls -l "$blob_path"
+            found="true"
+            break
+          fi
+        done
+        if [ "$found" != "true" ]; then
+          echo "ERROR: did not find any RootFS layer blobs on disk under $containerd_blobs_dir" >&2
+          exit 1
         fi
-        echo "--- find (config)"
-        sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/blobs/sha256/$sha_config" -print 2>/dev/null | head -n 50 || true
-        if [ -n "$sha_manifest" ]; then
-          echo "--- find (manifest)"
-          sudo find "$docker_root_dir" -maxdepth 10 -type f -path "*/blobs/sha256/$sha_manifest" -print 2>/dev/null | head -n 50 || true
-        fi
+        echo "::endgroup::"
+
+        echo "::group::Fallback: show some sha256 blobs under docker root"
+        sudo find "$docker_root_dir/containerd" -type f -path '*/io.containerd.content.v1.content/blobs/sha256/*' -printf '%p\n' 2>/dev/null | head -n 20 || true
         echo "::endgroup::"
 
         if [ "${{ inputs.explore_only }}" = "true" ]; then
