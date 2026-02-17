@@ -175,7 +175,12 @@ pkgs.writeShellApplication {
       systemctl status "$containerd_service_unit" --no-pager >&2 || true
       exit 1
     fi
-    systemctl enable --runtime --now "$docker_socket_unit" >/dev/null 2>&1 || true
+    systemctl enable --runtime "$docker_socket_unit" >/dev/null 2>&1 || true
+    if ! timeout 60 systemctl restart "$docker_socket_unit" >/dev/null 2>&1; then
+      echo "Error: failed to (re)start $docker_socket_unit" >&2
+      systemctl status "$docker_socket_unit" --no-pager >&2 || true
+      exit 1
+    fi
     if ! timeout 60 systemctl restart "$docker_service_unit" >/dev/null 2>&1; then
       echo "Error: failed to (re)start $docker_service_unit" >&2
       systemctl status "$docker_service_unit" --no-pager >&2 || true
