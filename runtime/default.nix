@@ -35,8 +35,13 @@ let
             'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "default_memory"]'
       '';
 
+  runtimePathEnv =
+    "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
   systemdServiceCommon = {
     Service = {
+      Type = "notify";
+      Environment = runtimePathEnv;
       Restart = "on-failure";
       TimeoutStartSec = 0;
       Delegate = "yes";
@@ -50,9 +55,6 @@ let
       WantedBy = "multi-user.target";
     };
   };
-
-  runtimePathEnv =
-    "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
   dockerDaemonJson = jsonFormat.generate "${name}-docker-daemon.json" {
     "data-root" = dockerDataDir;
@@ -105,9 +107,7 @@ let
       After = [ "local-fs.target" "${name}-containerd.service" ];
     };
     Service = {
-      Type = "notify";
       ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
-      Environment = runtimePathEnv;
     };
   });
 
@@ -117,10 +117,8 @@ let
       After = "local-fs.target";
     };
     Service = {
-      Type = "notify";
       NotifyAccess = "all";
       ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfigToml}";
-      Environment = runtimePathEnv;
       TimeoutStartSec = 60;
     };
   });
