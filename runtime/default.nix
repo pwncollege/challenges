@@ -166,7 +166,8 @@ pkgs.writeShellApplication {
     ln -sfn "${containerdServiceUnit}" "/run/systemd/system/$containerd_service_unit"
 
     mkdir -p /nix/var/nix/gcroots
-    ln -sfn "${dockerSystemdServiceUnit}" "/nix/var/nix/gcroots/${name}"
+    runtime_store_path="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+    ln -sfn "$runtime_store_path" "/nix/var/nix/gcroots/${name}"
 
     systemctl daemon-reload
 
