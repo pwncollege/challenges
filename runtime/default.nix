@@ -22,19 +22,6 @@ let
     unitFileName: sections:
     pkgs.writeText unitFileName (lib.generators.toINI { listsAsDuplicateKeys = true; } sections);
 
-  kataConfigToml =
-    pkgs.runCommand "${name}-kata-config.toml" { nativeBuildInputs = [ pkgs.gawk ]; }
-      ''
-        kernel_line="$(awk '$1 == "kernel" { print; exit }' ${pkgs.kata-runtime}/share/defaults/kata-containers/configuration.toml)"
-        substitute ${pkgs.kata-runtime}/share/defaults/kata-containers/configuration.toml "$out" \
-          --replace-fail \
-            "$kernel_line" \
-            'kernel = "${kataKernel}/share/kata-containers/vmlinux.container"' \
-          --replace-fail \
-            'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params"]' \
-            'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "default_memory"]'
-      '';
-
   systemdServiceCommon = {
     Service = {
       Type = "notify";
@@ -53,6 +40,19 @@ let
       WantedBy = "multi-user.target";
     };
   };
+
+  kataConfigToml =
+    pkgs.runCommand "${name}-kata-config.toml" { nativeBuildInputs = [ pkgs.gawk ]; }
+      ''
+        kernel_line="$(awk '$1 == "kernel" { print; exit }' ${pkgs.kata-runtime}/share/defaults/kata-containers/configuration.toml)"
+        substitute ${pkgs.kata-runtime}/share/defaults/kata-containers/configuration.toml "$out" \
+          --replace-fail \
+            "$kernel_line" \
+            'kernel = "${kataKernel}/share/kata-containers/vmlinux.container"' \
+          --replace-fail \
+            'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params"]' \
+            'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "default_memory"]'
+      '';
 
   dockerDaemonJson = jsonFormat.generate "${name}-docker-daemon.json" {
     "data-root" = dockerDataDir;
@@ -75,15 +75,6 @@ let
       };
     };
   };
-
-  containerdConfigToml = pkgs.writeText "${name}-containerd-config.toml" ''
-    version = 2
-    root = "${containerdDataDir}"
-    state = "${containerdRunDir}"
-
-    [grpc]
-      address = "${containerdSockPath}"
-  '';
 
   dockerSystemdSocketUnit = toSystemdUnit "${name}-docker.socket" {
     Unit = {
@@ -108,6 +99,15 @@ let
       ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
     };
   });
+
+  containerdConfigToml = pkgs.writeText "${name}-containerd-config.toml" ''
+    version = 2
+    root = "${containerdDataDir}"
+    state = "${containerdRunDir}"
+
+    [grpc]
+      address = "${containerdSockPath}"
+  '';
 
   containerdServiceUnit = toSystemdUnit "${name}-containerd.service" (lib.recursiveUpdate systemdServiceCommon {
     Unit = {
