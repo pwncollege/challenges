@@ -62,7 +62,7 @@ jobs:
         RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
         RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
-        containerd_blobs_dir="/var/lib/pwn.college/containerd/io.containerd.content.v1.content/blobs"
+        containerd_blobs_dir="/mnt/pwn.college/containerd/io.containerd.content.v1.content/blobs"
         publish_blobs_dir="/mnt/publish/blobs"
         publish_manifests_dir="/mnt/publish/manifests"
         sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
