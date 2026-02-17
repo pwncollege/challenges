@@ -1,114 +1,90 @@
-name: Explore Publish Blobs
+name: Explore Containerd Blobs
 
 on:
   workflow_dispatch:
     inputs:
-      challenge_group:
-        description: Top-level challenge group to build (e.g. advent-of-pwn, web-security).
+      challenge:
+        description: Challenge to build (group/slug, e.g. sql-playground/sql-where).
         required: true
-        default: advent-of-pwn
-      r2_bucket_name:
-        description: R2 bucket used by publish-challenges (should usually stay as-is).
-        required: true
-        default: challenges-registry
+        default: sql-playground/sql-where
 
 jobs:
   explore:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-nix
-      - uses: ./.github/actions/setup-challenge-runtime
+      - name: Install Nix (no cache action)
+        uses: DeterminateSystems/determinate-nix-action@v3.14.0
+        with:
+          extra-conf: |
+            accept-flake-config = true
+
+      - name: Setup challenge runtime mountpoint
+        shell: bash -euo pipefail {0}
+        run: |
+          sudo mkdir -p /mnt/pwn.college
+          sudo ln -sfn /mnt/pwn.college /var/lib/pwn.college
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
           cache-dependency-glob: tools/dojo/**
 
-      - name: Build/test challenge images
-        uses: ./.github/actions/test-challenges
-        with:
-          challenges: ${{ inputs.challenge_group }}
-          modified_since_ref: ""
-          gpg_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
-
-      - name: Install rclone
-        run: sudo apt-get update && sudo apt-get install -y rclone
-
-      - name: Explore local blob staging and remote location
+      - name: Build 1 challenge and locate containerd sha256 blobs on disk
         shell: 'nix develop -c bash -euo pipefail {0}'
-        env:
-          R2_BUCKET_NAME: ${{ inputs.r2_bucket_name }}
-          RCLONE_CONFIG_R2_TYPE: s3
-          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
-          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
-          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
         run: |
+          echo "::group::Runtime + docker daemon"
+          echo "DOCKER_HOST=${DOCKER_HOST:-<unset>}"
+          for i in $(seq 1 60); do
+            docker info >/dev/null 2>&1 && break
+            sleep 1
+          done
+          docker info --format 'DockerRootDir={{.DockerRootDir}} Driver={{.Driver}}' || (docker info || true)
+          echo "::endgroup::"
+
+          echo "::group::Manage encrypted files (no key in this workflow)"
+          # Match test-challenges behavior when no GPG key is available: delete encrypted tracked files.
+          git crypt status -e \
+            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+            | sort -u \
+            | xargs -r rm -f
+          echo "::endgroup::"
+
+          echo "::group::Build one challenge"
+          challenge_dir="challenges/${{ inputs.challenge }}"
+          echo "challenge_dir=$challenge_dir"
+          image_id="$(./pwnshop build "$challenge_dir" | tail -n 1)"
+          echo "image_id=$image_id"
+          echo "::endgroup::"
+
           docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
           containerd_blobs_dir="$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs"
 
-          echo "::group::Docker/containerd paths"
+          echo "::group::Containerd content store (expected location)"
           echo "docker_root_dir=$docker_root_dir"
+          echo "docker_root_dir_real=$(readlink -f "$docker_root_dir" || echo "$docker_root_dir")"
           echo "containerd_blobs_dir=$containerd_blobs_dir"
-          echo "containerd_blobs_dir_dev=$(stat -c %d "$containerd_blobs_dir")"
-          df -T "$docker_root_dir" "$containerd_blobs_dir" || true
+          echo "containerd_blobs_dir_real=$(readlink -f "$containerd_blobs_dir" || echo "$containerd_blobs_dir")"
+          sudo ls -la "$containerd_blobs_dir/sha256" | head -n 50 || true
           echo "::endgroup::"
 
-          echo "::group::Remote top-level prefixes"
-          rclone lsf "r2:${R2_BUCKET_NAME}" --dirs-only --config /dev/null || true
+          echo "::group::Verify at least one sha256 blob exists on disk for the built image"
+          mapfile -t layers < <(docker image inspect "$image_id" --format '{{range .RootFS.Layers}}{{println .}}{{end}}')
+          echo "layer_count=${#layers[@]}"
+          for digest in "${layers[@]:0:5}"; do
+            digest_path="${digest//:/\/}"
+            blob_path="$containerd_blobs_dir/$digest_path"
+            echo "digest=$digest"
+            echo "blob_path=$blob_path"
+            echo "blob_path_real=$(sudo readlink -f "$blob_path" 2>/dev/null || echo "<missing>")"
+            sudo test -f "$blob_path" || continue
+            sudo stat -c 'FOUND %n (%s bytes)' "$blob_path"
+            sudo ls -l "$blob_path"
+            # Stop after the first confirmed blob.
+            break
+          done
           echo "::endgroup::"
 
-          echo "::group::Local image inventory"
-          echo "image_count=$(docker image ls --filter \"label=pwncollege.challenge\" --quiet | wc -l)"
-          docker image ls --filter "label=pwncollege.challenge" --no-trunc --format '{{.ID}} {{.Repository}}:{{.Tag}}' | head -n 50 || true
-          echo "::endgroup::"
-
-          publish_blobs_dir="$docker_root_dir/publish-explore/blobs"
-          publish_manifests_dir="$docker_root_dir/publish-explore/manifests"
-          sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
-
-          while IFS= read -r line; do
-            image_id="${line%% *}"
-            challenge_slug="${line#* }"
-            stack=("$image_id")
-            while ((${#stack[@]})); do
-              digest="${stack[-1]}"
-              digest_path="${digest//:/\/}"
-              unset 'stack[-1]'
-              sudo mkdir -p "$publish_blobs_dir/${digest_path%%/*}"
-              if ! sudo ln "$containerd_blobs_dir/$digest_path" "$publish_blobs_dir/$digest_path" 2>ln.err; then
-                echo "hardlink failed for $digest_path: $(cat ln.err)" >&2
-                # Fallback to a real copy so we can continue exploring even if hardlinks are unavailable.
-                sudo cp --reflink=auto "$containerd_blobs_dir/$digest_path" "$publish_blobs_dir/$digest_path" 2>/dev/null || true
-              fi
-              rm -f ln.err
-              mapfile -t -O "${#stack[@]}" stack < <(
-                sudo jq -r '.manifests[]?.digest,.config.digest?,.layers[]?.digest? | select(type=="string")' \
-                  "$containerd_blobs_dir/$digest_path" 2>/dev/null
-              )
-            done
-            sudo mkdir -p "$publish_manifests_dir/$challenge_slug"
-            printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
-          done < <(
-            docker image ls --filter "label=pwncollege.challenge" --no-trunc --quiet \
-              | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
-          )
-
-          echo "::group::Local publish stats"
-          echo "blob_file_count=$(sudo find \"$publish_blobs_dir\" -type f | wc -l)"
-          sudo du -sh "$publish_blobs_dir" "$publish_manifests_dir" || true
-          first_blob_rel="$(sudo find "$publish_blobs_dir" -type f -print -quit | sed "s#^$publish_blobs_dir/##" || true)"
-          echo "first_blob_rel=$first_blob_rel"
-          echo "::endgroup::"
-
-          echo "::group::Remote existence checks (one sample blob)"
-          if [ -n "$first_blob_rel" ]; then
-            # Expected location.
-            rclone lsjson "r2:${R2_BUCKET_NAME}/blobs/$first_blob_rel" --config /dev/null || true
-            # Common misprefixes (in case blobs are being written somewhere unexpected).
-            rclone lsjson "r2:${R2_BUCKET_NAME}/$first_blob_rel" --config /dev/null || true
-            rclone lsjson "r2:${R2_BUCKET_NAME}/v2/blobs/$first_blob_rel" --config /dev/null || true
-            rclone lsjson "r2:${R2_BUCKET_NAME}/oci/blobs/$first_blob_rel" --config /dev/null || true
-          fi
+          echo "::group::Fallback: find some sha256 blobs under docker root"
+          sudo find "$docker_root_dir/containerd" -type f -path '*/io.containerd.content.v1.content/blobs/sha256/*' -printf '%p\n' 2>/dev/null | head -n 20 || true
           echo "::endgroup::"
