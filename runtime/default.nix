@@ -12,7 +12,6 @@ let
   containerdDataDir = "${dataDir}/containerd";
   containerdRunDir = "${runDir}/containerd";
   containerdSockPath = "${containerdRunDir}/containerd.sock";
-  containerdSockAddr = "unix://${containerdSockPath}";
 
   jsonFormat = pkgs.formats.json { };
 
@@ -58,7 +57,7 @@ let
     "pidfile" = "${dockerRunDir}/dockerd.pid";
     "log-driver" = "journald";
     "seccomp-profile" = "${seccompProfile}";
-    "containerd" = containerdSockAddr;
+    "containerd" = "unix://${containerdSockPath}";
 
     "features" = {
       "containerd-snapshotter" = true;
