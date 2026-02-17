@@ -25,8 +25,7 @@ let
   systemdServiceCommon = {
     Service = {
       Type = "notify";
-      Environment =
-        "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+      Environment = "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
       Restart = "on-failure";
       TimeoutStartSec = 0;
       Delegate = "yes";
@@ -89,16 +88,24 @@ let
     };
   };
 
-  dockerSystemdServiceUnit = toSystemdUnit "${name}-docker.service" (lib.recursiveUpdate systemdServiceCommon {
-    Unit = {
-      Description = "pwn.college challenge runtime docker daemon";
-      Requires = [ "${name}-docker.socket" "${name}-containerd.service" ];
-      After = [ "local-fs.target" "${name}-containerd.service" ];
-    };
-    Service = {
-      ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
-    };
-  });
+  dockerSystemdServiceUnit = toSystemdUnit "${name}-docker.service" (
+    lib.recursiveUpdate systemdServiceCommon {
+      Unit = {
+        Description = "pwn.college challenge runtime docker daemon";
+        Requires = [
+          "${name}-docker.socket"
+          "${name}-containerd.service"
+        ];
+        After = [
+          "local-fs.target"
+          "${name}-containerd.service"
+        ];
+      };
+      Service = {
+        ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
+      };
+    }
+  );
 
   containerdConfigToml = pkgs.writeText "${name}-containerd-config.toml" ''
     version = 2
@@ -109,17 +116,19 @@ let
       address = "${containerdSockPath}"
   '';
 
-  containerdServiceUnit = toSystemdUnit "${name}-containerd.service" (lib.recursiveUpdate systemdServiceCommon {
-    Unit = {
-      Description = "pwn.college challenge runtime containerd";
-      After = "local-fs.target";
-    };
-    Service = {
-      ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfigToml}";
-      NotifyAccess = "all";
-      TimeoutStartSec = 60;
-    };
-  });
+  containerdServiceUnit = toSystemdUnit "${name}-containerd.service" (
+    lib.recursiveUpdate systemdServiceCommon {
+      Unit = {
+        Description = "pwn.college challenge runtime containerd";
+        After = "local-fs.target";
+      };
+      Service = {
+        ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfigToml}";
+        NotifyAccess = "all";
+        TimeoutStartSec = 60;
+      };
+    }
+  );
 
 in
 pkgs.writeShellApplication {
