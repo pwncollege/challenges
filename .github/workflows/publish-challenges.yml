@@ -69,23 +69,46 @@ jobs:
         echo "::endgroup::"
 
         docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
-        containerd_blobs_dir="$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs"
 
-        echo "::group::Containerd content store (expected location)"
+        echo "::group::Locate containerd content store root"
         echo "docker_root_dir=$docker_root_dir"
         echo "docker_root_dir_real=$(readlink -f "$docker_root_dir" || echo "$docker_root_dir")"
-        echo "containerd_blobs_dir=$containerd_blobs_dir"
-        echo "containerd_blobs_dir_real=$(readlink -f "$containerd_blobs_dir" || echo "$containerd_blobs_dir")"
-        sudo ls -la "$containerd_blobs_dir/sha256" | head -n 40 || true
+        content_dir=""
+        for d in \
+          "$docker_root_dir/containerd/daemon/io.containerd.content.v1.content" \
+          "$docker_root_dir/containerd/io.containerd.content.v1.content"
+        do
+          if sudo test -d "$d"; then
+            content_dir="$d"
+            break
+          fi
+        done
+        if [ -z "$content_dir" ]; then
+          content_dir="$(sudo find "$docker_root_dir" -maxdepth 6 -type d -name io.containerd.content.v1.content -print -quit 2>/dev/null || true)"
+        fi
+        echo "content_dir=${content_dir:-<not found>}"
+        if [ -n "$content_dir" ]; then
+          echo "content_dir_real=$(sudo readlink -f "$content_dir" 2>/dev/null || echo "$content_dir")"
+          content_blobs_dir="$content_dir/blobs"
+          echo "content_blobs_dir=$content_blobs_dir"
+          sudo ls -la "$content_blobs_dir" | head -n 80 || true
+          sudo ls -la "$content_blobs_dir/sha256" | head -n 80 || true
+        fi
         echo "::endgroup::"
 
         echo "::group::Verify at least one sha256 blob exists on disk for the built image"
+        if [ -z "${content_dir:-}" ]; then
+          echo "ERROR: could not locate io.containerd.content.v1.content under docker_root_dir=$docker_root_dir" >&2
+          sudo find "$docker_root_dir" -maxdepth 6 -type d -name containerd -o -name blobs -o -name io.containerd.content.v1.content 2>/dev/null | head -n 200 || true
+          exit 1
+        fi
+
         mapfile -t layers < <(docker image inspect "$image_id" --format '{{range .RootFS.Layers}}{{println .}}{{end}}')
         echo "layer_count=${#layers[@]}"
         found="false"
         for digest in "${layers[@]:0:8}"; do
-          digest_path="${digest//:/\/}"
-          blob_path="$containerd_blobs_dir/$digest_path"
+          hex="${digest#sha256:}"
+          blob_path="$content_dir/blobs/sha256/$hex"
           echo "digest=$digest"
           echo "blob_path=$blob_path"
           echo "blob_path_real=$(sudo readlink -f "$blob_path" 2>/dev/null || echo "<missing>")"
@@ -97,13 +120,15 @@ jobs:
           fi
         done
         if [ "$found" != "true" ]; then
-          echo "ERROR: did not find any RootFS layer blobs on disk under $containerd_blobs_dir" >&2
+          echo "ERROR: did not find any RootFS layer blobs on disk under $content_dir/blobs/sha256" >&2
+          echo "Diagnostics: searching for blobs/sha256/ under docker_root_dir..."
+          sudo find "$docker_root_dir" -maxdepth 10 -type d -path '*/blobs/sha256' -print 2>/dev/null | head -n 200 || true
           exit 1
         fi
         echo "::endgroup::"
 
         echo "::group::Fallback: show some sha256 blobs under docker root"
-        sudo find "$docker_root_dir/containerd" -type f -path '*/io.containerd.content.v1.content/blobs/sha256/*' -printf '%p\n' 2>/dev/null | head -n 20 || true
+        sudo find "$docker_root_dir" -type f -path '*/io.containerd.content.v1.content/blobs/sha256/*' -printf '%p\n' 2>/dev/null | head -n 50 || true
         echo "::endgroup::"
 
         if [ "${{ inputs.explore_only }}" = "true" ]; then
