@@ -2,12 +2,15 @@
 let
   name = "pwn-challenge-runtime";
 
-  dataRoot = "/var/lib/pwn.college/docker";
-  runRoot = "/run/pwn.college/docker";
+  dataBase = "/var/lib/pwn.college";
+  runBase = "/run/pwn.college";
+
+  dataRoot = "${dataBase}/docker";
+  runRoot = "${runBase}/docker";
   sockPath = "${runRoot}/docker.sock";
 
-  containerdDataRoot = "/var/lib/pwn.college/containerd";
-  containerdRunRoot = "/run/pwn.college/containerd";
+  containerdDataRoot = "${dataBase}/containerd";
+  containerdRunRoot = "${runBase}/containerd";
   containerdSockPath = "${containerdRunRoot}/containerd.sock";
   containerdSockAddr = "unix://${containerdSockPath}";
 
