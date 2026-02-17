@@ -44,29 +44,16 @@ jobs:
         echo "Built image: $image_id"
         echo "image_id=$image_id" >>"$GITHUB_OUTPUT"
 
-    - name: Install rclone
-      run: sudo apt-get update && sudo apt-get install -y rclone
-
     - name: Explore blob locations on disk
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         IMAGE_ID: ${{ steps.build.outputs.image_id }}
-        R2_BUCKET_NAME: challenges-registry
-        RCLONE_CONFIG_R2_TYPE: s3
-        RCLONE_CONFIG_R2_PROVIDER: Cloudflare
-        RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-        RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
-        RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
         docker_root_dir="$(docker info --format '{{.DockerRootDir}}')"
 
         echo "::group::Docker info"
         echo "docker_root_dir=$docker_root_dir"
         docker info --format 'Driver={{.Driver}} RootDir={{.DockerRootDir}}'
-        echo "::endgroup::"
-
-        echo "::group::Remote top-level prefixes"
-        rclone lsf "r2:${R2_BUCKET_NAME}" --dirs-only --config /dev/null || true
         echo "::endgroup::"
 
         image_id="${IMAGE_ID}"
@@ -97,17 +84,13 @@ jobs:
         done
 
         echo "--- find $docker_root_dir -path '*/sha256/$sha'"
-        sudo find "$docker_root_dir" -type f -path "*/sha256/$sha" -print 2>/dev/null | head -n 50 || true
+        sudo find "$docker_root_dir" -maxdepth 8 -type f -path "*/sha256/$sha" -print 2>/dev/null | head -n 50 || true
         echo "::endgroup::"
 
         if [ "${{ inputs.explore_only }}" = "true" ]; then
-          echo "explore_only=true: skipping rclone copy"
+          echo "explore_only=true"
           exit 0
         fi
-
-        echo "::group::Remote top-level prefixes (again)"
-        rclone lsf "r2:${R2_BUCKET_NAME}" --dirs-only --config /dev/null || true
-        echo "::endgroup::"
 
   determine-modified-challenges:
     if: ${{ github.event_name != 'workflow_dispatch' }}
