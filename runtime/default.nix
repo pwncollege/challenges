@@ -74,8 +74,6 @@ let
     };
   };
 
-  # Run a dedicated containerd so its content store (blobs/sha256/...) lives under /var/lib/pwn.college,
-  # rather than the host's /var/lib/containerd.
   containerdConfigToml = pkgs.writeText "${name}-containerd-config.toml" ''
     version = 2
     root = "${containerdDataDir}"
