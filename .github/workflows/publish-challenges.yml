@@ -29,6 +29,7 @@ jobs:
     - uses: ./.github/actions/setup-challenge-runtime
 
     - name: Build challenge image(s)
+      id: build
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGE_TARGET: ${{ inputs.challenge_target }}
@@ -39,14 +40,17 @@ jobs:
           printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
           git crypt unlock || true
         fi
-        ./pwnshop build "$CHALLENGE_TARGET"
+        image_id="$(./pwnshop build "$CHALLENGE_TARGET" | tail -n 1)"
+        echo "Built image: $image_id"
+        echo "image_id=$image_id" >>"$GITHUB_OUTPUT"
 
-    - name: Install rclone + skopeo
-      run: sudo apt-get update && sudo apt-get install -y rclone skopeo
+    - name: Install rclone
+      run: sudo apt-get update && sudo apt-get install -y rclone
 
-    - name: Explore local blob staging and remote location
+    - name: Explore blob locations on disk
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
+        IMAGE_ID: ${{ steps.build.outputs.image_id }}
         R2_BUCKET_NAME: challenges-registry
         RCLONE_CONFIG_R2_TYPE: s3
         RCLONE_CONFIG_R2_PROVIDER: Cloudflare
@@ -65,54 +69,35 @@ jobs:
         rclone lsf "r2:${R2_BUCKET_NAME}" --dirs-only --config /dev/null || true
         echo "::endgroup::"
 
-        publish_root="/mnt/pwn.college/publish-explore"
-        publish_blobs_dir="$publish_root/blobs"
-        publish_manifests_dir="$publish_root/manifests"
-        oci_root="$publish_root/oci"
-        sudo mkdir -p "$publish_root"
-        sudo chown -R "$(id -u):$(id -g)" "$publish_root"
-        mkdir -p "$publish_blobs_dir" "$publish_manifests_dir" "$oci_root"
+        image_id="${IMAGE_ID}"
+        if [ -z "$image_id" ]; then
+          echo "missing IMAGE_ID from build step" >&2
+          exit 1
+        fi
 
-        while IFS= read -r line; do
-          image_id="${line%% *}"
-          challenge_slug="${line#* }"
-          image_tag="pwncollege-challenge:${challenge_slug//\//-}"
-          docker tag "$image_id" "$image_tag"
+        sha="${image_id#sha256:}"
+        if [ "$sha" = "$image_id" ]; then
+          echo "unexpected image id format: $image_id" >&2
+          exit 1
+        fi
 
-          image_oci_dir="$oci_root/$challenge_slug"
-          mkdir -p "$image_oci_dir"
+        echo "::group::Locate $image_id under DockerRootDir"
+        echo "sha=$sha"
 
-          skopeo copy --insecure-policy "docker-daemon:$image_tag" "oci:$image_oci_dir:latest"
-          manifest_ref="$(jq -r '.manifests[0].digest' "$image_oci_dir/index.json")"
-          if [ -z "$manifest_ref" ] || [ "$manifest_ref" = "null" ]; then
-            echo "failed to resolve manifest digest for $challenge_slug (image_id=$image_id)" >&2
-            exit 1
-          fi
-
-          mkdir -p "$publish_manifests_dir/$challenge_slug"
-          printf '%s\n' "$manifest_ref" >"$publish_manifests_dir/$challenge_slug/latest"
-
-          cp -a -n "$image_oci_dir/blobs/." "$publish_blobs_dir/"
-        done < <(
-          docker image ls --filter "label=pwncollege.challenge" --no-trunc --quiet \
-            | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
+        # Common storage locations across Docker/BuildKit/containerd setups.
+        candidates=(
+          "$docker_root_dir/image/overlay2/imagedb/content/sha256/$sha"
+          "$docker_root_dir/buildkit/content/blobs/sha256/$sha"
+          "$docker_root_dir/containerd/daemon/io.containerd.content.v1.content/blobs/sha256/$sha"
         )
 
-        echo "::group::Local publish stats"
-        blob_file_count="$(find "$publish_blobs_dir" -type f | wc -l)"
-        echo "blob_file_count=$blob_file_count"
-        du -sh "$publish_blobs_dir" "$publish_manifests_dir" || true
-        first_blob_rel="$(find "$publish_blobs_dir" -type f -print -quit | sed "s#^$publish_blobs_dir/##" || true)"
-        echo "first_blob_rel=$first_blob_rel"
-        echo "::endgroup::"
+        for p in "${candidates[@]}"; do
+          echo "--- $p"
+          sudo ls -la "$p" 2>&1 || true
+        done
 
-        echo "::group::Remote existence checks (one sample blob)"
-        if [ -n "$first_blob_rel" ]; then
-          rclone lsjson "r2:${R2_BUCKET_NAME}/blobs/$first_blob_rel" --config /dev/null || true
-          rclone lsjson "r2:${R2_BUCKET_NAME}/$first_blob_rel" --config /dev/null || true
-          rclone lsjson "r2:${R2_BUCKET_NAME}/v2/blobs/$first_blob_rel" --config /dev/null || true
-          rclone lsjson "r2:${R2_BUCKET_NAME}/oci/blobs/$first_blob_rel" --config /dev/null || true
-        fi
+        echo "--- find $docker_root_dir -path '*/sha256/$sha'"
+        sudo find "$docker_root_dir" -type f -path "*/sha256/$sha" -print 2>/dev/null | head -n 50 || true
         echo "::endgroup::"
 
         if [ "${{ inputs.explore_only }}" = "true" ]; then
@@ -120,12 +105,8 @@ jobs:
           exit 0
         fi
 
-        echo "::group::rclone blobs (dry run)"
-        rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --dry-run --ignore-existing --config /dev/null --stats-one-line --stats-log-level NOTICE
-        echo "::endgroup::"
-
-        echo "::group::rclone manifests (dry run)"
-        rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests" --dry-run --config /dev/null --stats-one-line --stats-log-level NOTICE
+        echo "::group::Remote top-level prefixes (again)"
+        rclone lsf "r2:${R2_BUCKET_NAME}" --dirs-only --config /dev/null || true
         echo "::endgroup::"
 
   determine-modified-challenges:
