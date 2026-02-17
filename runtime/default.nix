@@ -141,16 +141,17 @@ pkgs.writeShellApplication {
   text = ''
     set -euo pipefail
 
+    docker_host="unix://${dockerSockPath}"
+
     docker_socket_unit="${name}-docker.socket"
     docker_service_unit="${name}-docker.service"
     containerd_service_unit="${name}-containerd.service"
-    host="unix://${dockerSockPath}"
 
     current_execstart="$(systemctl show -p ExecStart "$docker_service_unit" 2>/dev/null || true)"
     want_cfg="--config-file=${dockerDaemonJson}"
 
-    if [[ "$current_execstart" == *"$want_cfg"* ]] && DOCKER_HOST="$host" docker info >/dev/null 2>&1; then
-      echo "$host"
+    if [[ "$current_execstart" == *"$want_cfg"* ]] && DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
+      echo "$docker_host"
       exit 0
     fi
 
@@ -172,18 +173,18 @@ pkgs.writeShellApplication {
 
     docker_ready="false"
     for _ in $(seq 1 120); do
-      if DOCKER_HOST="$host" docker info >/dev/null 2>&1; then
+      if DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
         docker_ready="true"
         break
       fi
       sleep 0.25
     done
     if [ "$docker_ready" != "true" ]; then
-      echo "Error: dockerd not reachable at $host" >&2
+      echo "Error: dockerd not reachable at $docker_host" >&2
       systemctl status "$docker_service_unit" --no-pager || true
       exit 1
     fi
 
-    echo "$host"
+    echo "$docker_host"
   '';
 }
