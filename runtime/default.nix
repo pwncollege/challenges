@@ -35,13 +35,11 @@ let
             'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "default_memory"]'
       '';
 
-  runtimePathEnv =
-    "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-
   systemdServiceCommon = {
     Service = {
       Type = "notify";
-      Environment = runtimePathEnv;
+      Environment =
+        "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
       Restart = "on-failure";
       TimeoutStartSec = 0;
       Delegate = "yes";
