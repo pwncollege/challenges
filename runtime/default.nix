@@ -169,23 +169,20 @@ pkgs.writeShellApplication {
     ln -sfn "${dockerSystemdServiceUnit}" "/nix/var/nix/gcroots/${name}"
 
     systemctl daemon-reload
-    systemctl enable --runtime "$containerd_service_unit" >/dev/null 2>&1 || true
-    if ! timeout 60 systemctl restart "$containerd_service_unit" >/dev/null; then
-      echo "Error: failed to (re)start $containerd_service_unit" >&2
-      systemctl status "$containerd_service_unit" --no-pager >&2 || true
-      exit 1
-    fi
-    systemctl enable --runtime "$docker_socket_unit" >/dev/null 2>&1 || true
-    if ! timeout 60 systemctl restart "$docker_socket_unit" >/dev/null 2>&1; then
-      echo "Error: failed to (re)start $docker_socket_unit" >&2
-      systemctl status "$docker_socket_unit" --no-pager >&2 || true
-      exit 1
-    fi
-    if ! timeout 60 systemctl restart "$docker_service_unit" >/dev/null 2>&1; then
-      echo "Error: failed to (re)start $docker_service_unit" >&2
-      systemctl status "$docker_service_unit" --no-pager >&2 || true
-      exit 1
-    fi
+
+    restart_unit() {
+      local unit="$1"
+      systemctl enable --runtime "$unit" >/dev/null 2>&1 || true
+      if ! timeout 60 systemctl restart "$unit" >/dev/null 2>&1; then
+        echo "Error: failed to (re)start $unit" >&2
+        systemctl status "$unit" --no-pager >&2 || true
+        exit 1
+      fi
+    }
+
+    restart_unit "$containerd_service_unit"
+    restart_unit "$docker_socket_unit"
+    restart_unit "$docker_service_unit"
     if ! timeout 60 env DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
       echo "Error: dockerd not reachable at $docker_host" >&2
       systemctl status "$docker_service_unit" --no-pager >&2 || true
