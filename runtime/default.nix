@@ -141,10 +141,9 @@ pkgs.writeShellApplication {
   text = ''
     set -euo pipefail
 
-    unit_base="${name}"
-    docker_socket_unit="$unit_base-docker.socket"
-    docker_service_unit="$unit_base-docker.service"
-    containerd_service_unit="$unit_base-containerd.service"
+    docker_socket_unit="${name}-docker.socket"
+    docker_service_unit="${name}-docker.service"
+    containerd_service_unit="${name}-containerd.service"
     host="unix://${dockerSockPath}"
 
     current_execstart="$(systemctl show -p ExecStart "$docker_service_unit" 2>/dev/null || true)"
@@ -164,7 +163,7 @@ pkgs.writeShellApplication {
     ln -sfn "${containerdServiceUnit}" "/run/systemd/system/$containerd_service_unit"
 
     mkdir -p /nix/var/nix/gcroots
-    ln -sfn "${dockerSystemdServiceUnit}" "/nix/var/nix/gcroots/$unit_base"
+    ln -sfn "${dockerSystemdServiceUnit}" "/nix/var/nix/gcroots/${name}"
 
     systemctl daemon-reload
     systemctl enable --runtime --now "$containerd_service_unit" >/dev/null
