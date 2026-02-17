@@ -85,7 +85,7 @@ let
       address = "${containerdSockPath}"
   '';
 
-  dockerSystemdSocketUnit = toSystemdUnit "${name}.socket" {
+  dockerSystemdSocketUnit = toSystemdUnit "${name}-docker.socket" {
     Unit = {
       Description = "pwn.college challenge runtime docker socket";
     };
@@ -98,10 +98,10 @@ let
     };
   };
 
-  dockerSystemdServiceUnit = toSystemdUnit "${name}.service" (lib.recursiveUpdate systemdServiceCommon {
+  dockerSystemdServiceUnit = toSystemdUnit "${name}-docker.service" (lib.recursiveUpdate systemdServiceCommon {
     Unit = {
       Description = "pwn.college challenge runtime docker daemon";
-      Requires = [ "${name}.socket" "${name}-containerd.service" ];
+      Requires = [ "${name}-docker.socket" "${name}-containerd.service" ];
       After = [ "local-fs.target" "${name}-containerd.service" ];
     };
     Service = {
@@ -145,8 +145,8 @@ pkgs.writeShellApplication {
     set -euo pipefail
 
     unit_base="${name}"
-    socket_unit="$unit_base.socket"
-    service_unit="$unit_base.service"
+    socket_unit="$unit_base-docker.socket"
+    service_unit="$unit_base-docker.service"
     containerd_unit="$unit_base-containerd.service"
     host="unix://${dockerSockPath}"
 
