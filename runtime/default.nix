@@ -73,8 +73,6 @@ let
     };
   };
 
-  dockerExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
-
   containerdConfigToml = pkgs.writeText "${name}-containerd-config.toml" ''
     version = 2
     root = "${containerdDataDir}"
@@ -105,7 +103,7 @@ let
     };
     Service = {
       Type = "notify";
-      ExecStart = dockerExecStart;
+      ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
       Environment = runtimePathEnv;
     };
     Install = {
