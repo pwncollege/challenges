@@ -2,16 +2,16 @@
 let
   name = "pwn-challenge-runtime";
 
-  dataBase = "/var/lib/pwn.college";
-  runBase = "/run/pwn.college";
+  dataDir = "/var/lib/pwn.college";
+  runDir = "/run/pwn.college";
 
-  dataRoot = "${dataBase}/docker";
-  runRoot = "${runBase}/docker";
-  sockPath = "${runRoot}/docker.sock";
+  dockerDataDir = "${dataDir}/docker";
+  dockerRunDir = "${runDir}/docker";
+  dockerSockPath = "${dockerRunDir}/docker.sock";
 
-  containerdDataRoot = "${dataBase}/containerd";
-  containerdRunRoot = "${runBase}/containerd";
-  containerdSockPath = "${containerdRunRoot}/containerd.sock";
+  containerdDataDir = "${dataDir}/containerd";
+  containerdRunDir = "${runDir}/containerd";
+  containerdSockPath = "${containerdRunDir}/containerd.sock";
   containerdSockAddr = "unix://${containerdSockPath}";
 
   jsonFormat = pkgs.formats.json { };
@@ -37,9 +37,9 @@ let
       '';
 
   dockerDaemonJson = jsonFormat.generate "${name}-docker-daemon.json" {
-    "data-root" = dataRoot;
-    "exec-root" = runRoot;
-    "pidfile" = "${runRoot}/dockerd.pid";
+    "data-root" = dockerDataDir;
+    "exec-root" = dockerRunDir;
+    "pidfile" = "${dockerRunDir}/dockerd.pid";
     "log-driver" = "journald";
     "seccomp-profile" = "${seccompProfile}";
     "containerd" = containerdSockAddr;
@@ -62,8 +62,8 @@ let
   # rather than the host's /var/lib/containerd.
   containerdConfigToml = pkgs.writeText "${name}-containerd-config.toml" ''
     version = 2
-    root = "${containerdDataRoot}"
-    state = "${containerdRunRoot}"
+    root = "${containerdDataDir}"
+    state = "${containerdRunDir}"
 
     [grpc]
       address = "${containerdSockPath}"
@@ -74,7 +74,7 @@ let
       Description = "pwn.college challenge runtime docker socket";
     };
     Socket = {
-      ListenStream = sockPath;
+      ListenStream = dockerSockPath;
       SocketMode = "0666";
     };
     Install = {
@@ -146,7 +146,7 @@ pkgs.writeShellApplication {
     socket_unit="$unit_base.socket"
     service_unit="$unit_base.service"
     containerd_unit="$unit_base-containerd.service"
-    host="unix://${sockPath}"
+    host="unix://${dockerSockPath}"
 
     current_execstart="$(systemctl show -p ExecStart "$service_unit" 2>/dev/null || true)"
     want_cfg="--config-file=${dockerDaemonJson}"
@@ -156,10 +156,10 @@ pkgs.writeShellApplication {
       exit 0
     fi
 
-    install -d -m 0711 -o root -g root ${runRoot}
-    install -d -m 0711 -o root -g root ${dataRoot}
-    install -d -m 0711 -o root -g root ${containerdRunRoot}
-    install -d -m 0711 -o root -g root ${containerdDataRoot}
+    install -d -m 0711 -o root -g root ${dockerRunDir}
+    install -d -m 0711 -o root -g root ${dockerDataDir}
+    install -d -m 0711 -o root -g root ${containerdRunDir}
+    install -d -m 0711 -o root -g root ${containerdDataDir}
 
     mkdir -p /run/systemd/system
     ln -sfn "${systemdSocketUnit}" "/run/systemd/system/$socket_unit"
