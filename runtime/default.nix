@@ -135,8 +135,8 @@ pkgs.writeShellApplication {
   inherit name;
   runtimeInputs = with pkgs; [
     bash
-    coreutils
     containerd
+    coreutils
     docker
     systemd
   ];
