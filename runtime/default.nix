@@ -73,6 +73,8 @@ let
     };
   };
 
+  dockerExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
+
   containerdConfigToml = pkgs.writeText "${name}-containerd-config.toml" ''
     version = 2
     root = "${containerdDataDir}"
@@ -103,7 +105,7 @@ let
     };
     Service = {
       Type = "notify";
-      ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
+      ExecStart = dockerExecStart;
       Environment = runtimePathEnv;
     };
     Install = {
@@ -148,9 +150,9 @@ pkgs.writeShellApplication {
     containerd_service_unit="${name}-containerd.service"
 
     current_execstart="$(systemctl show -p ExecStart "$docker_service_unit" 2>/dev/null || true)"
-    want_cfg="--config-file=${dockerDaemonJson}"
+    want_execstart="${dockerExecStart}"
 
-    if [[ "$current_execstart" == *"$want_cfg"* ]] && DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
+    if [[ "$current_execstart" == *"$want_execstart"* ]] && DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
       echo "$docker_host"
       exit 0
     fi
