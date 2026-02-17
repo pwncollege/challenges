@@ -46,6 +46,9 @@ let
       TasksMax = "infinity";
       OOMScoreAdjust = -500;
     };
+    Install = {
+      WantedBy = "multi-user.target";
+    };
   };
 
   runtimePathEnv =
@@ -106,9 +109,6 @@ let
       ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
       Environment = runtimePathEnv;
     };
-    Install = {
-      WantedBy = "multi-user.target";
-    };
   });
 
   containerdServiceUnit = toSystemdUnit "${name}-containerd.service" (lib.recursiveUpdate systemdServiceCommon {
@@ -122,9 +122,6 @@ let
       ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfigToml}";
       Environment = runtimePathEnv;
       TimeoutStartSec = 60;
-    };
-    Install = {
-      WantedBy = "multi-user.target";
     };
   });
 
