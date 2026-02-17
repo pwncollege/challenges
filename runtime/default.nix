@@ -149,10 +149,12 @@ pkgs.writeShellApplication {
     docker_service_unit="${name}-docker.service"
     containerd_service_unit="${name}-containerd.service"
 
-    current_execstart="$(systemctl show -p ExecStart "$docker_service_unit" 2>/dev/null || true)"
-    want_execstart="${dockerExecStart}"
+    current_service_link="$(readlink -f "/run/systemd/system/$docker_service_unit" 2>/dev/null || true)"
+    current_socket_link="$(readlink -f "/run/systemd/system/$docker_socket_unit" 2>/dev/null || true)"
 
-    if [[ "$current_execstart" == *"$want_execstart"* ]] && DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
+    if [[ "$current_service_link" == "${dockerSystemdServiceUnit}" ]] \
+      && [[ "$current_socket_link" == "${dockerSystemdSocketUnit}" ]] \
+      && DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
       echo "$docker_host"
       exit 0
     fi
