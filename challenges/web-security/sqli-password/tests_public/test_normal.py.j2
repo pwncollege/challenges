@@ -10,7 +10,24 @@ import time
 {{ generate_names(challenge, random) }}
 
 proc = subprocess.Popen(['/challenge/server'])
-time.sleep(1)  # Give it time to start
+
+def wait_for_login_ready(timeout=15):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            r = requests.post(
+                f"http://challenge.localhost/{{challenge.endpoint_login}}",
+                data={"{{challenge.parameter_username}}": "guest", "{{challenge.parameter_password}}": "password"},
+                timeout=1,
+            )
+            if r.status_code in (200, 403, 500):
+                return
+        except requests.RequestException:
+            pass
+        time.sleep(0.2)
+    raise AssertionError("server did not become ready in time")
+
+wait_for_login_ready()
 
 # Test normal login with guest account
 s = requests.Session()
