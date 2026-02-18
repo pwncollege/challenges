@@ -8,9 +8,15 @@ import os
 FLAG = os.environ["FLAG"]
 
 proc = subprocess.Popen(['/challenge/server'])
-time.sleep(1)
+for _ in range(75):
+    try:
+        requests.get("http://challenge.localhost/", timeout=1)
+        break
+    except requests.RequestException:
+        time.sleep(0.2)
+else:
+    raise AssertionError("server did not become ready in time")
 
-# Create a session to maintain cookies
 s = requests.Session()
 
 response = s.get("http://challenge.localhost/")
