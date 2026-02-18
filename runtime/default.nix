@@ -25,7 +25,6 @@ let
   systemdServiceCommon = {
     Service = {
       Type = "notify";
-      Environment = "PATH=${pkgs.kata-runtime}/bin:${pkgs.docker}/bin:${pkgs.containerd}/bin:/usr/sbin:/usr/bin:/sbin:/bin";
       Restart = "on-failure";
       TimeoutStartSec = 0;
       Delegate = "yes";
@@ -124,6 +123,7 @@ let
       };
       Service = {
         ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfigToml}";
+        Environment = "PATH=${pkgs.runc}/bin";
         NotifyAccess = "all";
         TimeoutStartSec = 60;
       };
