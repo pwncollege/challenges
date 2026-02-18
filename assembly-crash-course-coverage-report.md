@@ -1,116 +1,68 @@
-# Assembly Crash Course Coverage Report (computing-101)
-
-## Scope and method
-This report compares `challenges/computing-101/assembly-crash-course` against every other `computing-101` module except `common`:
-
-- `assembly-assortment`
-- `building-a-web-server`
-- `control-flow`
-- `debugging-refresher`
-- `hello-hackers`
-- `introspecting`
-- `memory`
-- `the-stack`
-- `your-first-program`
-
-Reviewed sources included each module's `DESCRIPTION.md`, `module.yml`, per-challenge `DESCRIPTION.md`, and readable challenge source/config files (`challenge.yml`, `run.j2`, `check.j2`, `builder.j2`, challenge `*.py`/`*.c` templates). Encrypted `test_solve.sh` files were intentionally skipped.
+# Assembly Crash Course Coverage Gap Report
 
 ## Summary of findings
-- `assembly-crash-course` is the most comprehensive single module for *writing* x86-64 assembly end-to-end (registers, arithmetic, memory, stack, control flow, loops, functions).
-- Many foundational topics are also taught elsewhere (register basics, `mov`, syscalls, memory dereference/offsets, stack basics, `cmp`/conditional branching, loops, switch/jump-table ideas).
-- The most removal-sensitive content in `assembly-crash-course` is advanced low-level assembly authoring: exact relative-jump construction, trampoline design, division/modulo mechanics (`rdx:rax`), bit-shift/partial-register tricks, and function/ABI/stack-frame implementation.
+- Scope reviewed:
+  - `assembly-crash-course`: all 30 listed challenges (`level-1` through `level-23`, including split variants like `-a`/`-b`), `module.yml`, top-level `DESCRIPTION.md`, and all `challenge/run.j2` source.
+  - Other `computing-101` modules (excluding `common`): `assembly-assortment`, `building-a-web-server`, `control-flow`, `debugging-refresher`, `hello-hackers`, `introspecting`, `memory`, `the-stack`, `your-first-program`.
+  - Readable level configs and source used where present (`module.yml`, `dojo.yml`, `challenge.yml`, `.init`, `chal.py`, `chalconf.py`, `run.j2`, etc.).
+- High-level result:
+  - `assembly-crash-course` is the only module that covers the full arc from arithmetic/data movement through memory sizing, stack mechanics, jump taxonomy, loops, and function stack frames in one progression.
+  - Some fundamentals are strongly duplicated elsewhere (register moves, basic memory dereference, stack basics, cmp/jumps, jump tables, syscall usage).
+  - Several advanced assembly topics are effectively unique to `assembly-crash-course` (especially division/modulo internals, subregister tricks, fixed-distance relative-jump padding, and function-frame construction with stack-local data structures).
 
-## Step 1: Assembly Crash Course concept catalog
-Concepts explicitly taught across levels (`module.yml` + level descriptions + level `run.j2` checks):
+## Concept coverage matrix
 
-- Register setup and multi-register initialization (`level-1`, `level-2-a`)
-- Arithmetic with registers (`add`, `sub`, `imul`) and linear formulas (`level-2`, `level-3`)
-- Integer division and remainder semantics (`div`, quotient/remainder behavior) (`level-4`, `level-5`)
-- Modulo optimization with power-of-two masking via partial-register moves (`level-6`, `level-6-a`)
-- Subregister/partial-register model (`al/ah/ax/eax/rax`) (`level-6-a`)
-- Bit shifts and byte extraction (`shl`, `shr`) (`level-7`)
-- Bitwise logic (`and`/`or`/`xor`) and boolean logic construction (`level-8`, `level-9`)
-- Memory read/write with absolute and register-indirect addressing (`level-10`, `level-10-a`, `level-10-b`)
-- Operand-size-aware memory access (byte/word/dword/qword) (`level-11`, `level-11-a`)
-- Little-endian interpretation and writing large constants into memory (`level-12`)
-- Memory offsets and contiguous-element processing (`level-13`)
-- Stack model, LIFO behavior, `push`/`pop`, top-of-stack transforms (`level-14`, `level-15`)
-- Direct stack-pointer access and stack-based aggregation (`[rsp+offset]`, averaging) (`level-16`)
-- Control-flow primitives: absolute jump, relative jump, labels, `nop`, `.rept` (`level-17-a`, `level-17-b`)
-- Jump trampoline composition (relative then absolute jump) (`level-17`)
-- Conditional branching with `cmp`/flags and multi-branch arithmetic paths (`level-18`)
-- Indirect jumps and jump-table dispatch (`switch` style) (`level-19`)
-- Loop construction over dynamic sizes and sentinel termination (`level-20`, `level-21`)
-- Function construction with `call`/`ret` and external function invocation (`level-22`)
-- Linux amd64 System V calling convention (arg in `rdi`, return in `rax`) (`level-22`)
-- Function stack frames (`rbp`), stack allocation/restoration, stack-local counting arrays (`level-23`)
+| Assembly-crash-course concept | Crash-course levels | Also covered in other computing-101 modules | Coverage status |
+|---|---|---|---|
+| Register initialization with `mov` | 1, 2-a | `your-first-program` (`rax`, `movreg`), `hello-hackers` (syscall register setup) | Well-covered elsewhere |
+| Multi-register state setup (including non-argument regs) | 2-a | `your-first-program` (multiple register use), `debugging-refresher` (register inspection/modification) | Partial elsewhere |
+| Basic arithmetic with `add` | 2 | `assembly-assortment/add-reverse` | Well-covered elsewhere |
+| Signed multiplication (`imul`) in expressions | 3 | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Integer division mechanics (`rdx:rax`, quotient in `rax`) | 4 | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Modulo via `div` remainder behavior | 5 | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Subregister byte access (`ah` / upper byte of `ax`) | 6-a | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Fast modulo via power-of-two / low-byte register trick | 6 | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Bit shifting (`shl`/`shr`) for byte extraction | 7 | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Bitwise logic (`and`/`or`/`xor`) as data transform | 8, 9 | `assembly-assortment/xor-reverse` (XOR-focused only) | Partial elsewhere |
+| Branchless parity/even check via bit-logic constraints | 9 | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Absolute memory read from known address | 10-a | `memory` (`mem-load`, dereference sequence) | Well-covered elsewhere |
+| Memory write to known location | 10-b | `hello-hackers/open-read-write-hardcode` (byte stores to memory), reverse binaries in `assembly-assortment`/`control-flow` write bytes | Partial elsewhere |
+| Read-modify-write memory update | 10 | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Sized memory loads (`byte/word/dword/qword`) | 11-a, 11 | Other modules mainly use `BYTE PTR` only; no full-width comparison exercise | Unique to assembly-crash-course |
+| Little-endian representation and large immediate memory writes | 12 | Implied in other modules, but not taught as explicit objective | Unique to assembly-crash-course |
+| Pointer + offset arithmetic over adjacent words | 13 | `memory/mem-offsets`, `the-stack/mem-stack-offsets` | Well-covered elsewhere |
+| Stack LIFO operations (`push`/`pop`) | 14, 15 | `the-stack/mem-pop`, `introspecting/gdb-pop` | Well-covered elsewhere |
+| Stack-pointer direct addressing (`[rsp+off]`) for computation | 16 | `the-stack` module (`mem-stack`, `mem-stack-offsets`, `mem-argv1`) | Well-covered elsewhere |
+| Absolute jump control-flow (`jmp reg` to address) | 17-a | `control-flow` (unconditional/conditional jump usage generally) | Partial elsewhere |
+| Relative jump targeting with exact byte distance (`nop`, labels, `.rept`) | 17-b | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Jump trampoline composition (relative + absolute + stack transfer) | 17 | No direct equivalent module exercise | Unique to assembly-crash-course |
+| Conditional branching with multi-case arithmetic paths | 18 | `control-flow` (`cmp-setz`, `cmp-jne`, `cmp-string`) | Well-covered elsewhere |
+| Indirect jumps and jump-table dispatch | 19 | `control-flow/switch` | Well-covered elsewhere |
+| Counted loop over dynamic-length numeric array (`for`-style) | 20 | `control-flow/loop` (looping concept, string compare) | Partial elsewhere |
+| Sentinel-based `while` over bytes (non-zero count, null handling) | 21 | `control-flow/loop`, `assembly-assortment/strcmp-stored` | Well-covered elsewhere |
+| Function construction with `call`/`ret`, SysV ABI, external function call | 22 | `debugging-refresher/broken-functions` (analysis of functions, not authoring equivalent logic) | Partial elsewhere |
+| Function stack frame design (`rbp`/`rsp`), stack-local table, frame restoration | 23 | No direct equivalent module exercise | Unique to assembly-crash-course |
 
-## Step 2: Other module concept catalog (high-level)
-- `your-first-program`: register basics (`rax`, `rdi`, `rsi`), `mov`, syscall model (`exit`), passing syscall args in registers, assembling/linking with `as`/`ld`.
-- `hello-hackers`: syscall chaining, `write`/`read`/`open`/`exit`, argument pointers from stack (`[rsp+16]`), byte-wise memory writes (`BYTE PTR`) to build strings.
-- `memory`: memory dereference (`[addr]`, `[reg]`), pointers, self-dereference, offsets, stored addresses, double dereference.
-- `the-stack`: `rsp` as stack base, `[rsp]` and `[rsp+offset]`, argument pointers on stack, `pop` semantics.
-- `control-flow`: `cmp`, ZF-driven logic (`setz`, `jne`, `je`), labels/branching, string comparison by byte offsets, looping with backward jumps, switch/jump-table reverse engineering.
-- `assembly-assortment`: reverse-engineering instruction effects (`add`, `sub`, `xor`, `cmp`), .rodata discovery, objdump/gdb-aided inversion.
-- `introspecting`: disassembly (`objdump`, gdb `disassemble`), stepping (`starti`, `stepi`), register/memory inspection (`print`, `x`), `strace`, `int3` breakpoint behavior.
-- `debugging-refresher`: advanced gdb usage (register/memory inspection/modification, breakpoints, scripting, stepping controls), understanding stack/register state during debugging.
-- `building-a-web-server`: syscall-heavy assembly application design (`socket`, `bind`, `listen`, `accept`, `read`, `write`, `open`, `fork`), iterative/concurrent control-flow patterns for HTTP servers.
+## Unique to assembly-crash-course
+If `assembly-crash-course` were removed, these concepts would have no strong replacement in the rest of `computing-101`:
+- Signed multiplication and expression composition (`imul`) as a primary task.
+- Division/modulo internals with `rdx:rax` semantics.
+- Subregister granularity tricks (`ah`) and power-of-two modulo optimization via register-width selection.
+- Shift-based extraction workflows (`shl`/`shr`) as a central objective.
+- Full memory-width access training (`byte`, `word`, `dword`, `qword`) and explicit little-endian write reasoning.
+- Relative jump distance engineering using filler (`nop`) and assembler repetition directives.
+- Jump trampoline construction as a composed control-flow pattern.
+- Authoring nontrivial ABI-compliant functions with explicit stack-frame allocation/restoration and stack-local frequency structures.
 
-## Step 3: Concept overlap matrix
-Legend: "Covered elsewhere" means at least one non-`assembly-crash-course` module teaches or exercises the concept directly.
-
-| Assembly Crash Course concept | Covered elsewhere? | Other modules covering it |
-|---|---|---|
-| Register basics and `mov` usage | Yes | `your-first-program`, `hello-hackers`, `memory`, `control-flow`, `the-stack` |
-| Multi-register setup for tasks | Yes | `your-first-program`, `hello-hackers`, `control-flow` |
-| Integer arithmetic (`add`, `sub`) | Yes | `assembly-assortment` |
-| Signed multiply (`imul`) in authored solutions | No (explicit) | None clearly explicit outside crash-course |
-| `div` mechanics (`rdx:rax`, quotient/remainder) | No (explicit) | None clearly explicit outside crash-course |
-| Modulo via `div` and modulo optimization tricks | No (explicit) | None clearly explicit outside crash-course |
-| Partial-register mechanics (`al/ah/ax/eax`) as a learning objective | Partial | `control-flow`/`assembly-assortment` use low-byte registers, but not as deeply as crash-course |
-| Bit-shifts (`shl`/`shr`) for extraction | No (explicit) | None clearly explicit outside crash-course |
-| Bitwise logic construction (`and`/`or`/`xor`) | Yes (partial) | `assembly-assortment` (especially `xor`) |
-| Absolute memory read/write (`[addr]`) | Yes | `memory`, `hello-hackers` |
-| Register-indirect dereference (`[reg]`) | Yes | `memory`, `the-stack`, `hello-hackers` |
-| Multi-level dereference (pointer-to-pointer) | Yes | `memory` |
-| Offset addressing (`[base+offset]`) | Yes | `memory`, `the-stack`, `control-flow`, `hello-hackers` |
-| Byte/word/dword/qword access sizing as explicit objective | Partial | `hello-hackers`/`control-flow` use `BYTE PTR`; full size ladder is mainly crash-course |
-| Little-endian memory representation/writes | No (explicit) | None clearly explicit outside crash-course |
-| Stack LIFO operations with `push`/`pop` | Yes | `the-stack` (especially `mem-pop`) |
-| Direct `rsp`-offset stack processing | Yes | `the-stack`, `control-flow`, `hello-hackers`, `introspecting` |
-| Absolute jump authoring | Partial | `control-flow` covers jumps, but not dedicated absolute-jump authoring challenge |
-| Exact relative-jump layout with labels/`nop`/`.rept` | No (explicit) | None |
-| Trampoline design (relative jump + payload + absolute jump) | No (explicit) | None |
-| Conditional branching with `cmp` and flags | Yes | `control-flow` |
-| Indirect jumps and jump-table dispatch | Yes | `control-flow` (`switch`) |
-| For/while loop construction over dynamic inputs | Yes | `control-flow` |
-| Function authoring with `call`/`ret` as core objective | No (explicit) | None clearly explicit outside crash-course |
-| System V AMD64 function calling convention as required ABI contract | No (explicit) | None clearly explicit outside crash-course |
-| Function stack frames with `rbp`, local stack allocation/restore | Partial | `debugging-refresher` inspects `rbp`-relative locals, but crash-course is where learners implement frames |
-
-## Concepts unique to Assembly Crash Course (high risk if removed)
-These topics appear uniquely or substantially uniquely in `computing-101` as practical assembly authoring objectives:
-
-- Precise relative-jump engineering (`jmp` distance control with labels + `.rept` + `nop`)
-- Trampoline construction patterns
-- Full `div`/remainder model and modulo-focused arithmetic challenges
-- Power-of-two modulo optimization via subregister behavior
-- Explicit, deep subregister semantics (`ah`/`al`/`ax`/`eax` interactions)
-- Shift-based byte extraction (`shl`/`shr`) as a primary exercise
-- Little-endian write reasoning for large constants
-- Function implementation requirements with strict System V AMD64 ABI adherence
-- Building/restoring full stack frames and using stack-local data structures for nontrivial algorithms
-
-## Concepts well-covered elsewhere
-If `assembly-crash-course` were removed, these concepts would still have meaningful coverage in other `computing-101` modules:
-
-- Basic register usage and `mov`
-- Syscall-driven program structure (`exit`, `read`, `write`, `open`, and networking syscalls)
-- Memory dereference, pointers, offsets, and stack-based argument access
-- Basic stack interaction (`rsp`, `pop`, offsets)
-- `cmp`-based decisions, flags, branches (`jne`/`je`), loops, and switch/jump-table control flow
-- Reverse-engineering common instruction effects (`add`, `sub`, `xor`, `cmp`) with disassembly/debug tooling
-- Tooling for assembly introspection/debugging (`objdump`, `gdb`, `strace`, breakpoints)
+## Well-covered elsewhere
+These crash-course concepts have strong overlap in other modules:
+- Basic register setup and movement (`mov`, register roles).
+- Fundamental memory dereference and offset addressing.
+- Stack basics (`[rsp]`, `[rsp+offset]`, `pop`, argv pointer layout).
+- Core conditional control-flow (`cmp`, `jne`/`je`, labels, fall-through vs branch).
+- Jump-table/switch style dispatch.
+- Looping over byte/string data until terminator.
+- Syscall-oriented register usage patterns (especially in `hello-hackers` and `building-a-web-server`).
 
 ## Bottom line
-`assembly-crash-course` is not redundant. While foundational assembly mechanics overlap with several modules, it is the only module that systematically combines advanced control-flow construction, arithmetic edge semantics, low-level bit/register tricks, and ABI-correct function/stack-frame implementation in authored x86-64 solutions.
+`assembly-crash-course` is not just redundant practice. It is the only `computing-101` module that systematically ties together advanced arithmetic semantics, granular data-width/register tricks, precise jump mechanics, and full function-frame implementation. Removing it would leave clear instruction-level gaps even though foundational topics are duplicated elsewhere.
