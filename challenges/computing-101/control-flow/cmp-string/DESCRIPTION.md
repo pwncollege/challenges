@@ -1,5 +1,5 @@
 In the previous challenge, you used `cmp` and `jne` to check a single character and branch to a failure path.
-But checking one character always sufficient: passwords, commands, and filenames are all _strings_ of multiple characters.
+But checking one character is rarely sufficient: passwords, commands, and filenames are all _strings_ of multiple characters.
 
 The good news: you already know everything you need to check a whole string!
 You simply chain multiple `cmp` / `jne` pairs, one for each character, all jumping to the same `fail` label:
