@@ -6,7 +6,7 @@ resources:
     Many before you have learned to read the writing in the flow of water.
     Let their wisdom pour into you.
 
-    - [Neat resource for bypassing input restrictions in bash](https://book.hacktricks.xyz/linux-hardening/bypass-bash-restrictions)
+    - [Neat resource for bypassing input restrictions in bash](https://book.hacktricks.wiki/en/linux-hardening/bypass-bash-restrictions/index.html)
     - [Shell Expansions](https://www.gnu.org/software/bash/manual/html_node/Shell-Expansions.html) from the Bash Manual
 
 - type: challenge
