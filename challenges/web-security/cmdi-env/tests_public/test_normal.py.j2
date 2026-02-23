@@ -10,24 +10,14 @@ import time
 {{ generate_names(challenge, random) }}
 
 proc = subprocess.Popen(['/challenge/server'])
-
-def wait_for_server_ready(timeout=15):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            r = requests.get(
-                f"http://challenge.localhost/{{challenge.endpoint_challenge}}",
-                params={"{{challenge.parameter_timezone}}": "MST"},
-                timeout=1,
-            )
-            if r.status_code == 200:
-                return
-        except requests.RequestException:
-            pass
+for _ in range(75):
+    try:
+        requests.get("http://challenge.localhost/", timeout=1)
+        break
+    except requests.RequestException:
         time.sleep(0.2)
+else:
     raise AssertionError("server did not become ready in time")
-
-wait_for_server_ready()
 
 response = requests.get(f"http://challenge.localhost/{{challenge.endpoint_challenge}}", params={"{{challenge.parameter_timezone}}": "MST"})
 assert response.status_code == 200
