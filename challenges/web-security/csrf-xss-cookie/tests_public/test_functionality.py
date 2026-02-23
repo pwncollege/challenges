@@ -8,12 +8,12 @@ import os
 FLAG = os.environ["FLAG"]
 
 proc = subprocess.Popen(['/challenge/server'])
-for _ in range(75):
+for _ in range(100):
     try:
-        requests.get("http://challenge.localhost/", timeout=1)
+        requests.get("http://challenge.localhost/")
         break
     except requests.RequestException:
-        time.sleep(0.2)
+        time.sleep(0.1)
 else:
     raise AssertionError("server did not become ready in time")
 
