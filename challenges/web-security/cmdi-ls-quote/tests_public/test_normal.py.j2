@@ -10,7 +10,15 @@ import time
 {{ generate_names(challenge, random) }}
 
 proc = subprocess.Popen(['/challenge/server'])
-time.sleep(1)  # Give it time to start
+for _ in range(100):
+    try:
+        requests.get("http://challenge.localhost/")
+        break
+    except requests.RequestException:
+        time.sleep(0.1)
+else:
+    raise AssertionError("server did not become ready in time")
+
 
 response = requests.get(f"http://challenge.localhost/{{challenge.endpoint_challenge}}", params={"{{challenge.parameter_directory}}": "/challenge"})
 assert response.status_code == 200
