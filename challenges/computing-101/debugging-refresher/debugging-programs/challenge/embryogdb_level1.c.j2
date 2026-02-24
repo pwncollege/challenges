@@ -1,0 +1,16 @@
+{% extends "common/base.c.j2" %}
+{% set iterations = 0 %}
+{% set initial_breakpoint = true %}
+{% set loop_breakpoint = false %}
+
+{% block level_text %}
+    puts("You are running in gdb! The program is currently paused. This is because it has set its own breakpoint here.\n");
+    puts("You can use the command `start` to start a program, with a breakpoint set on `main`. You can use the command `starti` to");
+    puts("start a program, with a breakpoint set on `_start`. You can use the command `run` to start a program, with no breakpoint");
+    puts("set. You can use the command `attach <PID>` to attach to some other already running program. You can use the command");
+    puts("`core <PATH>` to analyze the coredump of an already run program.\n");
+    puts("When starting or running a program, you can specify arguments in almost exactly the same way as you would on your shell.");
+    puts("For example, you can use `start <ARGV1> <ARGV2> <ARGVN> < <STDIN_PATH>`.\n");
+    puts("Use the command `continue`, or `c` for short, in order to continue program execution.\n");
+{% endblock %}
+

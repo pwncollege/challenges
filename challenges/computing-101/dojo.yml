@@ -1,0 +1,16 @@
+name: Computing 101
+type: welcome
+id: computing-101
+award:
+  emoji: "\U0001F4BB"
+modules:
+- id: your-first-program
+- id: memory
+- id: the-stack
+- id: introspecting
+- id: hello-hackers
+- id: control-flow
+- id: assembly-assortment
+- id: assembly-crash-course
+- id: building-a-web-server
+- id: debugging-refresher

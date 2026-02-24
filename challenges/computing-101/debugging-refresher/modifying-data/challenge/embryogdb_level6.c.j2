@@ -1,0 +1,33 @@
+{% extends "common/base.c.j2" %}
+{% set iterations = 64 %}
+{% set initial_breakpoint = true %}
+{% set loop_breakpoint = false %}
+
+{% block level_text %}
+    puts("As it turns out, gdb has FULL control over the target process. Not only can you analyze the program's state, but you can");
+    puts("also modify it. While gdb probably isn't the best tool for doing long term maintenance on a program, sometimes it can be");
+    puts("useful to quickly modify the behavior of your target process in order to more easily analyze it.\n");
+    puts("You can modify the state of your target program with the `set` command. For example, you can use `set $rdi = 0` to zero");
+    puts("out $rdi. You can use `set *((uint64_t *) $rsp) = 0x1234` to set the first value on the stack to 0x1234. You can use");
+    puts("`set *((uint16_t *) 0x31337000) = 0x1337` to set 2 bytes at 0x31337000 to 0x1337.\n");
+    puts("Suppose your target is some networked application which reads from some socket on fd 42. Maybe it would be easier for");
+    puts("the purposes of your analysis if the target instead read from stdin. You could achieve something like that with the");
+    puts("following gdb script:\n");
+    puts("  start");
+    puts("  catch syscall read");
+    puts("  commands");
+    puts("    silent");
+    puts("    if ($rdi == 42)");
+    puts("      set $rdi = 0");
+    puts("    end");
+    puts("    continue");
+    puts("  end");
+    puts("  continue");
+    puts("");
+    puts("This example gdb script demonstrates how you can automatically break on system calls, and how you can use conditions");
+    puts("within your commands to conditionally perform gdb commands.\n");
+    puts("In the previous level, your gdb scripting solution likely still required you to copy and paste your solutions. This");
+    puts("time, try to write a script that doesn't require you to ever talk to the program, and instead automatically solves each");
+    puts("challenge by correctly modifying registers / memory.\n");
+{% endblock %}
+
