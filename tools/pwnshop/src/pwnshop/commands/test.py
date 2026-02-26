@@ -40,12 +40,12 @@ logger = logging.getLogger(__name__)
     help="Write failure output to DIR/challenge/test.log files.",
 )
 @click.option(
-    "--retry",
+    "--attempts",
     metavar="N",
     type=click.IntRange(1, None),
     default=1,
     show_default=True,
-    help="Run each test up to N times until it succeeds.",
+    help="Run each test up to N attempts until it succeeds.",
 )
 @click.option("--silent-failures", is_flag=True, help="Do not print failing test output to stdout/stderr.")
 @click.argument(
@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
         resolve_path=False,
     ),
 )
-def test_command(targets, modified_since, jobs, require_tests, test_timeout, log_failures, retry, silent_failures):
+def test_command(targets, modified_since, jobs, require_tests, test_timeout, log_failures, attempts, silent_failures):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
         if modified_since:
@@ -90,8 +90,10 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout, log
                 passed = False
                 last_output = ""
                 failed_attempt_outputs = []
-                for attempt in range(1, retry + 1):
-                    logger.debug("running test %s in %s (attempt %d/%d)", test_name, challenge_path, attempt, retry)
+                for attempt in range(1, attempts + 1):
+                    logger.debug(
+                        "running test %s in %s (attempt %d/%d)", test_name, challenge_path, attempt, attempts
+                    )
                     with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, _):
                         try:
                             run = subprocess.run(
@@ -108,7 +110,7 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout, log
                                 test_timeout,
                                 challenge_path,
                                 attempt,
-                                retry,
+                                attempts,
                             )
                             last_output = f"TIMEOUT after {test_timeout}s\n{e.stdout or ''}"
                             passed = False
@@ -121,20 +123,28 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout, log
                                 "PASSED" if passed else "FAILED",
                                 run.returncode,
                                 attempt,
-                                retry,
+                                attempts,
                             )
                     if passed:
                         if attempt > 1:
-                            logger.info("test %s passed on attempt %d/%d in %s", test_name, attempt, retry, challenge_path)
+                            logger.info(
+                                "test %s passed on attempt %d/%d in %s",
+                                test_name,
+                                attempt,
+                                attempts,
+                                challenge_path,
+                            )
                         break
 
-                    if retry > 1:
-                        failed_attempt_outputs.append(f"=== attempt {attempt}/{retry} ===\n{last_output}")
+                    if attempts > 1:
+                        failed_attempt_outputs.append(f"=== attempt {attempt}/{attempts} ===\n{last_output}")
                     else:
                         failed_attempt_outputs.append(last_output)
 
                 if not passed:
-                    results.append((test_name, False, "\n".join(failed_attempt_outputs) if retry > 1 else last_output))
+                    results.append(
+                        (test_name, False, "\n".join(failed_attempt_outputs) if attempts > 1 else last_output)
+                    )
                     continue
 
                 results.append((test_name, True, last_output))
