@@ -58,5 +58,5 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Testing challenges"
-        ./pwnshop test --silent-failures --attempts 5 --jobs "$(( $(nproc) * 2 ))" --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
+        ./pwnshop test --silent-failures --jobs "$(( $(nproc) * 2 ))" --attempts 5 --modified-since="$MODIFIED_SINCE" "$CHALLENGES_DIR"
         echo "::endgroup::"
