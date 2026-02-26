@@ -25,20 +25,6 @@ logger = logging.getLogger(__name__)
 @click.command("test")
 @click.option("--modified-since", metavar="REF", help="Only include challenges changed versus REF.")
 @click.option("--jobs", "-j", metavar="N", type=click.IntRange(1, None), help="Parallel challenges (default: cores).")
-@click.option("--require-tests", is_flag=True, help="Fail if any challenge has no tests.")
-@click.option(
-    "--test-timeout",
-    metavar="N",
-    type=click.IntRange(1, None),
-    default=None,
-    help="Timeout in seconds for each individual test.",
-)
-@click.option(
-    "--log-failures",
-    metavar="DIR",
-    type=click.Path(path_type=pathlib.Path, file_okay=False, resolve_path=True),
-    help="Write failure output to DIR/challenge/test.log files.",
-)
 @click.option(
     "--attempts",
     metavar="N",
@@ -46,6 +32,20 @@ logger = logging.getLogger(__name__)
     default=1,
     show_default=True,
     help="Run each test up to N attempts until it succeeds.",
+)
+@click.option(
+    "--timeout",
+    metavar="N",
+    type=click.IntRange(1, None),
+    default=None,
+    help="Timeout in seconds for each individual test.",
+)
+@click.option("--require-tests", is_flag=True, help="Fail if any challenge has no tests.")
+@click.option(
+    "--log-failures",
+    metavar="DIR",
+    type=click.Path(path_type=pathlib.Path, file_okay=False, resolve_path=True),
+    help="Write failure output to DIR/challenge/test.log files.",
 )
 @click.option("--silent-failures", is_flag=True, help="Do not print failing test output to stdout/stderr.")
 @click.argument(
@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
         resolve_path=False,
     ),
 )
-def test_command(targets, modified_since, jobs, require_tests, test_timeout, log_failures, attempts, silent_failures):
+def test_command(targets, modified_since, jobs, attempts, timeout, require_tests, log_failures, silent_failures):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
         if modified_since:
@@ -99,18 +99,18 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout, log
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT,
                                 text=True,
-                                timeout=test_timeout,
+                                timeout=timeout,
                             )
                         except subprocess.TimeoutExpired as e:
                             logger.warning(
                                 "test %s timed out after %ds in %s (attempt %d/%d)",
                                 test_name,
-                                test_timeout,
+                                timeout,
                                 challenge_path,
                                 attempt,
                                 attempts,
                             )
-                            last_output = f"TIMEOUT after {test_timeout}s\n{e.stdout or ''}"
+                            last_output = f"TIMEOUT after {timeout}s\n{e.stdout or ''}"
                             passed = False
                         else:
                             passed = run.returncode == 0
