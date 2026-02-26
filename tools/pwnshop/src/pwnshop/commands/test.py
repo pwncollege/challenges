@@ -91,9 +91,7 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout, log
                 last_output = ""
                 failed_attempt_outputs = []
                 for attempt in range(1, attempts + 1):
-                    logger.debug(
-                        "running test %s in %s (attempt %d/%d)", test_name, challenge_path, attempt, attempts
-                    )
+                    logger.debug("running test %s in %s (attempt %d/%d)", test_name, challenge_path, attempt, attempts)
                     with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, _):
                         try:
                             run = subprocess.run(
