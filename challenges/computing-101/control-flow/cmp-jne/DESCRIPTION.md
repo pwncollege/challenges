@@ -12,7 +12,7 @@ jne fail
 ```
 
 After the `cmp`, if the values were _not_ equal, the CPU jumps to the location labeled `fail`.
-He terminology used for this is that it "takes the branch" (in the road/code).
+The terminology used for this is that it "takes the branch" (in the road/code).
 If the values _were_ equal, the CPU simply continues to the next instruction.
 The terminology used for this is behavior of _not_ taking the branch that it "falls through" to the next instruction.
 

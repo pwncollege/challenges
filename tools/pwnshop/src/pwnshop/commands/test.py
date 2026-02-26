@@ -25,14 +25,22 @@ logger = logging.getLogger(__name__)
 @click.command("test")
 @click.option("--modified-since", metavar="REF", help="Only include challenges changed versus REF.")
 @click.option("--jobs", "-j", metavar="N", type=click.IntRange(1, None), help="Parallel challenges (default: cores).")
-@click.option("--require-tests", is_flag=True, help="Fail if any challenge has no tests.")
 @click.option(
-    "--test-timeout",
+    "--attempts",
+    metavar="N",
+    type=click.IntRange(1, None),
+    default=1,
+    show_default=True,
+    help="Run each test up to N attempts until it succeeds.",
+)
+@click.option(
+    "--timeout",
     metavar="N",
     type=click.IntRange(1, None),
     default=None,
     help="Timeout in seconds for each individual test.",
 )
+@click.option("--require-tests", is_flag=True, help="Fail if any challenge has no tests.")
 @click.option(
     "--log-failures",
     metavar="DIR",
@@ -52,7 +60,7 @@ logger = logging.getLogger(__name__)
         resolve_path=False,
     ),
 )
-def test_command(targets, modified_since, jobs, require_tests, test_timeout, log_failures, silent_failures):
+def test_command(targets, modified_since, jobs, attempts, timeout, require_tests, log_failures, silent_failures):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
         if modified_since:
@@ -79,22 +87,65 @@ def test_command(targets, modified_since, jobs, require_tests, test_timeout, log
             for test in tests:
                 test_name = test.relative_to(rendered)
                 logger.debug("running test %s in %s", test_name, challenge_path)
-                with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, _):
-                    try:
-                        run = subprocess.run(
-                            ["docker", "exec", "--user=1000:1000", container, f"{test}"],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
-                            text=True,
-                            timeout=test_timeout,
-                        )
-                    except subprocess.TimeoutExpired as e:
-                        logger.warning("test %s timed out after %ds in %s", test_name, test_timeout, challenge_path)
-                        results.append((test_name, False, f"TIMEOUT after {test_timeout}s\n{e.stdout or ''}"))
-                        continue
-                passed = run.returncode == 0
-                logger.debug("test %s %s (rc=%d)", test_name, "PASSED" if passed else "FAILED", run.returncode)
-                results.append((test_name, passed, run.stdout or ""))
+                passed = False
+                last_output = ""
+                failed_attempt_outputs = []
+                for attempt in range(1, attempts + 1):
+                    logger.debug("running test %s in %s (attempt %d/%d)", test_name, challenge_path, attempt, attempts)
+                    with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, _):
+                        try:
+                            run = subprocess.run(
+                                ["docker", "exec", "--user=1000:1000", container, f"{test}"],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                text=True,
+                                timeout=timeout,
+                            )
+                        except subprocess.TimeoutExpired as e:
+                            logger.warning(
+                                "test %s timed out after %ds in %s (attempt %d/%d)",
+                                test_name,
+                                timeout,
+                                challenge_path,
+                                attempt,
+                                attempts,
+                            )
+                            last_output = f"TIMEOUT after {timeout}s\n{e.stdout or ''}"
+                            passed = False
+                        else:
+                            passed = run.returncode == 0
+                            last_output = run.stdout or ""
+                            logger.debug(
+                                "test %s %s (rc=%d, attempt %d/%d)",
+                                test_name,
+                                "PASSED" if passed else "FAILED",
+                                run.returncode,
+                                attempt,
+                                attempts,
+                            )
+                    if passed:
+                        if attempt > 1:
+                            logger.info(
+                                "test %s passed on attempt %d/%d in %s",
+                                test_name,
+                                attempt,
+                                attempts,
+                                challenge_path,
+                            )
+                        break
+
+                    if attempts > 1:
+                        failed_attempt_outputs.append(f"=== attempt {attempt}/{attempts} ===\n{last_output}")
+                    else:
+                        failed_attempt_outputs.append(last_output)
+
+                if not passed:
+                    results.append(
+                        (test_name, False, "\n".join(failed_attempt_outputs) if attempts > 1 else last_output)
+                    )
+                    continue
+
+                results.append((test_name, True, last_output))
             return {"path": challenge_path, "tests": results}
         except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as error:
             logger.error("test setup failed for %s: %s", challenge_path, error)
