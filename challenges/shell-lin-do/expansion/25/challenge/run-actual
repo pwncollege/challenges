@@ -1,4 +1,4 @@
-#!/usr/bin/exec-suid --real --environ=none -- /bin/bash -p
+#!/bin/bash
 
 PATH=/usr/bin
 

@@ -1,0 +1,5 @@
+#!/bin/bash -p
+
+read FLAG < /flag
+read FLAG
+echo "$FLAG"
