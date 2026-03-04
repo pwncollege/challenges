@@ -20,7 +20,7 @@ FROM debian:stable-slim AS runtime
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      bpftool libbpf1 libelf1 zlib1g ca-certificates llvm && \
+      bpftool libbpf1 libelf1 zlib1g ca-certificates llvm python3 && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /challenge
 

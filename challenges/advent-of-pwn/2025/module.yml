@@ -12,7 +12,6 @@ resources:
 - type: challenge
   id: day-02
   name: Day 02
-  privileged: true
   visibility:
     start: "2025-12-02T00:00:00+00:00"
 - type: challenge
@@ -23,13 +22,11 @@ resources:
 - type: challenge
   id: day-04
   name: Day 04
-  privileged: true
   visibility:
     start: "2025-12-04T00:00:00+00:00"
 - type: challenge
   id: day-05
   name: Day 05
-  privileged: true
   visibility:
     start: "2025-12-05T00:00:00+00:00"
 - type: challenge
@@ -40,7 +37,6 @@ resources:
 - type: challenge
   id: day-07
   name: Day 07
-  privileged: true
   visibility:
     start: "2025-12-07T00:00:00+00:00"
 - type: challenge
@@ -51,7 +47,6 @@ resources:
 - type: challenge
   id: day-09
   name: Day 09
-  privileged: true
   visibility:
     start: "2025-12-09T00:00:00+00:00"
 - type: challenge
@@ -62,7 +57,6 @@ resources:
 - type: challenge
   id: day-11
   name: Day 11
-  privileged: true
   visibility:
     start: "2025-12-11T00:00:00+00:00"
 - type: challenge
