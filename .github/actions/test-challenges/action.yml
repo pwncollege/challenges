@@ -57,6 +57,19 @@ runs:
         ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"
 
+        echo "::group::Prebuild challenges"
+        build_status=0
+        timeout --signal=TERM --kill-after=30s 1200s ./pwnshop -vv build \
+          --modified-since="$MODIFIED_SINCE" \
+          "$CHALLENGES_DIR" || build_status=$?
+        if [ "$build_status" -eq 124 ]; then
+          echo "pwnshop build timed out after 1200s" >&2
+        fi
+        echo "::endgroup::"
+        if [ "$build_status" -ne 0 ]; then
+          exit "$build_status"
+        fi
+
         echo "::group::Testing challenges"
         status=0
         timeout --signal=TERM --kill-after=30s 1200s ./pwnshop -vv test \
