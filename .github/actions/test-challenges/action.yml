@@ -47,7 +47,7 @@ runs:
           echo "::endgroup::"
         fi
 
-    - name: Test challenges
+    - name: Prebuild challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
@@ -70,6 +70,12 @@ runs:
           exit "$build_status"
         fi
 
+    - name: Test challenges
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
+        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
+      run: |
         echo "::group::Testing challenges"
         status=0
         timeout --signal=TERM --kill-after=30s 1200s ./pwnshop -vv test \
