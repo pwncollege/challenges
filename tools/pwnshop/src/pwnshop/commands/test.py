@@ -77,23 +77,33 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
         rendered = None
         try:
             logger.info("starting challenge %s", challenge_path)
+            lib.phase_log("challenge_start", challenge=challenge_path)
             rendered = lib.render_challenge(challenge_path)
             image_id = lib.build_challenge(challenge_path)
             tests = sorted(rendered.rglob("test*/test_*"))
             if not tests:
                 logger.warning("no tests found for %s", challenge_path)
+                lib.phase_log("challenge_no_tests", challenge=challenge_path)
                 return {"path": challenge_path, "tests": []}
             logger.info("discovered %d test(s) for %s", len(tests), challenge_path)
+            lib.phase_log("tests_discovered", challenge=challenge_path, count=len(tests))
             results = []
             for test in tests:
                 test_name = test.relative_to(rendered)
                 logger.info("starting test %s in %s", test_name, challenge_path)
+                lib.phase_log("test_start", challenge=challenge_path, test=test_name)
                 passed = False
                 last_output = ""
                 failed_attempt_outputs = []
                 for attempt in range(1, attempts + 1):
                     logger.info(
                         "starting test attempt %s in %s (%d/%d)", test_name, challenge_path, attempt, attempts
+                    )
+                    lib.phase_log(
+                        "test_attempt_start",
+                        challenge=challenge_path,
+                        test=test_name,
+                        attempt=f"{attempt}/{attempts}",
                     )
                     with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, _):
                         try:
@@ -112,6 +122,13 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                                 challenge_path,
                                 attempt,
                                 attempts,
+                            )
+                            lib.phase_log(
+                                "test_attempt_timeout",
+                                challenge=challenge_path,
+                                test=test_name,
+                                attempt=f"{attempt}/{attempts}",
+                                timeout=timeout,
                             )
                             last_output = f"TIMEOUT after {timeout}s\n{e.stdout or ''}"
                             passed = False
@@ -134,6 +151,13 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                             attempt,
                             attempts,
                         )
+                        lib.phase_log(
+                            "test_attempt_finish",
+                            challenge=challenge_path,
+                            test=test_name,
+                            attempt=f"{attempt}/{attempts}",
+                            result="PASS",
+                        )
                         if attempt > 1:
                             logger.info(
                                 "test %s passed on attempt %d/%d in %s",
@@ -150,6 +174,13 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                         attempt,
                         attempts,
                     )
+                    lib.phase_log(
+                        "test_attempt_finish",
+                        challenge=challenge_path,
+                        test=test_name,
+                        attempt=f"{attempt}/{attempts}",
+                        result="FAIL",
+                    )
 
                     if attempts > 1:
                         failed_attempt_outputs.append(f"=== attempt {attempt}/{attempts} ===\n{last_output}")
@@ -164,15 +195,19 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
 
                 results.append((test_name, True, last_output))
                 logger.info("finished test %s in %s: PASS", test_name, challenge_path)
+                lib.phase_log("test_finish", challenge=challenge_path, test=test_name, result="PASS")
             logger.info("finished challenge %s", challenge_path)
+            lib.phase_log("challenge_finish", challenge=challenge_path, result="PASS")
             return {"path": challenge_path, "tests": results}
         except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as error:
             logger.error("test setup failed for %s: %s", challenge_path, error)
+            lib.phase_log("challenge_finish", challenge=challenge_path, result="ERROR", error=type(error).__name__)
             return {"path": challenge_path, "error": str(error)}
         finally:
             if rendered:
                 shutil.rmtree(rendered, ignore_errors=True)
                 logger.info("cleaned rendered files for %s", challenge_path)
+                lib.phase_log("rendered_cleanup", challenge=challenge_path)
 
     with Progress(
         TextColumn("[progress.description]{task.description}"),
