@@ -17,6 +17,9 @@ runs:
           let ref = "";
           if (context.eventName === "pull_request") {
             ref = context.payload.pull_request.base.sha;
+          } else if (context.eventName === "workflow_dispatch") {
+            core.setOutput("ref", "");
+            return;
           } else if (context.eventName === "push") {
             const workflowFile = process.env.GITHUB_WORKFLOW_REF.split("@")[0].split("/").pop();
             const branch = context.ref.replace("refs/heads/", "");
@@ -50,6 +53,10 @@ runs:
         MODIFIED_SINCE: ${{ steps.resolve-ref.outputs.ref }}
       with:
         script: |
+          if (context.eventName === "workflow_dispatch") {
+            core.setOutput("challenges", JSON.stringify(["what-is-a-bug"]));
+            return;
+          }
           const { execFileSync } = require("child_process");
           const ref = process.env.MODIFIED_SINCE || "";
           const output = execFileSync("./pwnshop", ["list", "./challenges", `--modified-since=${ref}`], {

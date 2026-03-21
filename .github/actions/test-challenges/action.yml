@@ -58,11 +58,16 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Testing challenges"
-        ./pwnshop -v test \
+        status=0
+        timeout --signal=TERM --kill-after=30s 1200s ./pwnshop -v test \
           --modified-since="$MODIFIED_SINCE" \
           --jobs "$(( $(nproc) * 2 ))" \
           --attempts 5 \
           --timeout 600 \
           --silent-failures \
-          "$CHALLENGES_DIR"
+          "$CHALLENGES_DIR" || status=$?
+        if [ "$status" -eq 124 ]; then
+          echo "pwnshop test timed out after 1200s" >&2
+        fi
         echo "::endgroup::"
+        exit "$status"
