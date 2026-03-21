@@ -52,7 +52,6 @@ runs:
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
-        PWNSHOP_PHASE_LOG: "1"
       run: |
         echo "::group::Challenges to be tested"
         ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"

@@ -7,7 +7,6 @@ import random
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from typing import Iterable, Iterator, List, Optional, Sequence
 
@@ -18,7 +17,6 @@ import yaml
 logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
-PHASE_LOG_ENABLED = os.environ.get("PWNSHOP_PHASE_LOG") == "1"
 
 clang_format = shutil.which("clang-format")
 if not clang_format:
@@ -90,17 +88,6 @@ class _NoSelfExtendEnv(jinja2.Environment):
         return template
 
 
-def phase_log(event: str, **fields) -> None:
-    if not PHASE_LOG_ENABLED:
-        return
-    parts = [event]
-    for key, value in fields.items():
-        if value is None:
-            continue
-        parts.append(f"{key}={value}")
-    print(f"PWNSHOP_PHASE {' '.join(parts)}", file=sys.stderr, flush=True)
-
-
 def render(template: pathlib.Path) -> str:
     logger.debug("rendering template %s (seed=%d)", template, CHALLENGE_SEED)
     env = _NoSelfExtendEnv(loader=_NoSelfExtendLoader(template.parents))
@@ -125,7 +112,6 @@ def render(template: pathlib.Path) -> str:
 
 def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
     logger.info("rendering challenge %s", template_directory)
-    phase_log("render_start", challenge=template_directory)
     rendered_directory = pathlib.Path(tempfile.mkdtemp(prefix="pwncollege-"))
     logger.debug("render output directory: %s", rendered_directory)
 
@@ -150,7 +136,6 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
         destination.chmod((template_directory / path).stat().st_mode)
         (rendered_directory / path).unlink()
     logger.info("rendered challenge %s into %s", template_directory, rendered_directory)
-    phase_log("render_finish", challenge=template_directory, rendered=rendered_directory)
     return rendered_directory
 
 
@@ -185,7 +170,6 @@ def run_challenge(
     }.items():
         env_options.extend(["--env", f"{key}={value}"])
     logger.info("starting container for %s from image %s", challenge_path, challenge_image)
-    phase_log("container_start", challenge=challenge_path, image=challenge_image[:19])
     logger.debug("container runtime options for %s: %s", challenge_path, runtime_options)
     if volumes:
         logger.debug("mounting volumes: %s", volumes)
@@ -213,7 +197,6 @@ def run_challenge(
     )
     logger.debug("container started: %s", container[:12])
     logger.info("started container %s for %s", container[:12], challenge_path)
-    phase_log("container_started", challenge=challenge_path, container=container[:12])
     subprocess.run(
         [
             "docker",
@@ -231,7 +214,6 @@ def run_challenge(
     )
     logger.debug("flag written to /flag")
     logger.info("initialized flag for container %s (%s)", container[:12], challenge_path)
-    phase_log("flag_initialized", challenge=challenge_path, container=container[:12])
     subprocess.run(
         [
             "docker",
@@ -248,24 +230,20 @@ def run_challenge(
     )
     logger.debug(".init completed (if present)")
     logger.info("completed container init for %s", challenge_path)
-    phase_log("init_finish", challenge=challenge_path, container=container[:12])
     try:
         yield container, flag
     finally:
         logger.info("stopping container %s for %s", container[:12], challenge_path)
-        phase_log("container_stop", challenge=challenge_path, container=container[:12])
         subprocess.run(
             ["docker", "kill", container],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         logger.info("stopped container %s for %s", container[:12], challenge_path)
-        phase_log("container_stopped", challenge=challenge_path, container=container[:12])
 
 
 def build_challenge(challenge_path: pathlib.Path) -> str:
     logger.info("building challenge %s", challenge_path)
-    phase_log("build_start", challenge=challenge_path)
     rendered_directory = render_challenge(challenge_path)
     try:
         label = challenge_path.as_posix().removeprefix("challenges/")
@@ -282,7 +260,6 @@ def build_challenge(challenge_path: pathlib.Path) -> str:
             text=True,
         ).strip()
         logger.info("built image %s for %s", image_id[:19], challenge_path)
-        phase_log("build_finish", challenge=challenge_path, image=image_id[:19])
         return image_id
     except subprocess.CalledProcessError as error:
         logger.error("docker build failed for %s", challenge_path)
@@ -290,7 +267,6 @@ def build_challenge(challenge_path: pathlib.Path) -> str:
     finally:
         shutil.rmtree(rendered_directory, ignore_errors=True)
         logger.info("cleaned build context for %s", challenge_path)
-        phase_log("build_cleanup", challenge=challenge_path)
 
 
 def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = None) -> List[pathlib.Path]:
