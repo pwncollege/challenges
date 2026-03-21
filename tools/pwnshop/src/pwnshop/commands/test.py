@@ -76,22 +76,25 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
         challenge_path = pathlib.Path(challenge_path)
         rendered = None
         try:
+            logger.info("starting challenge %s", challenge_path)
             rendered = lib.render_challenge(challenge_path)
             image_id = lib.build_challenge(challenge_path)
             tests = sorted(rendered.rglob("test*/test_*"))
             if not tests:
                 logger.warning("no tests found for %s", challenge_path)
                 return {"path": challenge_path, "tests": []}
-            logger.info("running %d test(s) for %s", len(tests), challenge_path)
+            logger.info("discovered %d test(s) for %s", len(tests), challenge_path)
             results = []
             for test in tests:
                 test_name = test.relative_to(rendered)
-                logger.debug("running test %s in %s", test_name, challenge_path)
+                logger.info("starting test %s in %s", test_name, challenge_path)
                 passed = False
                 last_output = ""
                 failed_attempt_outputs = []
                 for attempt in range(1, attempts + 1):
-                    logger.debug("running test %s in %s (attempt %d/%d)", test_name, challenge_path, attempt, attempts)
+                    logger.info(
+                        "starting test attempt %s in %s (%d/%d)", test_name, challenge_path, attempt, attempts
+                    )
                     with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, _):
                         try:
                             run = subprocess.run(
@@ -124,6 +127,13 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                                 attempts,
                             )
                     if passed:
+                        logger.info(
+                            "finished test attempt %s in %s (%d/%d): PASS",
+                            test_name,
+                            challenge_path,
+                            attempt,
+                            attempts,
+                        )
                         if attempt > 1:
                             logger.info(
                                 "test %s passed on attempt %d/%d in %s",
@@ -133,6 +143,13 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                                 challenge_path,
                             )
                         break
+                    logger.info(
+                        "finished test attempt %s in %s (%d/%d): FAIL",
+                        test_name,
+                        challenge_path,
+                        attempt,
+                        attempts,
+                    )
 
                     if attempts > 1:
                         failed_attempt_outputs.append(f"=== attempt {attempt}/{attempts} ===\n{last_output}")
@@ -146,6 +163,8 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                     continue
 
                 results.append((test_name, True, last_output))
+                logger.info("finished test %s in %s: PASS", test_name, challenge_path)
+            logger.info("finished challenge %s", challenge_path)
             return {"path": challenge_path, "tests": results}
         except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as error:
             logger.error("test setup failed for %s: %s", challenge_path, error)
@@ -153,6 +172,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
         finally:
             if rendered:
                 shutil.rmtree(rendered, ignore_errors=True)
+                logger.info("cleaned rendered files for %s", challenge_path)
 
     with Progress(
         TextColumn("[progress.description]{task.description}"),

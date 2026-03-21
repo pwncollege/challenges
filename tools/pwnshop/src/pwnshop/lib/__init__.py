@@ -135,6 +135,7 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
         destination.write_text(render(template_directory / path))
         destination.chmod((template_directory / path).stat().st_mode)
         (rendered_directory / path).unlink()
+    logger.info("rendered challenge %s into %s", template_directory, rendered_directory)
     return rendered_directory
 
 
@@ -168,7 +169,7 @@ def run_challenge(
         "PATH": "/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     }.items():
         env_options.extend(["--env", f"{key}={value}"])
-    logger.info("starting container for image %s", challenge_image)
+    logger.info("starting container for %s from image %s", challenge_path, challenge_image)
     logger.debug("container runtime options for %s: %s", challenge_path, runtime_options)
     if volumes:
         logger.debug("mounting volumes: %s", volumes)
@@ -195,6 +196,7 @@ def run_challenge(
         .strip()
     )
     logger.debug("container started: %s", container[:12])
+    logger.info("started container %s for %s", container[:12], challenge_path)
     subprocess.run(
         [
             "docker",
@@ -211,6 +213,7 @@ def run_challenge(
         check=True,
     )
     logger.debug("flag written to /flag")
+    logger.info("initialized flag for container %s (%s)", container[:12], challenge_path)
     subprocess.run(
         [
             "docker",
@@ -226,15 +229,17 @@ def run_challenge(
         check=True,
     )
     logger.debug(".init completed (if present)")
+    logger.info("completed container init for %s", challenge_path)
     try:
         yield container, flag
     finally:
-        logger.debug("killing container %s", container[:12])
+        logger.info("stopping container %s for %s", container[:12], challenge_path)
         subprocess.run(
             ["docker", "kill", container],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        logger.info("stopped container %s for %s", container[:12], challenge_path)
 
 
 def build_challenge(challenge_path: pathlib.Path) -> str:
@@ -261,6 +266,7 @@ def build_challenge(challenge_path: pathlib.Path) -> str:
         raise RuntimeError(f"Failed to build challenge {challenge_path}") from error
     finally:
         shutil.rmtree(rendered_directory, ignore_errors=True)
+        logger.info("cleaned build context for %s", challenge_path)
 
 
 def list_challenges(directory: pathlib.Path, modified_since: Optional[str] = None) -> List[pathlib.Path]:

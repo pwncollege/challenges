@@ -58,9 +58,9 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Testing challenges"
-        ./pwnshop test \
+        ./pwnshop -v test \
           --modified-since="$MODIFIED_SINCE" \
-          --jobs 1 \
+          --jobs "$(( $(nproc) * 2 ))" \
           --attempts 5 \
           --timeout 600 \
           --silent-failures \
