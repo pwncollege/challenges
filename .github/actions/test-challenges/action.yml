@@ -47,7 +47,7 @@ runs:
           echo "::endgroup::"
         fi
 
-    - name: Prebuild challenges
+    - name: Test challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
@@ -57,36 +57,18 @@ runs:
         ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"
 
-        echo "::group::Prebuild challenges"
-        build_status=0
-        timeout --signal=TERM --kill-after=30s 3600s ./pwnshop -vv build \
-          --modified-since="$MODIFIED_SINCE" \
-          "$CHALLENGES_DIR" || build_status=$?
-        if [ "$build_status" -eq 124 ]; then
-          echo "pwnshop build timed out after 3600s" >&2
-        fi
-        echo "::endgroup::"
-        if [ "$build_status" -ne 0 ]; then
-          exit "$build_status"
-        fi
-
-    - name: Test challenges
-      shell: 'nix develop -c bash -euo pipefail {0}'
-      env:
-        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
-        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
-      run: |
         echo "::group::Testing challenges"
         status=0
-        timeout --signal=TERM --kill-after=30s 1200s ./pwnshop -vv test \
+        timeout --signal=TERM --kill-after=30s 3600s ./pwnshop -vv test \
           --modified-since="$MODIFIED_SINCE" \
           --jobs "$(( $(nproc) * 2 ))" \
+          --build-jobs 1 \
           --attempts 5 \
           --timeout 600 \
           --silent-failures \
           "$CHALLENGES_DIR" || status=$?
         if [ "$status" -eq 124 ]; then
-          echo "pwnshop test timed out after 1200s" >&2
+          echo "pwnshop test timed out after 3600s" >&2
         fi
         echo "::endgroup::"
         exit "$status"

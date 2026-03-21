@@ -5,6 +5,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import threading
 
 import click
 from rich.progress import (
@@ -25,6 +26,12 @@ logger = logging.getLogger(__name__)
 @click.command("test")
 @click.option("--modified-since", metavar="REF", help="Only include challenges changed versus REF.")
 @click.option("--jobs", "-j", metavar="N", type=click.IntRange(1, None), help="Parallel challenges (default: cores).")
+@click.option(
+    "--build-jobs",
+    metavar="N",
+    type=click.IntRange(1, None),
+    help="Parallel challenge builds before test execution (default: same as --jobs).",
+)
 @click.option(
     "--attempts",
     metavar="N",
@@ -60,7 +67,7 @@ logger = logging.getLogger(__name__)
         resolve_path=False,
     ),
 )
-def test_command(targets, modified_since, jobs, attempts, timeout, require_tests, log_failures, silent_failures):
+def test_command(targets, modified_since, jobs, build_jobs, attempts, timeout, require_tests, log_failures, silent_failures):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
         if modified_since:
@@ -69,6 +76,8 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
         raise click.ClickException("No challenges found in provided targets.")
 
     jobs = jobs or os.cpu_count() or 1
+    build_jobs = build_jobs or jobs
+    build_slots = threading.Semaphore(build_jobs)
     failed: dict[pathlib.Path, list] = {}
     passed_count = failed_count = total_tests = failed_tests = 0
 
@@ -78,7 +87,10 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
         try:
             logger.info("starting challenge %s", challenge_path)
             rendered = lib.render_challenge(challenge_path)
-            image_id = lib.build_challenge(challenge_path)
+            logger.info("waiting for build slot for %s", challenge_path)
+            with build_slots:
+                logger.info("acquired build slot for %s", challenge_path)
+                image_id = lib.build_challenge(challenge_path)
             tests = sorted(rendered.rglob("test*/test_*"))
             if not tests:
                 logger.warning("no tests found for %s", challenge_path)
