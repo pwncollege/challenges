@@ -60,7 +60,7 @@ runs:
         echo "::group::Testing challenges"
         ./pwnshop test \
           --modified-since="$MODIFIED_SINCE" \
-          --jobs "$(( $(nproc) * 2 ))" \
+          --jobs 1 \
           --attempts 5 \
           --timeout 600 \
           --silent-failures \
