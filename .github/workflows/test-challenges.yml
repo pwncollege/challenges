@@ -8,7 +8,7 @@ on:
     - cron: '0 2 * * *'
 
 concurrency:
-  group: test-challenges-${{ github.ref }}
+  group: test-challenges-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
