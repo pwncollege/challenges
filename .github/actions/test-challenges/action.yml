@@ -59,7 +59,7 @@ runs:
 
         echo "::group::Testing challenges"
         status=0
-        timeout --signal=TERM --kill-after=30s 1200s ./pwnshop -v test \
+        timeout --signal=TERM --kill-after=30s 1200s ./pwnshop -vv test \
           --modified-since="$MODIFIED_SINCE" \
           --jobs "$(( $(nproc) * 2 ))" \
           --attempts 5 \
