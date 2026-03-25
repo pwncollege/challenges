@@ -209,18 +209,30 @@ jobs:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
         MODIFIED_SINCE: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
         PWNSHOP_VERBOSE_DOCKER_BUILD: "1"
+        HEARTBEAT_INTERVAL_SECONDS: "10"
       run: |
         chmod +x .github/actions/test-challenges/with-heartbeat.sh
         status=0
         failure_logs="$(mktemp -d)"
-        ./.github/actions/test-challenges/with-heartbeat.sh "pwnshop test" \
-          timeout --signal=TERM --kill-after=30s 240s ./pwnshop -vv test \
-            --modified-since="$MODIFIED_SINCE" \
-            --jobs "$(( $(nproc) * 2 ))" \
-            --attempts 1 \
-            --timeout 90 \
-            --log-failures "$failure_logs" \
-            "$CHALLENGES_DIR" || status=$?
+        mapfile -t challenges < <(./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE")
+        printf 'serial test targets:\n%s\n' "${challenges[@]}"
+        for challenge in "${challenges[@]}"; do
+          repo_challenge="${CHALLENGES_DIR}/${challenge}"
+          echo "serial test starting ${repo_challenge} at $(date -Ins)"
+          ./.github/actions/test-challenges/with-heartbeat.sh "pwnshop test ${repo_challenge}" \
+            timeout --signal=TERM --kill-after=30s 420s ./pwnshop -vv test \
+              --jobs 1 \
+              --build-jobs 1 \
+              --attempts 1 \
+              --timeout 90 \
+              --log-failures "$failure_logs" \
+              "$repo_challenge" || {
+                status=$?
+                echo "serial test failed for ${repo_challenge} at $(date -Ins) with status=${status}" >&2
+                break
+              }
+          echo "serial test finished ${repo_challenge} at $(date -Ins)"
+        done
         if [ "$status" -ne 0 ] && [ -d "$failure_logs" ]; then
           echo "::group::pwnshop failure logs"
           find "$failure_logs" -type f -print | sort
