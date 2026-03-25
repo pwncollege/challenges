@@ -104,7 +104,7 @@ runs:
         echo "testing challenges from $CHALLENGES_DIR at $(date -Ins)"
         run_with_heartbeat "pwnshop test" \
           stdbuf -oL -eL \
-          timeout --signal=TERM --kill-after=30s 3600s ./pwnshop -vv test \
+          timeout --signal=TERM --kill-after=30s 900s ./pwnshop -vv test \
             --modified-since="$MODIFIED_SINCE" \
             --jobs "$(( $(nproc) * 2 ))" \
             --attempts 5 \
@@ -112,7 +112,7 @@ runs:
             --silent-failures \
             "$CHALLENGES_DIR" || status=$?
         if [ "$status" -eq 124 ]; then
-          echo "pwnshop test timed out after 3600s" >&2
+          echo "pwnshop test timed out after 900s" >&2
         fi
         echo "::endgroup::"
         exit "$status"
