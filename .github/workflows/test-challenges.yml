@@ -212,17 +212,28 @@ jobs:
       run: |
         chmod +x .github/actions/test-challenges/with-heartbeat.sh
         status=0
+        failure_logs="$(mktemp -d)"
         ./.github/actions/test-challenges/with-heartbeat.sh "pwnshop test" \
-          timeout --signal=TERM --kill-after=30s 900s ./pwnshop -vv test \
+          timeout --signal=TERM --kill-after=30s 240s ./pwnshop -vv test \
             --modified-since="$MODIFIED_SINCE" \
             --jobs "$(( $(nproc) * 2 ))" \
-            --attempts 5 \
-            --timeout 600 \
-            --silent-failures \
+            --attempts 1 \
+            --timeout 90 \
+            --log-failures "$failure_logs" \
             "$CHALLENGES_DIR" || status=$?
-        if [ "$status" -eq 124 ]; then
-          echo "pwnshop test timed out after 900s" >&2
+        if [ "$status" -ne 0 ] && [ -d "$failure_logs" ]; then
+          echo "::group::pwnshop failure logs"
+          find "$failure_logs" -type f -print | sort
+          while IFS= read -r log_file; do
+            echo "--- ${log_file} ---"
+            sed -n '1,220p' "$log_file"
+          done < <(find "$failure_logs" -type f | sort)
+          echo "::endgroup::"
         fi
+        if [ "$status" -eq 124 ]; then
+          echo "pwnshop test timed out after 240s" >&2
+        fi
+        rm -rf "$failure_logs"
         exit "$status"
 
     - name: Test challenges (untrusted)
