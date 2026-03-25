@@ -60,13 +60,147 @@ jobs:
     - uses: ./.github/actions/setup-nix
     - uses: ./.github/actions/setup-challenge-runtime
 
+    - name: Manage encrypted files (trusted)
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        GPG_PRIVATE_KEY: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+      run: |
+        if [ -n "$GPG_PRIVATE_KEY" ]; then
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          git crypt unlock
+        else
+          git crypt status -e \
+            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+            | sort -u \
+            | xargs -r rm -f
+        fi
+
+    - name: Validate dojo.yml (trusted)
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+      run: |
+        if [ -f "$CHALLENGES_DIR/dojo.yml" ]; then
+          ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
+        fi
+
+    - name: Preflight diagnostics (trusted)
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+        MODIFIED_SINCE: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        echo "::group::Preflight"
+        date -Ins
+        uname -a
+        nproc
+        free -h
+        df -h
+        ulimit -a
+        env | sort
+        docker version
+        docker info
+        echo "::endgroup::"
+        echo "::group::Challenges to be tested"
+        ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
+        echo "::endgroup::"
+
+    - name: Build challenges (trusted)
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+        MODIFIED_SINCE: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+        PWNSHOP_VERBOSE_DOCKER_BUILD: "1"
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        ./.github/actions/test-challenges/with-heartbeat.sh "pwnshop build" \
+          timeout --signal=TERM --kill-after=30s 1200s ./pwnshop -vv build \
+            --modified-since="$MODIFIED_SINCE" \
+            "$CHALLENGES_DIR"
+
+    - name: Smoke start challenges (trusted)
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+        MODIFIED_SINCE: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+        PWNSHOP_VERBOSE_DOCKER_BUILD: "1"
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        mapfile -t challenges < <(./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE")
+        printf 'smoke targets:\n%s\n' "${challenges[@]}"
+        ./.github/actions/test-challenges/with-heartbeat.sh "smoke run_challenge" \
+          timeout --signal=TERM --kill-after=30s 300s bash -euo pipefail -c '
+            for challenge in "$@"; do
+              label="${challenge#challenges/}"
+              image_id="$(docker images --quiet --filter "label=pwncollege.challenge=${label}" | head -n1)"
+              echo "smoke-start ${challenge}"
+              echo "smoke-image ${challenge} ${image_id}"
+              if [ -z "$image_id" ]; then
+                echo "missing image for ${challenge}" >&2
+                exit 1
+              fi
+
+              container="$(
+                docker run \
+                  --rm \
+                  --interactive \
+                  --detach \
+                  --init \
+                  --user=0:0 \
+                  --runtime=runc \
+                  --device=/dev/kvm \
+                  --device=/dev/net/tun \
+                  --cap-add=SYS_PTRACE \
+                  --sysctl=net.ipv4.ip_unprivileged_port_start=1024 \
+                  --env FLAG=pwn.college{diagnostic} \
+                  --env SEED=0 \
+                  --env PATH=/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+                  "$image_id" \
+                  /bin/sh -c "read forever"
+              )"
+              echo "smoke-container-id ${challenge} ${container}"
+              docker exec --interactive --user=0:0 "$container" /bin/sh -c \
+                "cat >/flag && chown 0:0 /flag && chmod 0400 /flag" <<EOF
+pwn.college{diagnostic}
+EOF
+              docker exec --user=0:0 "$container" /bin/sh -c \
+                "[ ! -e /challenge/.init ] || /challenge/.init"
+              echo "smoke-container-up ${challenge}"
+              sleep 5
+              docker kill "$container" >/dev/null 2>&1 || true
+              echo "smoke-container-down ${challenge}"
+            done
+          ' bash "${challenges[@]}"
+
     - name: Test challenges (trusted)
       if: ${{ steps.trust.outputs.trusted == 'true' }}
-      uses: ./.github/actions/test-challenges
-      with:
-        challenges: ${{ matrix.challenges }}
-        modified_since_ref: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
-        gpg_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+        MODIFIED_SINCE: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+        PWNSHOP_VERBOSE_DOCKER_BUILD: "1"
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        status=0
+        ./.github/actions/test-challenges/with-heartbeat.sh "pwnshop test" \
+          timeout --signal=TERM --kill-after=30s 900s ./pwnshop -vv test \
+            --modified-since="$MODIFIED_SINCE" \
+            --jobs "$(( $(nproc) * 2 ))" \
+            --attempts 5 \
+            --timeout 600 \
+            --silent-failures \
+            "$CHALLENGES_DIR" || status=$?
+        if [ "$status" -eq 124 ]; then
+          echo "pwnshop test timed out after 900s" >&2
+        fi
+        exit "$status"
 
     - name: Test challenges (untrusted)
       if: ${{ steps.trust.outputs.trusted != 'true' }}
