@@ -61,9 +61,7 @@ runs:
           log_file="$(mktemp)"
 
           echo "${label}: started at $(date -Ins)"
-          (
-            "$@" 2>&1 | tee -a "$log_file"
-          ) &
+          "$@" >"$log_file" 2>&1 &
           local cmd_pid=$!
 
           (
@@ -88,6 +86,9 @@ runs:
           wait "$cmd_pid" || status=$?
           kill "$heartbeat_pid" 2>/dev/null || true
           wait "$heartbeat_pid" 2>/dev/null || true
+          echo "::group::${label} final output"
+          tail -n 200 "$log_file" || true
+          echo "::endgroup::"
           echo "${label}: finished at $(date -Ins) (status=${status})"
           rm -f "$log_file"
           return "$status"
