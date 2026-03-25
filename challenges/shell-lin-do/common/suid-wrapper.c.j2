@@ -1,0 +1,20 @@
+#include <unistd.h>
+#include <stdlib.h>
+
+int main(int argc, char *argv[]) {
+	setreuid(0, 0);
+	setregid(0, 0);
+
+	// Use bash -c to source the script so that $0 is preserved from argv[0]
+	// argv layout: bash -c ". /challenge/run-actual" <original argv[0]> <original argv[1]> ...
+	char **new_argv = malloc((argc + 4) * sizeof(char *));
+	new_argv[0] = "bash";
+	new_argv[1] = "-pc";
+	new_argv[2] = ". /challenge/run-actual";
+	for (int i = 0; i < argc; i++)
+		new_argv[3 + i] = argv[i];
+	new_argv[3 + argc] = NULL;
+
+	execv("/bin/bash", new_argv);
+	return 1;
+}

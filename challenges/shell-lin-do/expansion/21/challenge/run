@@ -1,4 +1,4 @@
-#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+#!/usr/bin/exec-suid --real --environ=none -- /bin/bash -p
 
 PATH=/usr/bin
 WORKDIR=$(mktemp -d /tmp/tmpXXXXXXX) || exit 1
