@@ -47,52 +47,24 @@ runs:
           echo "::endgroup::"
         fi
 
-    - name: Test challenges
+    - name: Preflight diagnostics
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
-        PWNSHOP_VERBOSE_DOCKER_BUILD: "1"
       run: |
-        run_with_heartbeat() {
-          local label="$1"
-          shift
-          local log_file
-          log_file="$(mktemp)"
-
-          echo "${label}: started at $(date -Ins)"
-          "$@" >"$log_file" 2>&1 &
-          local cmd_pid=$!
-
-          (
-            while kill -0 "$cmd_pid" 2>/dev/null; do
-              sleep 15
-              if ! kill -0 "$cmd_pid" 2>/dev/null; then
-                break
-              fi
-              echo "::group::${label} heartbeat $(date -Ins)"
-              echo "recent ${label} output:"
-              tail -n 80 "$log_file" || true
-              ps -eo pid,ppid,stat,etime,pcpu,pmem,args \
-                | grep -E 'pwnshop|docker( |$)|pytest|python .*pwnshop' \
-                | grep -v grep || true
-              docker ps --format 'table {{.ID}}\t{{.Status}}\t{{.Image}}\t{{.Names}}' || true
-              echo "::endgroup::"
-            done
-          ) &
-          local heartbeat_pid=$!
-
-          local status=0
-          wait "$cmd_pid" || status=$?
-          kill "$heartbeat_pid" 2>/dev/null || true
-          wait "$heartbeat_pid" 2>/dev/null || true
-          echo "::group::${label} final output"
-          tail -n 200 "$log_file" || true
-          echo "::endgroup::"
-          echo "${label}: finished at $(date -Ins) (status=${status})"
-          rm -f "$log_file"
-          return "$status"
-        }
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        echo "::group::Preflight"
+        date -Ins
+        uname -a
+        nproc
+        free -h
+        df -h
+        ulimit -a
+        env | sort
+        docker version
+        docker info
+        echo "::endgroup::"
 
         echo "::group::Challenges to be tested"
         echo "listing challenges at $(date -Ins)"
@@ -100,11 +72,83 @@ runs:
         echo "finished listing challenges at $(date -Ins)"
         echo "::endgroup::"
 
-        echo "::group::Testing challenges"
+    - name: Build challenges (diagnostic)
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
+        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
+        PWNSHOP_VERBOSE_DOCKER_BUILD: "1"
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        ./.github/actions/test-challenges/with-heartbeat.sh "pwnshop build" \
+          timeout --signal=TERM --kill-after=30s 1200s ./pwnshop -vv build \
+            --modified-since="$MODIFIED_SINCE" \
+            "$CHALLENGES_DIR"
+
+    - name: Smoke start challenges (diagnostic)
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
+        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
+        PWNSHOP_VERBOSE_DOCKER_BUILD: "1"
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        mapfile -t challenges < <(./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE")
+        printf 'smoke targets:\n%s\n' "${challenges[@]}"
+        ./.github/actions/test-challenges/with-heartbeat.sh "smoke run_challenge" \
+          timeout --signal=TERM --kill-after=30s 300s bash -euo pipefail -c '
+            for challenge in "$@"; do
+              label="${challenge#challenges/}"
+              image_id="$(docker images --quiet --filter "label=pwncollege.challenge=${label}" | head -n1)"
+              echo "smoke-start ${challenge}"
+              echo "smoke-image ${challenge} ${image_id}"
+              if [ -z "$image_id" ]; then
+                echo "missing image for ${challenge}" >&2
+                exit 1
+              fi
+
+              container="$(
+                docker run \
+                  --rm \
+                  --interactive \
+                  --detach \
+                  --init \
+                  --user=0:0 \
+                  --runtime=runc \
+                  --device=/dev/kvm \
+                  --device=/dev/net/tun \
+                  --cap-add=SYS_PTRACE \
+                  --sysctl=net.ipv4.ip_unprivileged_port_start=1024 \
+                  --env FLAG=pwn.college{diagnostic} \
+                  --env SEED=0 \
+                  --env PATH=/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+                  "$image_id" \
+                  /bin/sh -c "read forever"
+              )"
+              echo "smoke-container-id ${challenge} ${container}"
+              docker exec --interactive --user=0:0 "$container" /bin/sh -c \
+                "cat >/flag && chown 0:0 /flag && chmod 0400 /flag" <<EOF
+pwn.college{diagnostic}
+EOF
+              docker exec --user=0:0 "$container" /bin/sh -c \
+                "[ ! -e /challenge/.init ] || /challenge/.init"
+              echo "smoke-container-up ${challenge}"
+              sleep 5
+              docker kill "$container" >/dev/null 2>&1 || true
+              echo "smoke-container-down ${challenge}"
+            done
+          ' bash "${challenges[@]}"
+
+    - name: Test challenges
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
+        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
+        PWNSHOP_VERBOSE_DOCKER_BUILD: "1"
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
         status=0
-        echo "testing challenges from $CHALLENGES_DIR at $(date -Ins)"
-        run_with_heartbeat "pwnshop test" \
-          stdbuf -oL -eL \
+        ./.github/actions/test-challenges/with-heartbeat.sh "pwnshop test" \
           timeout --signal=TERM --kill-after=30s 900s ./pwnshop -vv test \
             --modified-since="$MODIFIED_SINCE" \
             --jobs "$(( $(nproc) * 2 ))" \
@@ -115,5 +159,4 @@ runs:
         if [ "$status" -eq 124 ]; then
           echo "pwnshop test timed out after 900s" >&2
         fi
-        echo "::endgroup::"
         exit "$status"
