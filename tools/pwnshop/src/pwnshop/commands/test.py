@@ -67,7 +67,9 @@ logger = logging.getLogger(__name__)
         resolve_path=False,
     ),
 )
-def test_command(targets, modified_since, jobs, build_jobs, attempts, timeout, require_tests, log_failures, silent_failures):
+def test_command(
+    targets, modified_since, jobs, build_jobs, attempts, timeout, require_tests, log_failures, silent_failures
+):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
         if modified_since:
@@ -104,9 +106,7 @@ def test_command(targets, modified_since, jobs, build_jobs, attempts, timeout, r
                 last_output = ""
                 failed_attempt_outputs = []
                 for attempt in range(1, attempts + 1):
-                    logger.info(
-                        "starting test attempt %s in %s (%d/%d)", test_name, challenge_path, attempt, attempts
-                    )
+                    logger.info("starting test attempt %s in %s (%d/%d)", test_name, challenge_path, attempt, attempts)
                     with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, _):
                         try:
                             run = subprocess.run(
