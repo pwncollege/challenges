@@ -10,7 +10,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/github-script@v7
+    - uses: actions/github-script@v8
       id: resolve-ref
       with:
         script: |
@@ -44,7 +44,7 @@ runs:
       with:
         cache-dependency-glob: tools/pwnshop/**
 
-    - uses: actions/github-script@v7
+    - uses: actions/github-script@v8
       id: resolve-challenges
       env:
         MODIFIED_SINCE: ${{ steps.resolve-ref.outputs.ref }}
