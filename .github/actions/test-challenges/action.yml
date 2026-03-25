@@ -115,12 +115,13 @@ runs:
         ./.github/actions/test-challenges/with-heartbeat.sh "smoke run_challenge" \
           timeout --signal=TERM --kill-after=30s 300s bash -euo pipefail -c '
             for challenge in "$@"; do
-              label="${challenge#challenges/}"
+              repo_challenge="'"$CHALLENGES_DIR"'/${challenge}"
+              label="${repo_challenge#challenges/}"
               image_id="$(docker images --quiet --filter "label=pwncollege.challenge=${label}" | head -n1)"
-              echo "smoke-start ${challenge}"
-              echo "smoke-image ${challenge} ${image_id}"
+              echo "smoke-start ${repo_challenge}"
+              echo "smoke-image ${repo_challenge} ${image_id}"
               if [ -z "$image_id" ]; then
-                echo "missing image for ${challenge}" >&2
+                echo "missing image for ${repo_challenge}" >&2
                 exit 1
               fi
 
@@ -142,16 +143,16 @@ runs:
                   "$image_id" \
                   /bin/sh -c "read forever"
               )"
-              echo "smoke-container-id ${challenge} ${container}"
+              echo "smoke-container-id ${repo_challenge} ${container}"
               printf "%s\n" "pwn.college{diagnostic}" | \
                 docker exec --interactive --user=0:0 "$container" /bin/sh -c \
                   "cat >/flag && chown 0:0 /flag && chmod 0400 /flag"
               docker exec --user=0:0 "$container" /bin/sh -c \
                 "[ ! -e /challenge/.init ] || /challenge/.init"
-              echo "smoke-container-up ${challenge}"
+              echo "smoke-container-up ${repo_challenge}"
               sleep 5
               docker kill "$container" >/dev/null 2>&1 || true
-              echo "smoke-container-down ${challenge}"
+              echo "smoke-container-down ${repo_challenge}"
             done
           ' bash "${challenges[@]}"
 
