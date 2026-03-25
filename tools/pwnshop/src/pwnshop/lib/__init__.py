@@ -267,17 +267,29 @@ def build_challenge(challenge_path: pathlib.Path) -> str:
     try:
         label = challenge_path.as_posix().removeprefix("challenges/")
         logger.debug("docker build context: %s", rendered_directory / "challenge")
-        image_id = subprocess.check_output(
+        iidfile = rendered_directory / ".image-id"
+        verbose_build = os.environ.get("PWNSHOP_VERBOSE_DOCKER_BUILD") == "1"
+        command = ["docker", "build"]
+        if verbose_build:
+            command.extend(["--progress=plain"])
+        else:
+            command.append("-q")
+        command.extend(
             [
-                "docker",
-                "build",
-                "-q",
+                "--iidfile",
+                str(iidfile),
                 "--label",
                 f"pwncollege.challenge={label}",
                 str(rendered_directory / "challenge"),
-            ],
-            text=True,
-        ).strip()
+            ]
+        )
+        logger.info("starting docker build for %s (verbose=%s)", challenge_path, verbose_build)
+        subprocess.run(
+            command,
+            check=True,
+            stdout=None if verbose_build else subprocess.DEVNULL,
+        )
+        image_id = iidfile.read_text().strip()
         logger.info(
             "built image %s for %s in %.2fs",
             image_id[:19],
