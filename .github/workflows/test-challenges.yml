@@ -166,10 +166,9 @@ jobs:
                   /bin/sh -c "read forever"
               )"
               echo "smoke-container-id ${challenge} ${container}"
-              docker exec --interactive --user=0:0 "$container" /bin/sh -c \
-                "cat >/flag && chown 0:0 /flag && chmod 0400 /flag" <<EOF
-pwn.college{diagnostic}
-EOF
+              printf "%s\n" "pwn.college{diagnostic}" | \
+                docker exec --interactive --user=0:0 "$container" /bin/sh -c \
+                  "cat >/flag && chown 0:0 /flag && chmod 0400 /flag"
               docker exec --user=0:0 "$container" /bin/sh -c \
                 "[ ! -e /challenge/.init ] || /challenge/.init"
               echo "smoke-container-up ${challenge}"
