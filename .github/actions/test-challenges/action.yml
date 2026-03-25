@@ -47,14 +47,10 @@ runs:
           echo "::endgroup::"
         fi
 
-    - name: Preflight diagnostics
+    - name: Host diagnostics
       shell: 'nix develop -c bash -euo pipefail {0}'
-      env:
-        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
-        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
-        chmod +x .github/actions/test-challenges/with-heartbeat.sh
-        echo "::group::Preflight"
+        echo "::group::Host diagnostics"
         date -Ins
         uname -a
         nproc
@@ -62,15 +58,36 @@ runs:
         df -h
         ulimit -a
         env | sort
-        docker version
-        docker info
         echo "::endgroup::"
 
-        echo "::group::Challenges to be tested"
-        echo "listing challenges at $(date -Ins)"
-        ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
-        echo "finished listing challenges at $(date -Ins)"
-        echo "::endgroup::"
+    - name: Docker diagnostics
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        ./.github/actions/test-challenges/with-heartbeat.sh "docker diagnostics" \
+          timeout --signal=TERM --kill-after=10s 60s bash -euo pipefail -c '
+            echo "::group::Docker diagnostics"
+            docker version
+            docker info
+            docker ps -a
+            echo "::endgroup::"
+          '
+
+    - name: Challenge listing
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
+        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        ./.github/actions/test-challenges/with-heartbeat.sh "pwnshop list" \
+          timeout --signal=TERM --kill-after=10s 60s bash -euo pipefail -c '
+            echo "::group::Challenges to be tested"
+            echo "listing challenges at $(date -Ins)"
+            ./pwnshop list "$1" --modified-since="$2"
+            echo "finished listing challenges at $(date -Ins)"
+            echo "::endgroup::"
+          ' bash "$CHALLENGES_DIR" "$MODIFIED_SINCE"
 
     - name: Build challenges (diagnostic)
       shell: 'nix develop -c bash -euo pipefail {0}'

@@ -87,15 +87,11 @@ jobs:
           ./tools/dojo/parse-dojo-yml "$CHALLENGES_DIR/dojo.yml"
         fi
 
-    - name: Preflight diagnostics (trusted)
+    - name: Host diagnostics (trusted)
       if: ${{ steps.trust.outputs.trusted == 'true' }}
       shell: 'nix develop -c bash -euo pipefail {0}'
-      env:
-        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
-        MODIFIED_SINCE: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
       run: |
-        chmod +x .github/actions/test-challenges/with-heartbeat.sh
-        echo "::group::Preflight"
+        echo "::group::Host diagnostics"
         date -Ins
         uname -a
         nproc
@@ -103,12 +99,36 @@ jobs:
         df -h
         ulimit -a
         env | sort
-        docker version
-        docker info
         echo "::endgroup::"
-        echo "::group::Challenges to be tested"
-        ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
-        echo "::endgroup::"
+
+    - name: Docker diagnostics (trusted)
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        ./.github/actions/test-challenges/with-heartbeat.sh "docker diagnostics" \
+          timeout --signal=TERM --kill-after=10s 60s bash -euo pipefail -c '
+            echo "::group::Docker diagnostics"
+            docker version
+            docker info
+            docker ps -a
+            echo "::endgroup::"
+          '
+
+    - name: Challenge listing (trusted)
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+        MODIFIED_SINCE: ${{ needs.determine-modified-challenges.outputs.modified_since_ref }}
+      run: |
+        chmod +x .github/actions/test-challenges/with-heartbeat.sh
+        ./.github/actions/test-challenges/with-heartbeat.sh "pwnshop list" \
+          timeout --signal=TERM --kill-after=10s 60s bash -euo pipefail -c '
+            echo "::group::Challenges to be tested"
+            ./pwnshop list "$1" --modified-since="$2"
+            echo "::endgroup::"
+          ' bash "$CHALLENGES_DIR" "$MODIFIED_SINCE"
 
     - name: Build challenges (trusted)
       if: ${{ steps.trust.outputs.trusted == 'true' }}
