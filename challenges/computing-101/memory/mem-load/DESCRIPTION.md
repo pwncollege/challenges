@@ -49,6 +49,3 @@ I've stored a secret number at memory address `133700`, as so:
 You must retrieve this secret number and use it as the exit code for your program.
 To do this, you must read it into `rdi`, whose value, if you recall, is the first parameter to `exit` and is used as the exit code.
 Good luck!
-
-----
-*NOTE*: To solve this challenge, you must pass either the output executable binary or the assembly code `.s` file to `/challenge/check`.
