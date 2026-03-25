@@ -6,6 +6,7 @@ import pathlib
 import shutil
 import subprocess
 import threading
+import time
 
 import click
 from rich.progress import (
@@ -87,8 +88,11 @@ def test_command(
         challenge_path = pathlib.Path(challenge_path)
         rendered = None
         try:
+            challenge_start = time.monotonic()
             logger.info("starting challenge %s", challenge_path)
+            render_start = time.monotonic()
             rendered = lib.render_challenge(challenge_path)
+            logger.info("rendered challenge %s in %.2fs", challenge_path, time.monotonic() - render_start)
             logger.info("waiting for build slot for %s", challenge_path)
             with build_slots:
                 logger.info("acquired build slot for %s", challenge_path)
@@ -106,9 +110,11 @@ def test_command(
                 last_output = ""
                 failed_attempt_outputs = []
                 for attempt in range(1, attempts + 1):
+                    attempt_start = time.monotonic()
                     logger.info("starting test attempt %s in %s (%d/%d)", test_name, challenge_path, attempt, attempts)
                     with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, _):
                         try:
+                            exec_start = time.monotonic()
                             run = subprocess.run(
                                 ["docker", "exec", "--user=1000:1000", container, f"{test}"],
                                 stdout=subprocess.PIPE,
@@ -118,12 +124,13 @@ def test_command(
                             )
                         except subprocess.TimeoutExpired as e:
                             logger.warning(
-                                "test %s timed out after %ds in %s (attempt %d/%d)",
+                                "test %s timed out after %ds in %s (attempt %d/%d, wall=%.2fs)",
                                 test_name,
                                 timeout,
                                 challenge_path,
                                 attempt,
                                 attempts,
+                                time.monotonic() - attempt_start,
                             )
                             last_output = f"TIMEOUT after {timeout}s\n{e.stdout or ''}"
                             passed = False
@@ -131,20 +138,22 @@ def test_command(
                             passed = run.returncode == 0
                             last_output = run.stdout or ""
                             logger.debug(
-                                "test %s %s (rc=%d, attempt %d/%d)",
+                                "test %s %s (rc=%d, attempt %d/%d, exec=%.2fs)",
                                 test_name,
                                 "PASSED" if passed else "FAILED",
                                 run.returncode,
                                 attempt,
                                 attempts,
+                                time.monotonic() - exec_start,
                             )
                     if passed:
                         logger.info(
-                            "finished test attempt %s in %s (%d/%d): PASS",
+                            "finished test attempt %s in %s (%d/%d): PASS in %.2fs",
                             test_name,
                             challenge_path,
                             attempt,
                             attempts,
+                            time.monotonic() - attempt_start,
                         )
                         if attempt > 1:
                             logger.info(
@@ -156,11 +165,12 @@ def test_command(
                             )
                         break
                     logger.info(
-                        "finished test attempt %s in %s (%d/%d): FAIL",
+                        "finished test attempt %s in %s (%d/%d): FAIL in %.2fs",
                         test_name,
                         challenge_path,
                         attempt,
                         attempts,
+                        time.monotonic() - attempt_start,
                     )
 
                     if attempts > 1:
@@ -176,7 +186,7 @@ def test_command(
 
                 results.append((test_name, True, last_output))
                 logger.info("finished test %s in %s: PASS", test_name, challenge_path)
-            logger.info("finished challenge %s", challenge_path)
+            logger.info("finished challenge %s in %.2fs", challenge_path, time.monotonic() - challenge_start)
             return {"path": challenge_path, "tests": results}
         except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as error:
             logger.error("test setup failed for %s: %s", challenge_path, error)

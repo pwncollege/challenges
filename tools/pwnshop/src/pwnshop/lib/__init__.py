@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from typing import Iterable, Iterator, List, Optional, Sequence
 
 import black
@@ -146,6 +147,7 @@ def run_challenge(
     *,
     volumes: Optional[Sequence[pathlib.Path]] = None,
 ) -> Iterator[tuple[str, str]]:
+    start_time = time.monotonic()
     flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
     privileged = (
         yaml.safe_load(challenge_yml.read_text()).get("privileged")
@@ -196,7 +198,12 @@ def run_challenge(
         .strip()
     )
     logger.debug("container started: %s", container[:12])
-    logger.info("started container %s for %s", container[:12], challenge_path)
+    logger.info(
+        "started container %s for %s in %.2fs",
+        container[:12],
+        challenge_path,
+        time.monotonic() - start_time,
+    )
     subprocess.run(
         [
             "docker",
@@ -213,7 +220,12 @@ def run_challenge(
         check=True,
     )
     logger.debug("flag written to /flag")
-    logger.info("initialized flag for container %s (%s)", container[:12], challenge_path)
+    logger.info(
+        "initialized flag for container %s (%s) in %.2fs",
+        container[:12],
+        challenge_path,
+        time.monotonic() - start_time,
+    )
     subprocess.run(
         [
             "docker",
@@ -229,21 +241,28 @@ def run_challenge(
         check=True,
     )
     logger.debug(".init completed (if present)")
-    logger.info("completed container init for %s", challenge_path)
+    logger.info("completed container init for %s in %.2fs", challenge_path, time.monotonic() - start_time)
     try:
         yield container, flag
     finally:
+        stop_start = time.monotonic()
         logger.info("stopping container %s for %s", container[:12], challenge_path)
         subprocess.run(
             ["docker", "kill", container],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        logger.info("stopped container %s for %s", container[:12], challenge_path)
+        logger.info(
+            "stopped container %s for %s in %.2fs",
+            container[:12],
+            challenge_path,
+            time.monotonic() - stop_start,
+        )
 
 
 def build_challenge(challenge_path: pathlib.Path) -> str:
     logger.info("building challenge %s", challenge_path)
+    build_start = time.monotonic()
     rendered_directory = render_challenge(challenge_path)
     try:
         label = challenge_path.as_posix().removeprefix("challenges/")
@@ -259,7 +278,12 @@ def build_challenge(challenge_path: pathlib.Path) -> str:
             ],
             text=True,
         ).strip()
-        logger.info("built image %s for %s", image_id[:19], challenge_path)
+        logger.info(
+            "built image %s for %s in %.2fs",
+            image_id[:19],
+            challenge_path,
+            time.monotonic() - build_start,
+        )
         return image_id
     except subprocess.CalledProcessError as error:
         logger.error("docker build failed for %s", challenge_path)
