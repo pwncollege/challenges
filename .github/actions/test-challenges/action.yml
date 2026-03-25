@@ -47,7 +47,7 @@ runs:
           echo "::endgroup::"
         fi
 
-    - name: Prebuild challenges
+    - name: Test challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
@@ -90,57 +90,6 @@ runs:
         ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
         echo "finished listing challenges at $(date -Ins)"
         echo "::endgroup::"
-
-        echo "::group::Prebuild challenges"
-        status=0
-        run_with_heartbeat "pwnshop build" \
-          stdbuf -oL -eL \
-          timeout --signal=TERM --kill-after=30s 3600s ./pwnshop -vv build \
-            --modified-since="$MODIFIED_SINCE" \
-            "$CHALLENGES_DIR" || status=$?
-        if [ "$status" -eq 124 ]; then
-          echo "pwnshop build timed out after 3600s" >&2
-        fi
-        echo "::endgroup::"
-        exit "$status"
-
-    - name: Test challenges
-      shell: 'nix develop -c bash -euo pipefail {0}'
-      env:
-        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
-        MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
-      run: |
-        run_with_heartbeat() {
-          local label="$1"
-          shift
-
-          echo "${label}: started at $(date -Ins)"
-          "$@" &
-          local cmd_pid=$!
-
-          (
-            while kill -0 "$cmd_pid" 2>/dev/null; do
-              sleep 30
-              if ! kill -0 "$cmd_pid" 2>/dev/null; then
-                break
-              fi
-              echo "::group::${label} heartbeat $(date -Ins)"
-              ps -eo pid,ppid,stat,etime,pcpu,pmem,args \
-                | grep -E 'pwnshop|docker( |$)|pytest|python .*pwnshop' \
-                | grep -v grep || true
-              docker ps --format 'table {{.ID}}\t{{.Status}}\t{{.Image}}\t{{.Names}}' || true
-              echo "::endgroup::"
-            done
-          ) &
-          local heartbeat_pid=$!
-
-          local status=0
-          wait "$cmd_pid" || status=$?
-          kill "$heartbeat_pid" 2>/dev/null || true
-          wait "$heartbeat_pid" 2>/dev/null || true
-          echo "${label}: finished at $(date -Ins) (status=${status})"
-          return "$status"
-        }
 
         echo "::group::Testing challenges"
         status=0
