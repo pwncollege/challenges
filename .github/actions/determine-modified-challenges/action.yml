@@ -34,7 +34,7 @@ runs:
           }
           core.setOutput("ref", ref);
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       if: ${{ steps.resolve-ref.outputs.ref != '' }}
       with:
         fetch-depth: 0

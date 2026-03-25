@@ -19,7 +19,7 @@ jobs:
       modified_since_ref: ${{ steps.determine-modified-challenges.outputs.modified_since_ref }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Determine modified challenges
       id: determine-modified-challenges
@@ -36,7 +36,7 @@ jobs:
         challenges: ${{ fromJson(needs.determine-modified-challenges.outputs.challenges) }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Determine trust
       id: trust
