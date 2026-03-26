@@ -70,6 +70,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
 
     jobs = jobs or os.cpu_count() or 1
     failed: dict[pathlib.Path, list] = {}
+    unsolved: set[pathlib.Path] = set()
     passed_count = failed_count = total_tests = failed_tests = 0
 
     def test_challenge(challenge_path):
@@ -84,6 +85,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                 return {"path": challenge_path, "tests": []}
             logger.info("running %d test(s) for %s", len(tests), challenge_path)
             results = []
+            solved = False
             for test in tests:
                 test_name = test.relative_to(rendered)
                 logger.debug("running test %s in %s", test_name, challenge_path)
@@ -92,7 +94,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                 failed_attempt_outputs = []
                 for attempt in range(1, attempts + 1):
                     logger.debug("running test %s in %s (attempt %d/%d)", test_name, challenge_path, attempt, attempts)
-                    with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, _):
+                    with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, flag):
                         try:
                             run = subprocess.run(
                                 ["docker", "exec", "--user=1000:1000", container, f"{test}"],
@@ -123,6 +125,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                                 attempt,
                                 attempts,
                             )
+                    solved = solved or flag in last_output
                     if passed:
                         if attempt > 1:
                             logger.info(
@@ -146,7 +149,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                     continue
 
                 results.append((test_name, True, last_output))
-            return {"path": challenge_path, "tests": results}
+            return {"path": challenge_path, "tests": results, "solved": solved}
         except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as error:
             logger.error("test setup failed for %s: %s", challenge_path, error)
             return {"path": challenge_path, "error": str(error)}
@@ -170,6 +173,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
             challenge = result["path"]
             error = result.get("error")
             tests = result.get("tests") or []
+            solved = result.get("solved", False)
             if error:
                 failed.setdefault(challenge, []).append("<build>")
                 failed_count += 1
@@ -204,6 +208,8 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                     failed_count += 1
                 else:
                     passed_count += 1
+                if not solved:
+                    unsolved.add(challenge)
             completed += 1
             progress.update(
                 task,
@@ -217,6 +223,11 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                 )
         pool.close()
         pool.join()
+
+    if unsolved:
+        console.print("[yellow]Warning: unsolved challenges:[/]")
+        for challenge_path in sorted(unsolved):
+            console.print(f"- {challenge_path}")
 
     if failed:
         console.print("[red]Some tests failed:[/]")
