@@ -1,0 +1,104 @@
+name: Legacy Intro Heartbeat
+
+on:
+  push:
+    branches:
+      - ci/legacy-intro-heartbeat
+  workflow_dispatch:
+
+concurrency:
+  group: legacy-intro-heartbeat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-legacy-intro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+    - uses: actions/checkout@v6
+    - uses: ./.github/actions/setup-nix
+    - uses: ./.github/actions/setup-challenge-runtime
+
+    - name: Manage encrypted files
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        GPG_PRIVATE_KEY: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
+      run: |
+        printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+        git crypt unlock
+
+    - name: Test legacy/intro-to-cybersecurity with heartbeat
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      run: |
+        heartbeat() {
+          local seq=0
+          while true; do
+            seq=$((seq + 1))
+            echo "::group::heartbeat ${seq} $(date -Is)"
+            echo "uptime"
+            uptime
+            echo
+            echo "loadavg"
+            cat /proc/loadavg
+            echo
+            echo "meminfo"
+            grep -E '^(MemTotal|MemFree|MemAvailable|Buffers|Cached|SwapTotal|SwapFree):' /proc/meminfo
+            echo
+            echo "free -h"
+            free -h
+            echo
+            echo "vmstat"
+            vmstat -SM 1 2
+            echo
+            echo "pressure"
+            for resource in cpu io memory; do
+              echo "[$resource]"
+              cat "/proc/pressure/$resource"
+            done
+            echo
+            echo "disk"
+            df -hT
+            echo
+            echo "inodes"
+            df -ih
+            echo
+            echo "docker ps -a --size"
+            docker ps -a --size || true
+            echo
+            echo "docker system df"
+            docker system df || true
+            echo
+            echo "ps auxww"
+            ps auxww
+            echo "::endgroup::"
+            sleep 10
+          done
+        }
+
+        cleanup() {
+          if [ -n "${HEARTBEAT_PID:-}" ]; then
+            kill "$HEARTBEAT_PID" 2>/dev/null || true
+            wait "$HEARTBEAT_PID" 2>/dev/null || true
+          fi
+        }
+
+        trap cleanup EXIT
+
+        echo "::group::Challenges to be tested"
+        ./pwnshop list challenges/legacy/intro-to-cybersecurity
+        echo "::endgroup::"
+
+        heartbeat &
+        HEARTBEAT_PID=$!
+
+        ./pwnshop -v test \
+          --jobs "$(( $(nproc) * 2 ))" \
+          --attempts 5 \
+          --timeout 600 \
+          --silent-failures \
+          challenges/legacy/intro-to-cybersecurity
+
+    - name: Report runtime storage
+      if: always()
+      uses: ./.github/actions/report-runtime-storage
