@@ -4,13 +4,10 @@ import subprocess
 import requests
 import atexit
 import time
-import os
 
 {% from '../../../common/random_names.j2' import generate_names %}
 {% set challenge = namespace() %}
 {{ generate_names(challenge, random) }}
-
-FLAG = os.environ.get("FLAG", "pwn.college{test}")
 
 proc = subprocess.Popen(['/challenge/server'])
 for _ in range(100):

@@ -3,9 +3,7 @@ import subprocess
 import requests
 import atexit
 import time
-import os
-
-FLAG = os.environ["FLAG"]
+import re
 
 proc = subprocess.Popen(['/challenge/server'])
 for _ in range(100):
@@ -32,7 +30,7 @@ assert "session_user=guest" in response.headers.get('Set-Cookie', '')
 response = requests.get("http://challenge.localhost/", cookies={"session_user": "guest"})
 assert response.status_code == 200
 assert "Hello, guest!" in response.text
-assert FLAG not in response.text
+assert not re.search(r"pwn\.college\{[^}\n]+\}", response.text)
 
 response = requests.post("http://challenge.localhost/", data={
     "username": "admin",
