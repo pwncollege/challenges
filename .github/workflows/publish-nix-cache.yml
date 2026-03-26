@@ -24,7 +24,7 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - uses: ./.github/actions/setup-nix
 
     - name: Build dev shell
