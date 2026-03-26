@@ -3,9 +3,7 @@ import subprocess
 import requests
 import atexit
 import time
-import os
-
-FLAG = os.environ["FLAG"]
+import re
 
 proc = subprocess.Popen(['/challenge/server'])
 for _ in range(100):
@@ -30,7 +28,7 @@ assert response.status_code == 200
 assert response.history[0].status_code == 302
 assert "session_user=guest" in response.url
 assert "Hello, guest!" in response.text
-assert FLAG not in response.text
+assert not re.search(r"pwn\.college\{[^}\n]+\}", response.text)
 
 response = requests.post("http://challenge.localhost/", data={
     "username": "admin",

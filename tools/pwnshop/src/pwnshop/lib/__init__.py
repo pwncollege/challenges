@@ -108,7 +108,6 @@ def run_challenge(
         runtime_options.extend(["--cap-add=SYS_ADMIN", "--cap-add=NET_ADMIN"])
     env_options = []
     for key, value in {
-        "FLAG": flag,
         "SEED": str(CHALLENGE_SEED),
         "PATH": "/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     }.items():

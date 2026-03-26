@@ -3,9 +3,6 @@ import subprocess
 import requests
 import atexit
 import time
-import os
-
-FLAG = os.environ["FLAG"]
 
 proc = subprocess.Popen(['/challenge/server'])
 for _ in range(100):
