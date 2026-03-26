@@ -5,7 +5,7 @@ import requests
 import atexit
 import time
 
-{% from 'common/random_names.j2' import generate_names %}
+{% from '../../../common/random_names.j2' import generate_names %}
 {% set challenge = namespace() %}
 {{ generate_names(challenge, random) }}
 
