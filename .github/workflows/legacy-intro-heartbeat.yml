@@ -31,6 +31,8 @@ jobs:
     - name: Test legacy/intro-to-cybersecurity with heartbeat
       shell: 'nix develop -c bash -euo pipefail {0}'
       run: |
+        DOCKER_EVENTS_LOG="$(mktemp)"
+
         heartbeat() {
           local seq=0
           while true; do
@@ -63,11 +65,14 @@ jobs:
             echo "inodes"
             df -ih
             echo
-            echo "docker ps -a --size"
-            docker ps -a --size || true
+            echo "docker ps -a --no-trunc --size"
+            docker ps -a --no-trunc --size || true
             echo
             echo "docker system df"
             docker system df || true
+            echo
+            echo "docker events (tail -200)"
+            tail -n 200 "$DOCKER_EVENTS_LOG" || true
             echo
             echo "ps auxww"
             ps auxww
@@ -77,6 +82,10 @@ jobs:
         }
 
         cleanup() {
+          if [ -n "${DOCKER_EVENTS_PID:-}" ]; then
+            kill "$DOCKER_EVENTS_PID" 2>/dev/null || true
+            wait "$DOCKER_EVENTS_PID" 2>/dev/null || true
+          fi
           if [ -n "${HEARTBEAT_PID:-}" ]; then
             kill "$HEARTBEAT_PID" 2>/dev/null || true
             wait "$HEARTBEAT_PID" 2>/dev/null || true
@@ -89,10 +98,13 @@ jobs:
         ./pwnshop list challenges/legacy/intro-to-cybersecurity
         echo "::endgroup::"
 
+        docker events --since "$(date -Is)" --format '{{json .}}' >"$DOCKER_EVENTS_LOG" &
+        DOCKER_EVENTS_PID=$!
+
         heartbeat &
         HEARTBEAT_PID=$!
 
-        ./pwnshop -v test \
+        ./pwnshop -vv test \
           --jobs "$(( $(nproc) * 2 ))" \
           --attempts 5 \
           --timeout 600 \
