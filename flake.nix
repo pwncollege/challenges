@@ -71,7 +71,14 @@
               uv
             ];
             shellHook = ''
-              export DOCKER_HOST="$(sudo ${pwn-challenge-runtime}/bin/pwn-challenge-runtime)"
+              if [ "$(id -u)" -eq 0 ]; then
+                export DOCKER_HOST="$(${lib.getExe pwn-challenge-runtime})"
+              elif command -v sudo >/dev/null 2>&1; then
+                export DOCKER_HOST="$(sudo ${lib.getExe pwn-challenge-runtime})"
+              else
+                echo "error: cannot start the challenge runtime without root privileges" >&2
+                return 1
+              fi
             '';
           };
         }
