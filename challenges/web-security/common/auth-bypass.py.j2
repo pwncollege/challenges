@@ -1,4 +1,4 @@
-{%- extends "common/flask.py.j2" -%}
+{%- extends "../../common/flask.py.j2" -%}
 
 {% block setup %}
   {{- super() -}}
@@ -14,7 +14,7 @@ import sqlite3
 {% endblock %}
 
 {% block handlers %}
-{% include 'common/temporarydb.py.j2' %}
+{% include './temporarydb.py.j2' %}
 # https://www.sqlite.org/lang_createtable.html
 db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as password""", [os.urandom({{challenge.admin_password_length}})])
 # https://www.sqlite.org/lang_insert.html

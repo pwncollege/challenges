@@ -3,7 +3,6 @@ import os
 import time
 
 give_flag = False
-num_instructions = 23
 
 FLAG_SIZE = 64
 

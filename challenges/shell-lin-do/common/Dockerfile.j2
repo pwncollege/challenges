@@ -1,2 +1,3 @@
-{%- extends "common/Dockerfile.j2" -%}
-{%- block additional_packages %}fortune-mod procps netcat-openbsd curl{% endblock -%}
+{%- extends "../../common/Dockerfile.j2" -%}
+{%- block additional_packages %}fortune-mod procps netcat-openbsd curl ed{% endblock -%}
+{%- block after_setup %}RUN chmod 4755 /challenge/run{% endblock -%}

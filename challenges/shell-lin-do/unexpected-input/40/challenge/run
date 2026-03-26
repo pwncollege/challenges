@@ -1,4 +1,4 @@
-#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+#!/usr/bin/exec-suid --real --environ=none -- /bin/bash -p
 
 read VAR < <(head -n1 | tr -cd 'a-zA-Z0-9')
 read VAL < <(head -n1)

@@ -8,7 +8,15 @@ import os
 FLAG = os.environ["FLAG"]
 
 proc = subprocess.Popen(['/challenge/server'])
-time.sleep(1)  # Give it time to start
+for _ in range(100):
+    try:
+        requests.get("http://challenge.localhost/")
+        break
+    except requests.RequestException:
+        time.sleep(0.1)
+else:
+    raise AssertionError("server did not become ready in time")
+
 
 # Test normal posting
 response = requests.post("http://challenge.localhost/", data={"content": "Test post"})

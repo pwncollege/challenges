@@ -1,7 +1,7 @@
-{%- extends "common/flask.py.j2" -%}
+{%- extends "../../common/flask.py.j2" -%}
 
 {% block setup %}
-  {%- from 'common/random_names.j2' import generate_names -%}
+  {%- from '../../common/random_names.j2' import generate_names -%}
   {{- generate_names(challenge, random) -}}
 {% endblock %}
 
@@ -14,7 +14,7 @@ import tempfile
 {% endblock %}
 
 {% block handlers %}
-{% include 'common/temporarydb.py.j2' %}
+{% include './temporarydb.py.j2' %}
 
 # https://www.sqlite.org/lang_createtable.html
 db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as {{challenge.pw_name}}""", [{{challenge.admin_pw_code}}])

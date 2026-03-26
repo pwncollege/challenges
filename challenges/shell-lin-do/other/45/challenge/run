@@ -1,4 +1,4 @@
-#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+#!/usr/bin/exec-suid --real --environ=none -- /bin/bash -p
 
 regex='^[0-9]+[\+\-\*/][0-9]+$'
 

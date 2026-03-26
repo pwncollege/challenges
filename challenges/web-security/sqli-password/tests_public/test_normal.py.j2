@@ -5,12 +5,19 @@ import requests
 import atexit
 import time
 
-{% from 'common/random_names.j2' import generate_names %}
+{% from '../../../common/random_names.j2' import generate_names %}
 {% set challenge = namespace() %}
 {{ generate_names(challenge, random) }}
 
 proc = subprocess.Popen(['/challenge/server'])
-time.sleep(1)  # Give it time to start
+for _ in range(100):
+    try:
+        requests.get("http://challenge.localhost/")
+        break
+    except requests.RequestException:
+        time.sleep(0.1)
+else:
+    raise AssertionError("server did not become ready in time")
 
 # Test normal login with guest account
 s = requests.Session()
