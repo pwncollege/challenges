@@ -3,9 +3,6 @@
 ARG CHALLENGE_IMAGE="{{ challenge_image }}"
 FROM "${CHALLENGE_IMAGE}"
 
-ENV PATH="/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-RUN echo "PATH=\"$PATH\"" > /etc/environment
-
 # Save the base image's .init if it exists (will be run later)
 RUN if [ -x /challenge/.init ]; then mv /challenge/.init /challenge/.init.base; fi
 
@@ -87,6 +84,9 @@ if [ -x /challenge/.init ]; then
     exec /challenge/.init
 fi
 EOF
+
+ENV PATH="/challenge/bin:$PATH"
+RUN echo "PATH=\"$PATH\"" > /etc/environment
 
 ARG CHALLENGE_PATH="/opt/dojos/{{ challenge_path }}"
 ENV CHALLENGE_PATH="${CHALLENGE_PATH}"
