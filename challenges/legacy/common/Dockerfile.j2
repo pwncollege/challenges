@@ -25,6 +25,8 @@ COPY --chmod=755 <<'EOF' /challenge/.init
 #!/bin/bash
 set -eou pipefail
 
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 if [ ! -d "$CHALLENGE_PATH" ]; then
     echo "[*] Challenge path $CHALLENGE_PATH does not exist!"
     exit 1
@@ -81,6 +83,11 @@ fi
 if [ -x /challenge/.init ]; then
     exec /challenge/.init
 fi
+EOF
+
+ENV PATH="/challenge/bin:$PATH"
+COPY <<EOF /etc/environment
+PATH="$PATH"
 EOF
 
 ARG CHALLENGE_PATH="/opt/dojos/{{ challenge_path }}"
