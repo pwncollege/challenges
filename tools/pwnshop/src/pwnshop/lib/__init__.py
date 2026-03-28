@@ -26,7 +26,10 @@ if not clang_format:
 
 class RelativeEnvironment(jinja2.Environment):
     def join_path(self, template: str, parent: str) -> str:
-        return posixpath.normpath(str(pathlib.PurePosixPath(parent).parent / template))
+        parent_path = pathlib.PurePosixPath(parent)
+        if template.startswith("common/") and len(parent_path.parts) >= 3 and parent_path.parts[-2] == "challenge":
+            return posixpath.normpath(str(parent_path.parents[2] / template))
+        return posixpath.normpath(str(parent_path.parent / template))
 
 
 def render(template: pathlib.Path) -> str:
