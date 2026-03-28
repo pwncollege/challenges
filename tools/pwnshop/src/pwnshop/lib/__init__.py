@@ -106,12 +106,6 @@ def run_challenge(
     ]
     if privileged:
         runtime_options.extend(["--cap-add=SYS_ADMIN", "--cap-add=NET_ADMIN"])
-    env_options = []
-    for key, value in {
-        "SEED": str(CHALLENGE_SEED),
-        "PATH": "/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    }.items():
-        env_options.extend(["--env", f"{key}={value}"])
     logger.info("starting container for image %s", challenge_image)
     logger.debug("container runtime options for %s: %s", challenge_path, runtime_options)
     if volumes:
@@ -127,7 +121,6 @@ def run_challenge(
                 "--init",
                 "--user=0:0",
                 *runtime_options,
-                *env_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
                 challenge_image,
                 "/bin/sh",
