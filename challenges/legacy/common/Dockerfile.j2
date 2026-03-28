@@ -3,6 +3,9 @@
 ARG CHALLENGE_IMAGE="{{ challenge_image }}"
 FROM "${CHALLENGE_IMAGE}"
 
+ENV PATH="/challenge/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+RUN echo "PATH=\"$PATH\"" > /etc/environment
+
 # Save the base image's .init if it exists (will be run later)
 RUN if [ -x /challenge/.init ]; then mv /challenge/.init /challenge/.init.base; fi
 
@@ -24,6 +27,8 @@ WORKDIR /
 COPY --chmod=755 <<'EOF' /challenge/.init
 #!/bin/bash
 set -eou pipefail
+
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 if [ ! -d "$CHALLENGE_PATH" ]; then
     echo "[*] Challenge path $CHALLENGE_PATH does not exist!"
@@ -68,10 +73,6 @@ if ! getent passwd 1000 >/dev/null 2>&1; then
     mkdir -p /home/hacker
     chown 1000:1000 /home/hacker
 fi
-
-# Add /challenge/bin to PATH for current and future shells
-export PATH="/challenge/bin:$PATH"
-echo "PATH=\"$PATH\"" > /etc/environment
 
 # Run the base image's .init if it was saved (e.g., for program-misuse challenges)
 # Use set +e because the base .init may try to rm files that don't exist
