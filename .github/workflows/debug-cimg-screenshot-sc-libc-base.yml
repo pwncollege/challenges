@@ -65,7 +65,7 @@ jobs:
 
         docker exec --user=0:0 "$cid" /bin/sh -c '[ ! -e /challenge/.init ] || /challenge/.init'
 
-        docker exec --interactive --user=0:0 "$cid" /bin/sh <<'EOF'
+        docker exec --interactive --user=0:0 "$cid" /bin/bash <<'EOF'
         set -euo pipefail
 
         echo "runner_uname=$(uname -srmo)"
