@@ -1,6 +1,11 @@
 name: Debug Cimg Screenshot SC Libc Base
 
 on:
+  push:
+    branches:
+      - pr-legacy-fix-tests-260331161904
+    paths:
+      - .github/workflows/debug-cimg-screenshot-sc-libc-base.yml
   workflow_dispatch:
 
 concurrency:
