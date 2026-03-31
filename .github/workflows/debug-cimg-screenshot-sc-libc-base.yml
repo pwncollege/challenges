@@ -1,0 +1,106 @@
+name: Debug Cimg Screenshot SC Libc Base
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: debug-cimg-screenshot-sc-libc-base-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  inspect-libc-base:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v6
+    - uses: ./.github/actions/setup-nix
+    - uses: ./.github/actions/setup-challenge-runtime
+
+    - name: Render challenge
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      run: |
+        rm -rf /tmp/rendered-cimg-screenshot-sc
+        ./pwnshop render \
+          challenges/legacy/intro-to-cybersecurity/integrated-security/cimg-screenshot-sc \
+          --output /tmp/rendered-cimg-screenshot-sc
+
+    - name: Build challenge image
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      run: |
+        docker build --pull --no-cache \
+          -t debug-cimg-screenshot-sc \
+          /tmp/rendered-cimg-screenshot-sc/challenge
+        echo "image_id=$(docker image inspect debug-cimg-screenshot-sc --format '{{.Id}}')"
+
+    - name: Inspect runtime libc base
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      run: |
+        echo "host_docker_host=${DOCKER_HOST:-unset}"
+        cid="$(
+          docker run \
+            --rm \
+            --interactive \
+            --detach \
+            --init \
+            --user=0:0 \
+            --runtime="${PWN_CHALLENGE_RUNTIME:-runc}" \
+            --device=/dev/kvm \
+            --device=/dev/net/tun \
+            --cap-add=SYS_PTRACE \
+            --sysctl=net.ipv4.ip_unprivileged_port_start=1024 \
+            debug-cimg-screenshot-sc \
+            /bin/sh -c 'read forever'
+        )"
+        cleanup() {
+          docker kill "$cid" >/dev/null 2>&1 || true
+        }
+        trap cleanup EXIT
+
+        docker exec --user=0:0 "$cid" /bin/sh -c '[ ! -e /challenge/.init ] || /challenge/.init'
+
+        docker exec --interactive --user=0:0 "$cid" /bin/sh <<'EOF'
+        set -euo pipefail
+
+        echo "runner_uname=$(uname -srmo)"
+        echo "expected_libc_base=0x7ffff7dc7000"
+        echo "libc_version=$(/lib/x86_64-linux-gnu/libc.so.6 | head -n 1)"
+
+        rm -f /tmp/hold.cimg
+        mkfifo /tmp/hold.cimg
+
+        # Launch the challenge against a FIFO so it blocks in file I/O after its
+        # own ASLR-disable path has run, giving us a stable process to inspect.
+        /challenge/integration-cimg-screenshot-sc /tmp/hold.cimg >/tmp/cimg.log 2>&1 &
+        pid=$!
+        sleep 1
+
+        if [ ! -d "/proc/$pid" ]; then
+          echo "challenge_process_missing=true"
+          echo "::group::challenge-log"
+          sed -n '1,80p' /tmp/cimg.log || true
+          echo "::endgroup::"
+          exit 1
+        fi
+
+        echo "pid=$pid"
+        echo "::group::challenge-log"
+        sed -n '1,80p' /tmp/cimg.log || true
+        echo "::endgroup::"
+
+        echo "::group::libc-maps"
+        awk '/libc\.so\.6/ && $2 ~ /^r..p$/ {print}' /proc/$pid/maps
+        echo "::endgroup::"
+
+        base="$(
+          awk '/libc\.so\.6/ && $2 ~ /^r..p$/ {print $1}' /proc/$pid/maps \
+            | head -n 1 \
+            | cut -d- -f1
+        )"
+        echo "observed_libc_base=0x${base}"
+        echo "base_match=$([ "0x${base}" = "0x7ffff7dc7000" ] && echo true || echo false)"
+
+        kill "$pid" || true
+        wait "$pid" || true
+        EOF
