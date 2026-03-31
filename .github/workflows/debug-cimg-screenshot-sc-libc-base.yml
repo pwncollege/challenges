@@ -34,7 +34,7 @@ jobs:
     - name: Build challenge image
       shell: 'nix develop -c bash -euo pipefail {0}'
       run: |
-        docker build --pull --no-cache \
+        docker build \
           -t debug-cimg-screenshot-sc \
           /tmp/rendered-cimg-screenshot-sc/challenge
         echo "image_id=$(docker image inspect debug-cimg-screenshot-sc --format '{{.Id}}')"
