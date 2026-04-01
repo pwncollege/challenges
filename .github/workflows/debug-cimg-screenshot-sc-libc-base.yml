@@ -46,7 +46,6 @@ jobs:
         cid="$(
           docker run \
             --rm \
-            --interactive \
             --detach \
             --init \
             --user=0:0 \
@@ -56,7 +55,7 @@ jobs:
             --cap-add=SYS_PTRACE \
             --sysctl=net.ipv4.ip_unprivileged_port_start=1024 \
             debug-cimg-screenshot-sc \
-            /bin/sh -c 'read forever'
+            sleep infinity
         )"
         cleanup() {
           docker kill "$cid" >/dev/null 2>&1 || true
@@ -68,8 +67,14 @@ jobs:
         docker exec --interactive --user=0:0 "$cid" /bin/bash <<'EOF'
         set -euo pipefail
 
+        expected_libc_base=0x7ffff7dc7000
+        jmp_rsp_offset=0x131afd
+        expected_jmp_rsp=0x7ffff7ef8afd
+
         echo "runner_uname=$(uname -srmo)"
-        echo "expected_libc_base=0x7ffff7dc7000"
+        echo "expected_libc_base=${expected_libc_base}"
+        echo "jmp_rsp_offset=${jmp_rsp_offset}"
+        echo "expected_jmp_rsp=${expected_jmp_rsp}"
         echo "libc_version=$(/lib/x86_64-linux-gnu/libc.so.6 | head -n 1)"
 
         rm -f /tmp/hold.cimg
@@ -95,16 +100,29 @@ jobs:
         echo "::endgroup::"
 
         echo "::group::libc-maps"
-        awk '/libc\.so\.6/ && $2 ~ /^r..p$/ {print}' /proc/$pid/maps
+        awk '
+          $6 ~ /\/libc([^[:space:]]+)?\.so([[:punct:][:digit:]]+)?$/ && $3 == "00000000" {print}
+          $6 ~ /\/libc-[^[:space:]]+\.so$/ && $3 == "00000000" {print}
+        ' /proc/$pid/maps
         echo "::endgroup::"
 
         base="$(
-          awk '/libc\.so\.6/ && $2 ~ /^r..p$/ {print $1}' /proc/$pid/maps \
+          awk '
+            $6 ~ /\/libc([^[:space:]]+)?\.so([[:punct:][:digit:]]+)?$/ && $3 == "00000000" {print $1; exit}
+            $6 ~ /\/libc-[^[:space:]]+\.so$/ && $3 == "00000000" {print $1; exit}
+          ' /proc/$pid/maps \
             | head -n 1 \
             | cut -d- -f1
         )"
         echo "observed_libc_base=0x${base}"
-        echo "base_match=$([ "0x${base}" = "0x7ffff7dc7000" ] && echo true || echo false)"
+        if [ -n "$base" ]; then
+          printf -v observed_jmp_rsp '0x%x' "$(( 0x${base} + jmp_rsp_offset ))"
+        else
+          observed_jmp_rsp=""
+        fi
+        echo "observed_jmp_rsp=${observed_jmp_rsp}"
+        echo "base_match=$([ "0x${base}" = "${expected_libc_base}" ] && echo true || echo false)"
+        echo "jmp_rsp_match=$([ "${observed_jmp_rsp}" = "${expected_jmp_rsp}" ] && echo true || echo false)"
 
         kill "$pid" || true
         wait "$pid" || true
