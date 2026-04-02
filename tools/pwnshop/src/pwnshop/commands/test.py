@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Timeout in seconds for each individual test.",
 )
-@click.option("--require-tests", is_flag=True, help="Fail if any challenge has no tests.")
+@click.option("--require-solved", is_flag=True, help="Fail if any challenge is unsolved.")
 @click.option(
     "--log-failures",
     metavar="DIR",
@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
         resolve_path=False,
     ),
 )
-def test_command(targets, modified_since, jobs, attempts, timeout, require_tests, log_failures, silent_failures):
+def test_command(targets, modified_since, jobs, attempts, timeout, require_solved, log_failures, silent_failures):
     """Test one or more challenges."""
     if not (challenge_paths := lib.resolve_targets(targets, modified_since=modified_since)):
         if modified_since:
@@ -82,7 +82,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
             tests = sorted(rendered.rglob("test*/test_*"))
             if not tests:
                 logger.warning("no tests found for %s", challenge_path)
-                return {"path": challenge_path, "tests": []}
+                return {"path": challenge_path, "tests": [], "solved": False}
             logger.info("running %d test(s) for %s", len(tests), challenge_path)
             results = []
             solved = False
@@ -184,12 +184,8 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                 else:
                     console.print(f"[red]FAIL[/] {challenge}: {error}")
             elif not tests:
-                if require_tests:
-                    console.print(f"[red]FAIL[/] {challenge}: no tests found")
-                    failed.setdefault(challenge, []).append("<no tests>")
-                    failed_count += 1
-                else:
-                    passed_count += 1
+                unsolved.add(challenge)
+                passed_count += 1
             else:
                 for test_path, passed, output in tests:
                     total_tests += 1
@@ -225,7 +221,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
         pool.join()
 
     if unsolved:
-        console.print("[yellow]Warning: unsolved challenges:[/]")
+        console.print("[red]Unsolved challenges:[/]" if require_solved else "[yellow]Warning: unsolved challenges:[/]")
         for challenge_path in sorted(unsolved):
             console.print(f"- {challenge_path}")
 
@@ -236,4 +232,6 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_tests
                 console.print(f"- {challenge_path}/{test_path}")
         console.print(f"Ran {total_tests} testcases across {len(challenge_paths)} challenges (failed: {failed_tests})")
         raise click.ClickException("Some tests have failed.")
+    if require_solved and unsolved:
+        raise click.ClickException("Some challenges are unsolved.")
     console.print(f"[green]All tests passed ({passed_count} challenges, {total_tests} testcases)[/]")
