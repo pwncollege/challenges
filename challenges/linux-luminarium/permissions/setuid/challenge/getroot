@@ -1,0 +1,4 @@
+#!/usr/bin/exec-suid --real -- /bin/bash -p
+
+fold -s <<< "SUCCESS! You have set the suid bit on this program, and it is running as root! Here is your shell..."
+exec /bin/bash

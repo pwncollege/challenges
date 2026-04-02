@@ -1,0 +1,7 @@
+#!/bin/bash
+
+mv /flag /tmp/.hidden_flag
+chmod 644 /tmp/.hidden_flag
+
+mkdir -p /challenge/bin
+ln -sf /usr/bin/screen /challenge/bin/screen

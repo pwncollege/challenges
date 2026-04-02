@@ -1,0 +1,35 @@
+#!/usr/bin/exec-suid --real -- /bin/bash -p
+export SCREENDIR=/run/screen/S-hacker
+
+SCREEN_SESSION=$(su -c 'screen -ls' hacker | grep -E "Detached|Attached" | head -1 | awk '{print $1}')
+
+if [ -z "$SCREEN_SESSION" ]; then
+    echo "No screen session found!"
+    echo ""
+    echo "You need to:"
+    echo "1. Launch screen with: screen"
+    echo "2. Detach from it with: Ctrl-A then d"
+    echo "3. Then run this program again"
+    exit 1
+fi
+
+if ! su -c 'screen -ls' hacker | grep -q "Detached"; then
+    echo "Your screen session is still attached!"
+    echo ""
+    echo "You need to detach from your screen session first."
+    echo "Press Ctrl-A then d to detach."
+    exit 1
+fi
+
+echo "Found detached screen session: $SCREEN_SESSION"
+echo "Sending flag to your screen session..."
+
+read FLAG </flag
+su -c 'screen -S "'$SCREEN_SESSION'" -X eval "stuff \\015" "stuff \"echo Yes! Flag is: '$FLAG'\\015\""' hacker &>/dev/null
+
+echo ""
+echo "Flag sent! Now reattach to your screen session with:"
+echo ""
+echo "  screen -r"
+echo ""
+echo "You'll find the flag waiting for you there!"

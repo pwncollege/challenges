@@ -1,0 +1,4 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+echo "Correct! Here is your flag:"
+cat /flag

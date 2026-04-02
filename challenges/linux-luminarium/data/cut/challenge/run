@@ -1,0 +1,5 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+cat /flag | while IFS= read -n1 C; do
+    [ -n "$C" ] && echo "$RANDOM $C"
+done

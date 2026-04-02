@@ -1,0 +1,21 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+[[ "$BASH_EXECUTION_STRING" == .* ]] && exec -a bash /bin/bash $BASH_SOURCE
+
+fold -s <<< "I'll only give you the flag if there's already another copy of me running in this terminal... Let's check!"
+
+echo
+ps -f
+echo
+
+if ps -f | grep -v "$$" | grep -q "[r]un"
+then
+	fold -s <<< "Yay, I found another version of me! Here is the flag:"
+	cat /flag
+	exit
+fi
+
+echo "I don't see a second me!"
+echo
+fold -s <<< "To pass this level, you need to suspend me and launch me again! You can background me with Ctrl-Z or, if you're not ready to do that for whatever reason, just hit Enter and I'll exit!"
+read A

@@ -1,0 +1,4 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+fold -s <<< "Sending the flag to /tmp/flag_fifo!"
+cat /flag > /tmp/flag_fifo

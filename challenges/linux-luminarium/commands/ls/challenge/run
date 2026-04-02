@@ -1,0 +1,4 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+echo "Yahaha, you found me! Here is your flag:"
+cat /flag

@@ -1,0 +1,38 @@
+#!/usr/bin/exec-suid --environ=all -- /bin/bash -p
+
+if [ -n "$COLLEGE" ]
+then
+	echo "Incorrect..."
+	/bin/fold -s <<< "You have exported the COLLEGE variable. This challenge requires you to export the PWN variable but *not* the COLLEGE variable!"
+	exit 1
+fi
+
+if [ -z "$PWN" ]
+then
+	echo "Incorrect..."
+	/bin/fold -s <<< "You have not exported the PWN variable. This challenge requires you to export the PWN variable."
+	exit 2
+fi
+
+if [ "$PWN" != "COLLEGE" ] && [ -f /tmp/.pwn-right ]
+then
+	echo "Incorrect..."
+	/bin/fold -s <<< "You have set the PWN variable correctly in your shell, but you haven't re-exported it, so its *old* value is being passed to $0. You must re-export the PWN variable!"
+	exit 3
+elif [ "$PWN" != "COLLEGE" ]
+then
+	echo "Incorrect..."
+	/bin/fold -s <<< "You have exported the PWN variable, but it is not the right value. You must set it to 'COLLEGE'."
+	exit 4
+fi
+
+if [ ! -f /tmp/.college-right ]
+then
+	echo "Incorrect..."
+	/bin/fold -s <<< "You have not set the COLLEGE variable to the correct value (it should be 'PWN'). Do that before running this script! Even though it is not exported, in this challenge, we have ways to check..."
+	exit 5
+fi
+
+echo "CORRECT!"
+/bin/fold -s <<< "You have exported PWN=COLLEGE and set, but not exported, COLLEGE=PWN. Great job! Here is your flag:"
+cat /flag

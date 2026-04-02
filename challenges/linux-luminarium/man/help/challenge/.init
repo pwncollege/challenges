@@ -1,0 +1,4 @@
+#!/usr/bin/python3
+
+import os
+os.chmod("/challenge/challenge", 0o4711)

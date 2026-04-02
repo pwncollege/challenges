@@ -1,0 +1,27 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+import pathlib
+import random
+import re
+import os
+
+
+old_flag = pathlib.Path("/flag")
+FLAG = old_flag.read_text().strip()
+BAD_PATHS = { "home", "proc", "sys", "dev", "root", "nix"}
+RND = random.Random(int(re.sub("[^0-9]", "", FLAG) + "1"))
+
+def get_dirs(root):
+	for dirpath, dirnames, _ in os.walk(root, topdown=True):
+		perm = os.stat(dirpath).st_mode
+		if set(dirpath.split("/")) & BAD_PATHS or oct(perm)[-1] != "5":
+			dirnames[:] = [ ]
+			continue
+		yield dirpath
+
+flag_dir = pathlib.Path(RND.choice(list(get_dirs("/"))))
+flag_path = flag_dir / "flag"
+flag_path.write_text(FLAG, encoding='latin1')
+flag_path.chmod(0o644)
+if flag_path.exists():
+    old_flag.unlink()

@@ -1,0 +1,5 @@
+#!/bin/bash
+
+touch /challenge/pwn
+chown hacker.hacker /challenge/pwn
+chmod 644 /challenge/pwn
