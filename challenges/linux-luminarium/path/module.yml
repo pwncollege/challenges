@@ -1,0 +1,21 @@
+name: Pondering PATH
+resources:
+- name: Resources
+  type: markdown
+  content: |
+    - [What is PATH?](https://www.linfo.org/path_env_var.html)
+- type: challenge
+  id: path
+  name: The PATH Variable
+- type: challenge
+  id: path-win
+  name: Setting PATH
+- type: challenge
+  id: which
+  name: Finding Commands
+- type: challenge
+  id: path-win-yours
+  name: Adding Commands
+- type: challenge
+  id: command-hijack
+  name: Hijacking Commands

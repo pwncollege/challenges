@@ -1,0 +1,20 @@
+name: Silly Shenanigans
+resources:
+- type: challenge
+  id: bashrc-trojan
+  name: Bashrc Backdoor
+- type: challenge
+  id: flag-checker-hijack
+  name: Sniffing Input
+- type: challenge
+  id: writable-home-dir
+  name: Overshared Directories
+- type: challenge
+  id: writable-tmp-dir
+  name: Tricky Linking
+- type: challenge
+  id: process-sniffing
+  name: Sniffing Process Arguments
+- type: challenge
+  id: config-snooping
+  name: Snooping on Configurations

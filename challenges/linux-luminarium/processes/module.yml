@@ -1,0 +1,34 @@
+name: Processes and Jobs
+
+resources:
+- type: challenge
+  id: ps
+  name: Listing Processes
+- type: challenge
+  id: kill
+  name: Killing Processes
+- type: challenge
+  id: int
+  name: Interrupting Processes
+- type: challenge
+  id: kill-decoy
+  name: Killing Misbehaving Processes
+- type: challenge
+  id: suspend
+  name: Suspending Processes
+- type: challenge
+  id: resume
+  name: Resuming Processes
+- type: challenge
+  id: background
+  name: Backgrounding Processes
+- type: challenge
+  id: foreground
+  name: Foregrounding Processes
+- type: challenge
+  id: start-backgrounded
+  name: Starting Backgrounded Processes
+- type: challenge
+  id: exit-codes
+  name: Process Exit Codes
+

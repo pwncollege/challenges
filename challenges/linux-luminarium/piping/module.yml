@@ -1,0 +1,53 @@
+name: Practicing Piping
+resources:
+- name: Resources
+  type: markdown
+  content: |
+    - A [treatise on I/O redirection in Linux shells](https://web.archive.org/web/20220629044814/http://bencane.com:80/2012/04/16/unix-shell-the-art-of-io-redirection/), which has applications in this assignment.
+    - A great [visual guide to I/O redirection](http://www.rozmichelle.com/pipes-forks-dups/) in Linux.
+
+- type: challenge
+  id: echo
+  name: Redirecting output
+- type: challenge
+  id: stdout-myflag
+  name: Redirecting more output
+- type: challenge
+  id: append
+  name: Appending output
+- type: challenge
+  id: stderr-myflag
+  name: Redirecting errors
+- type: challenge
+  id: stdin
+  name: Redirecting input
+- type: challenge
+  id: redir-then-grep
+  name: Grepping stored results
+- type: challenge
+  id: pipe-grep
+  name: Grepping live output
+- type: challenge
+  id: stderr-grep
+  name: Grepping errors
+- type: challenge
+  id: grep-invert
+  name: Filtering with grep -v
+- type: challenge
+  id: sed
+  name: Filtering with sed
+- type: challenge
+  id: tee
+  name: Duplicating piped data with tee
+- type: challenge
+  id: procsub-read
+  name: Process substitution for input
+- type: challenge
+  id: procsub-write
+  name: Writing to multiple programs
+- type: challenge
+  id: dualpiper
+  name: Split-piping stderr and stdout
+- type: challenge
+  id: fifo
+  name: Named pipes

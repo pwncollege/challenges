@@ -1,0 +1,37 @@
+name: File Globbing
+resources:
+- type: markdown
+  name: Further Reading
+  content: |
+    - The [section on Shell Expansions](https://www.gnu.org/software/bash/manual/html_node/Shell-Expansions.html) from the Bash Reference Manual can be helpful.
+
+- type: challenge
+  id: asterisk
+  name: Matching with *
+- type: challenge
+  id: question
+  name: Matching with ?
+- type: challenge
+  id: bracket
+  name: Matching with []
+- type: challenge
+  id: bracket-absolute
+  name: Matching paths with []
+- type: challenge
+  id: multiglob
+  name: Multiple globs
+- type: challenge
+  id: mixing
+  name: Mixing globs
+- type: challenge
+  id: unmatching
+  name: Exclusionary globbing
+- type: challenge
+  id: tab-completion
+  name: Tab completion
+- type: challenge
+  id: tab-completion-options
+  name: Multiple options for tab completion
+- type: challenge
+  id: tab-completion-command
+  name: Tab completion on commands

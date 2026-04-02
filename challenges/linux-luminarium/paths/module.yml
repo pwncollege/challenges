@@ -1,0 +1,31 @@
+name: Pondering Paths
+resources:
+- name: The File System
+  type: lecture
+  video: b67Jq6IZ3U8
+  playlist: PL-ymxv0nOtqqRAz1x90vxNbhmSkeYxHVC
+  slides: 1rZYXk2waekELrSYIiBTk0z0XXx8e8ovvARrH0n6XeO8
+- type: challenge
+  id: root
+  name: The Root
+- type: challenge
+  id: absolute
+  name: Program and absolute paths
+- type: challenge
+  id: absolute-cwd
+  name: Position thy self
+- type: challenge
+  id: absolute-cwd-2
+  name: Position elsewhere
+- type: challenge
+  id: relative-naked
+  name: implicit relative paths, from /
+- type: challenge
+  id: relative-dot
+  name: explicit relative paths, from /
+- type: challenge
+  id: relative-dot-local
+  name: implicit relative path
+- type: challenge
+  id: home
+  name: home sweet home
