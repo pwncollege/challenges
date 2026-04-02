@@ -1,0 +1,6 @@
+#!/bin/bash
+
+su -c "/challenge/.make_screens $(</flag)" hacker
+
+mkdir -p /challenge/bin
+ln -sf /usr/bin/screen /challenge/bin/screen

@@ -1,0 +1,4 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+fold -s <<< "About to read out the /home/hacker/not-the-flag file!"
+cat /home/hacker/not-the-flag

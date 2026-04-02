@@ -1,0 +1,20 @@
+name: Terminal Multiplexing
+resources:
+- type: challenge
+  id: launch-screen
+  name: Launching Screen
+- type: challenge
+  id: detach-attach
+  name: Detaching and Attaching
+- type: challenge
+  id: find-session
+  name: Finding Sessions
+- type: challenge
+  id: switch-windows
+  name: Switching Windows
+- type: challenge
+  id: detach-attach-tmux
+  name: Detaching and Attaching (tmux)
+- type: challenge
+  id: switch-windows-tmux
+  name: Switching Windows (tmux)

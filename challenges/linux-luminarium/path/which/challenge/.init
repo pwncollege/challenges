@@ -1,0 +1,18 @@
+#!/bin/bash
+
+WPATH="/bin" #lazy fix for blank entry in path
+
+for N in {1..50}
+do
+	P=/challenge/paths/$RANDOM
+	mkdir -p $P
+	WPATH="$WPATH:$P"
+
+	[ "$N" -eq 42 ] && mv /challenge/win /flag $P/
+done
+
+chmod 711 /challenge/paths
+chmod 644 /challenge/paths/*/flag
+cat <<END >/challenge/.bashrc
+export PATH="$WPATH:\$PATH"
+END

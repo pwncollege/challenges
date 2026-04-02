@@ -1,0 +1,40 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pwntools \
+    bash-builtins \
+    build-essential \
+    john \
+    man-db \
+    manpages \
+    python3-asteval \
+    screen \
+    sudo \
+    tmux \
+    xxd
+
+ADD --chown=0:0 --chmod=6755 http://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
+
+RUN <<'END'
+export DEBIAN_FRONTEND=noninteractive
+yes | unminimize
+
+usermod -md /home/hacker -l hacker ubuntu
+groupmod -n hacker ubuntu
+
+cat >> /etc/bash.bashrc <<'EOF'
+if [ -f /challenge/.bashrc ]; then
+    . /challenge/.bashrc
+fi
+EOF
+END
+
+COPY . /challenge
+
+RUN find -L /challenge -type f -exec chmod 4755 {} +
+
+ENV PATH="/challenge/bin:$PATH"
+COPY <<EOF /etc/environment
+PATH="$PATH"
+EOF

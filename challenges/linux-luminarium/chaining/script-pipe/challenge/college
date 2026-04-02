@@ -1,0 +1,6 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+(
+	tail -c +17 /flag
+	cat /tmp/.pwn-secret
+) | md5sum

@@ -1,0 +1,8 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+if [ -f /tmp/.chained ] && [ -f /tmp/.and ]; then
+    echo "Nice chaining! Flag: $(cat /flag)"
+else
+    fold -s <<< "Error: /challenge/first-success must be successfully chained with /challenge/second using &&"
+    exit 1
+fi

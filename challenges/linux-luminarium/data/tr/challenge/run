@@ -1,0 +1,5 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+echo "Your case-swapped flag:"
+cat /flag | tr '[A-Z][a-z]' '[a-z][A-Z]'
+echo

@@ -1,0 +1,10 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+read GUESS
+if [ "$GUESS" == "hack the PLANET" ]
+then
+	echo "CORRECT! Your flag:"
+	cat /flag
+else
+	echo "Read the /challenge/run file to figure out the correct password!"
+fi

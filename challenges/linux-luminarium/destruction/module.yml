@@ -1,0 +1,18 @@
+name: Daring Destruction
+resources:
+- type: challenge
+  id: forkbomb
+  name: The Fork Bomb
+  privileged: true
+- type: challenge
+  id: disk-doomsday
+  name: Disk-Space Doomsday
+- type: challenge
+  id: rm-rf-root
+  name: rm -rf /
+- type: challenge
+  id: rm-rf-root-read
+  name: Life after rm -rf /
+- type: challenge
+  id: rm-rf-root-search
+  name: Finding meaning after rm -rf /

@@ -1,0 +1,4 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+fold -s <<< "Success! Here is your flag:"
+cat /flag

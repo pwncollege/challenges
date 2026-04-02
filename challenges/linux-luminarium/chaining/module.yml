@@ -1,0 +1,38 @@
+name: Chaining Commands
+resources:
+- type: challenge
+  id: semicolon
+  name: Chaining with Semicolons
+- type: challenge
+  id: and
+  name: Building on Success
+- type: challenge
+  id: or
+  name: Handling Failure
+- type: challenge
+  id: script
+  name: Your First Shell Script
+- type: challenge
+  id: script-pipe
+  name: Redirecting Script Output
+- type: challenge
+  id: execution
+  name: Executable Shell Scripts
+- type: challenge
+  id: shebang
+  name: Understanding Shebangs
+- type: challenge
+  id: script-args
+  name: Scripting with Arguments
+- type: challenge
+  id: script-if
+  name: Scripting with Conditionals
+- type: challenge
+  id: script-else
+  name: Scripting with Default Cases
+- type: challenge
+  id: script-elif
+  name: Scripting with Multiple Conditions
+- type: challenge
+  id: reading-scripts
+  name: Reading Shell Scripts

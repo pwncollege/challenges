@@ -1,0 +1,9 @@
+#!/bin/bash
+
+unset BASH_ENV
+
+if ! /challenge/.check_redir
+then
+	fold -s <<< "It looks like you are not piping this script out to /challenge/solve! Remember to pipe the output of your script into /challenge/solve using '|'." > /dev/tty
+	exit 1
+fi

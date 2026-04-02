@@ -1,0 +1,16 @@
+#!/usr/bin/python3
+
+import os
+import random
+import string
+import time
+import sys
+
+flag_length = os.stat("/flag").st_size
+content_length = flag_length - 14
+
+while True:
+    random_content = ''.join(random.choices(string.ascii_letters + string.digits + "-.", k=content_length))
+    sys.stdout.write(f"pwn.college{{{random_content}}}\n")
+    sys.stdout.flush()
+    time.sleep(0.01)

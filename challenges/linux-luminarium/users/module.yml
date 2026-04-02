@@ -1,0 +1,14 @@
+name: Untangling Users
+resources:
+- type: challenge
+  id: su
+  name: Becoming root with su
+- type: challenge
+  id: su-other
+  name: Other users with su
+- type: challenge
+  id: su-crack
+  name: Cracking passwords
+- type: challenge
+  id: sudo
+  name: Using sudo
