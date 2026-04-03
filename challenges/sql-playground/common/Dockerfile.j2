@@ -1,5 +1,9 @@
-{% extends "../../common/Dockerfile.j2" %}
+FROM python:3.13
 
-{% block after_setup %}
-RUN chmod 4755 /challenge/sql.py
-{% endblock %}
+ADD --chown=0:0 --chmod=6755 http://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
+
+RUN useradd --user-group --uid 1000 --create-home --shell /bin/bash hacker
+
+COPY . /challenge
+
+RUN chmod 4755 /challenge/sql
