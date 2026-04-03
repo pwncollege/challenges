@@ -1,0 +1,131 @@
+name: Prune Registry
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: prune-registry
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-nix
+
+      - name: Configure AWS credentials
+        shell: 'nix shell nixpkgs#awscli2 --command bash --noprofile --norc -euo pipefail {0}'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
+        run: |
+          aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
+          aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
+          aws configure set region auto
+
+      - name: List registry bucket
+        shell: 'nix shell nixpkgs#awscli2 --command bash --noprofile --norc -euo pipefail {0}'
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          aws --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            s3 ls "s3://challenges-registry" --recursive > "$RUNNER_TEMP/registry-bucket.txt"
+
+      - name: Compute stale set
+        shell: python
+        run: |
+          import collections
+          import concurrent.futures
+          import datetime
+          import json
+          import os
+          import pathlib
+          import urllib.request
+
+          runner_temp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          registry_listing = (runner_temp / "registry-bucket.txt").read_text()
+          stale_path = runner_temp / "stale.txt"
+          cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
+
+          def fetch(path):
+              req = urllib.request.Request(
+                  f"https://challenges.pwn.college{path}",
+                  headers={"User-Agent": "pwncollege-registry-prune/1"},
+              )
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  return dict(resp.headers), json.loads(resp.read())
+
+          def refs(doc):
+              yield from doc.get("manifests", [])
+              if doc.get("config"):
+                  yield doc["config"]
+              yield from doc.get("layers", [])
+              if doc.get("subject"):
+                  yield doc["subject"]
+
+          closure = set()
+          pending = collections.deque()
+          seen = set()
+
+          def fetch_task(task):
+              if task.startswith("manifests/"):
+                  slug, tag = task.removeprefix("manifests/").rsplit("/", 1)
+                  headers, doc = fetch(f"/v2/{slug}/manifests/{tag}")
+                  digest = headers["Docker-Content-Digest"]
+                  closure.add(task)
+                  closure.add(f"blobs/{digest.replace(':', '/')}")
+              else:
+                  _, doc = fetch(f"/v2/_/blobs/{task}")
+
+              return doc
+
+          for line in registry_listing.splitlines():
+              _, _, _, key = line.split(maxsplit=3)
+              if key.startswith("manifests/"):
+                  pending.append(key)
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+              while pending:
+                  tasks, pending = tuple(pending), collections.deque()
+                  for doc in pool.map(fetch_task, tasks):
+                      for ref in refs(doc):
+                          ref_digest = ref.get("digest")
+                          if not ref_digest:
+                              continue
+                          closure.add(f"blobs/{ref_digest.replace(':', '/')}")
+                          if "json" in ref.get("mediaType", "") and ref_digest not in seen:
+                              pending.append(ref_digest)
+                              seen.add(ref_digest)
+
+          stale = []
+
+          for line in registry_listing.splitlines():
+              date, time, size, key = line.split(maxsplit=3)
+              last_modified = datetime.datetime.strptime(
+                  f"{date} {time}", "%Y-%m-%d %H:%M:%S"
+              ).replace(tzinfo=datetime.timezone.utc)
+              if key not in closure and last_modified < cutoff:
+                  stale.append(key)
+
+          stale_path.write_text("".join(f"{key}\n" for key in stale))
+
+      - name: Delete stale objects
+        shell: 'nix shell nixpkgs#awscli2 nixpkgs#jq --command bash --noprofile --norc -euo pipefail {0}'
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          shopt -s nullglob
+
+          split -l 1000 -d "$RUNNER_TEMP/stale.txt" "$RUNNER_TEMP/stale-batch."
+
+          for batch in "$RUNNER_TEMP"/stale-batch.*; do
+            aws --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" s3api delete-objects \
+              --bucket "challenges-registry" \
+              --delete "$(jq -Rn '{Objects:[inputs | {Key:.}]}' < "$batch")" \
+              >/dev/null
+          done
