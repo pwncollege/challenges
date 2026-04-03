@@ -1,0 +1,37 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install --no-install-recommends -yqq \
+    binutils \
+    bsdextrautils \
+    bzip2 \
+    cpio \
+    ed \
+    emacs \
+    gcc \
+    genisoimage \
+    less \
+    make \
+    nano \
+    openssh-client \
+    python-is-python3 \
+    python3 \
+    ruby \
+    socat \
+    vim \
+    wget \
+    whiptail \
+    xxd \
+    zip && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN usermod -md /home/hacker -l hacker ubuntu && \
+    groupmod -n hacker ubuntu && \
+    mkdir -p /challenge/bin
+
+RUN chmod u+s "/usr/bin/{{ program_name }}" && \
+    ln -sf "/usr/bin/{{ program_name }}" "/challenge/bin/{{ program_name }}"
+
+ENV PATH="/challenge/bin:$PATH"
+COPY <<EOF /etc/environment
+PATH="$PATH"
+EOF
