@@ -1,8 +1,0 @@
-{%- extends "../../common/sql.py.j2" -%}
-
-{%- block setup -%}
-  {{- super() -}}
-  {%- set challenge.db_state = "trivial" -%}
-  {%- set challenge.max_characters = 5 -%}
-  {%- set challenge.doc_hint = "https://www.sqlite.org/lang_corefunc.html#substr" -%}
-{%- endblock -%}
