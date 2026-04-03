@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install --no-install-recommends -yqq \
     python3 \
     python3-pwntools \
     bash-builtins \
@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y \
     screen \
     sudo \
     tmux \
-    xxd
+    xxd \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ADD --chown=0:0 --chmod=6755 http://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
 
@@ -20,8 +21,8 @@ RUN <<'END'
 export DEBIAN_FRONTEND=noninteractive
 yes | unminimize
 
-usermod -md /home/hacker -l hacker ubuntu
-groupmod -n hacker ubuntu
+userdel --remove ubuntu
+useradd --user-group --uid 1000 --create-home --shell /bin/bash hacker
 
 cat >> /etc/bash.bashrc <<'EOF'
 if [ -f /challenge/.bashrc ]; then
