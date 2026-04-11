@@ -2,7 +2,6 @@ import __main__ as checker
 import random
 
 give_flag = True
-num_instructions = 5
 
 check_disassembly_prologue = "Checking that your assembly compares argc against 42..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -13,6 +12,10 @@ check_runtime_success = "Your program correctly uses cmp and setz to compare arg
 check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
+	assert len(disas) <= 5, (
+		"Your solution uses too many instructions."
+	)
+
 	mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
 	cmp_operands = [d.op_str for d in disas if d.mnemonic == 'cmp']
 
