@@ -58,9 +58,14 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Testing challenges"
+        jobs="$(( $(nproc) * 2 ))"
+        if [ "$CHALLENGES_DIR" = "challenges/v8-exploitation" ] && [ "$jobs" -gt 2 ]; then
+          jobs=2
+        fi
+
         ./pwnshop test \
           --modified-since="$MODIFIED_SINCE" \
-          --jobs "$(( $(nproc) * 2 ))" \
+          --jobs "$jobs" \
           --attempts 5 \
           --timeout 600 \
           --silent-failures \
