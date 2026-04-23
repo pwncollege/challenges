@@ -71,8 +71,8 @@ runs:
 
         echo "::group::Testing challenges"
         jobs="$(( $(nproc) * 2 ))"
-        if [ "$CHALLENGES_DIR" = "challenges/v8-exploitation" ] && [ "$jobs" -gt 2 ]; then
-          jobs=2
+        if [ "$CHALLENGES_DIR" = "challenges/v8-exploitation" ]; then
+          jobs=1
         fi
 
         ./pwnshop test \
