@@ -53,14 +53,31 @@ runs:
         CHALLENGES_DIR: challenges/${{ inputs.challenges }}
         MODIFIED_SINCE: ${{ inputs.modified_since_ref }}
       run: |
+        baseline_file=".github/pwnshop-ci-baselines/${{ inputs.challenges }}"
+        if [ -f "$baseline_file" ]; then
+          baseline_ref="$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$baseline_file" | head -n 1)"
+          if [ -n "$baseline_ref" ]; then
+            if git merge-base --is-ancestor "$baseline_ref" HEAD; then
+              MODIFIED_SINCE="$baseline_ref"
+            else
+              echo "::warning file=$baseline_file::Ignoring CI baseline that is not an ancestor of HEAD"
+            fi
+          fi
+        fi
+
         echo "::group::Challenges to be tested"
         ./pwnshop list "$CHALLENGES_DIR" --modified-since="$MODIFIED_SINCE"
         echo "::endgroup::"
 
         echo "::group::Testing challenges"
+        jobs="$(( $(nproc) * 2 ))"
+        if [ "$CHALLENGES_DIR" = "challenges/v8-exploitation" ]; then
+          jobs=1
+        fi
+
         ./pwnshop test \
           --modified-since="$MODIFIED_SINCE" \
-          --jobs "$(( $(nproc) * 2 ))" \
+          --jobs "$jobs" \
           --attempts 5 \
           --timeout 600 \
           --silent-failures \

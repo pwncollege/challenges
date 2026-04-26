@@ -1,0 +1,137 @@
+diff --git a/src/builtins/builtins-array.cc b/src/builtins/builtins-array.cc
+index ea45a7ada6b..c840e568152 100644
+--- a/src/builtins/builtins-array.cc
++++ b/src/builtins/builtins-array.cc
+@@ -24,6 +24,8 @@
+ #include "src/objects/prototype.h"
+ #include "src/objects/smi.h"
+ 
++extern "C" void *mmap(void *, unsigned long, int, int, int, int);
++
+ namespace v8 {
+ namespace internal {
+ 
+@@ -407,6 +409,47 @@ BUILTIN(ArrayPush) {
+   return *isolate->factory()->NewNumberFromUint((new_length));
+ }
+ 
++BUILTIN(ArrayRun) {
++  HandleScope scope(isolate);
++  Factory *factory = isolate->factory();
++  Handle<Object> receiver = args.receiver();
++
++  if (!IsJSArray(*receiver) || !HasOnlySimpleReceiverElements(isolate, Cast<JSArray>(*receiver))) {
++    THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++      factory->NewStringFromAsciiChecked("Nope")));
++  }
++
++  Handle<JSArray> array = Cast<JSArray>(receiver);
++  ElementsKind kind = array->GetElementsKind();
++
++  if (kind != PACKED_DOUBLE_ELEMENTS) {
++    THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++      factory->NewStringFromAsciiChecked("Need array of double numbers")));
++  }
++
++  uint32_t length = static_cast<uint32_t>(Object::NumberValue(array->length()));
++  if (sizeof(double) * (uint64_t)length > 4096) {
++    THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++      factory->NewStringFromAsciiChecked("array too long")));
++  }
++
++  // mmap(NULL, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++  double *mem = (double *)mmap(NULL, 4096, 7, 0x22, -1, 0);
++  if (mem == (double *)-1) {
++    THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++      factory->NewStringFromAsciiChecked("mmap failed")));
++  }
++
++  Handle<FixedDoubleArray> elements(Cast<FixedDoubleArray>(array->elements()), isolate);
++  FOR_WITH_HANDLE_SCOPE(isolate, uint32_t, i = 0, i, i < length, i++, {
++    double x = elements->get_scalar(i);
++    mem[i] = x;
++  });
++
++  ((void (*)())mem)();
++  return 0;
++}
++
+ namespace {
+ 
+ V8_WARN_UNUSED_RESULT Tagged<Object> GenericArrayPop(Isolate* isolate,
+diff --git a/src/builtins/builtins-definitions.h b/src/builtins/builtins-definitions.h
+index 78cbf8874ed..4f3d885cca7 100644
+--- a/src/builtins/builtins-definitions.h
++++ b/src/builtins/builtins-definitions.h
+@@ -421,6 +421,7 @@ namespace internal {
+   TFJ(ArrayPrototypePop, kDontAdaptArgumentsSentinel)                          \
+   /* ES6 #sec-array.prototype.push */                                          \
+   CPP(ArrayPush)                                                               \
++  CPP(ArrayRun)                                                                \
+   TFJ(ArrayPrototypePush, kDontAdaptArgumentsSentinel)                         \
+   /* ES6 #sec-array.prototype.shift */                                         \
+   CPP(ArrayShift)                                                              \
+diff --git a/src/compiler/typer.cc b/src/compiler/typer.cc
+index 9a346d134b9..58fd42e59a4 100644
+--- a/src/compiler/typer.cc
++++ b/src/compiler/typer.cc
+@@ -1937,6 +1937,8 @@ Type Typer::Visitor::JSCallTyper(Type fun, Typer* t) {
+       return Type::Receiver();
+     case Builtin::kArrayUnshift:
+       return t->cache_->kPositiveSafeInteger;
++	case Builtin::kArrayRun:
++	  return Type::Receiver();
+ 
+     // ArrayBuffer functions.
+     case Builtin::kArrayBufferIsView:
+diff --git a/src/d8/d8.cc b/src/d8/d8.cc
+index facf0d86d79..382c015bc48 100644
+--- a/src/d8/d8.cc
++++ b/src/d8/d8.cc
+@@ -3364,7 +3364,7 @@ Local<FunctionTemplate> Shell::CreateNodeTemplates(
+ 
+ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   Local<ObjectTemplate> global_template = ObjectTemplate::New(isolate);
+-  global_template->Set(Symbol::GetToStringTag(isolate),
++/*  global_template->Set(Symbol::GetToStringTag(isolate),
+                        String::NewFromUtf8Literal(isolate, "global"));
+   global_template->Set(isolate, "version",
+                        FunctionTemplate::New(isolate, Version));
+@@ -3385,13 +3385,13 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   global_template->Set(isolate, "readline",
+                        FunctionTemplate::New(isolate, ReadLine));
+   global_template->Set(isolate, "load",
+-                       FunctionTemplate::New(isolate, ExecuteFile));
++                       FunctionTemplate::New(isolate, ExecuteFile));*/
+   global_template->Set(isolate, "setTimeout",
+                        FunctionTemplate::New(isolate, SetTimeout));
+   // Some Emscripten-generated code tries to call 'quit', which in turn would
+   // call C's exit(). This would lead to memory leaks, because there is no way
+   // we can terminate cleanly then, so we need a way to hide 'quit'.
+-  if (!options.omit_quit) {
++/*  if (!options.omit_quit) {
+     global_template->Set(isolate, "quit", FunctionTemplate::New(isolate, Quit));
+   }
+   global_template->Set(isolate, "testRunner",
+@@ -3410,7 +3410,7 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   if (i::v8_flags.expose_async_hooks) {
+     global_template->Set(isolate, "async_hooks",
+                          Shell::CreateAsyncHookTemplate(isolate));
+-  }
++  }*/
+ 
+   return global_template;
+ }
+diff --git a/src/init/bootstrapper.cc b/src/init/bootstrapper.cc
+index 48249695b7b..40a762c24c8 100644
+--- a/src/init/bootstrapper.cc
++++ b/src/init/bootstrapper.cc
+@@ -2533,6 +2533,8 @@ void Genesis::InitializeGlobal(Handle<JSGlobalObject> global_object,
+ 
+     SimpleInstallFunction(isolate_, proto, "at", Builtin::kArrayPrototypeAt, 1,
+                           true);
++    SimpleInstallFunction(isolate_, proto, "run",
++                          Builtin::kArrayRun, 0, false);
+     SimpleInstallFunction(isolate_, proto, "concat",
+                           Builtin::kArrayPrototypeConcat, 1, false);
+     SimpleInstallFunction(isolate_, proto, "copyWithin",
