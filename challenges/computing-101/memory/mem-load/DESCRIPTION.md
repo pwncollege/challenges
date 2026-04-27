@@ -51,4 +51,4 @@ To do this, you must read it into `rdi`, whose value, if you recall, is the firs
 Good luck!
 
 ----
-*NOTE*: To solve this challenge, you must pass either the output executable binary or the assembly code `.s` file to `/challenge/check`.
+*NOTE*: To solve this challenge, you must pass the assembled code to `/challenge/check`.
