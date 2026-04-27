@@ -28,7 +28,7 @@ This challenge (at `/challenge/reverse-me`) has 256 possible cases, with only on
 Look at the jump table (you'll have to look at a lot of entries...), look at the program to understand how to influence the index, and get the flag!
 
 You must pass an argument to the program. If you don't, it will crash with a segmentation fault.
-From the [Software Introspection](/computing-101/introspection) module, remember: you practiced passing arguments in gdb. To pass an argument here, either launch with `gdb --args /challenge/reverse-me YOUR_INPUT`, or launch gdb first and run `set args YOUR_INPUT` before `starti`.
+From the [Software Introspection](/computing-101/introspecting) module, remember: you practiced passing arguments in gdb. To pass an argument here, either launch with `gdb --args /challenge/reverse-me YOUR_INPUT`, or launch gdb first and run `set args YOUR_INPUT` before `starti`.
 
 ----
 **NOTE:**
