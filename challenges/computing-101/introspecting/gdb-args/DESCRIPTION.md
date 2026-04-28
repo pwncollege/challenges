@@ -14,7 +14,7 @@ hacker@dojo:~$ /challenge/debug-me arg1 arg2 arg3
 ```
 
 In this level, using `set args` **is mandatory**.
-If you start the program in gdb without at least two arguments, the program exits before it reveals the secret.
+The program requires **exactly two arguments**. If you provide any other number of arguments, the program exits before it reveals the secret.
 
 Also, passing arguments directly outside gdb will not help you solve this level!
 For example, running:
@@ -35,7 +35,7 @@ When the arguments are set correctly, the secret will be loaded into the `rdi` r
 Go and do that!
 
 1. Launch gdb on `/challenge/debug-me`
-2. Run `set args <arg1> <arg2>` (arg1 and arg2 can be anything)
+2. Run `set args <arg1> <arg2>` (exactly 2 arguments), arg1 and arg2 can be anything
 3. Start the program (`starti`), then continue (`continue`)
 4. Read the secret with `print $rdi`
 5. Submit with `/challenge/submit-number`
