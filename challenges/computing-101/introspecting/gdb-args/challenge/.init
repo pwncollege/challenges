@@ -1,6 +1,6 @@
 #!/bin/bash
 
-NUM=$((RANDOM % 65536))
+NUM=$((RANDOM % 512))
 echo $NUM > /challenge/.correct
 chmod 600 /challenge/.correct
 
