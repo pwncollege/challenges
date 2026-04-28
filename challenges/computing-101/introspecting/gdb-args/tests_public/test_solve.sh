@@ -1,5 +1,11 @@
 #!/bin/bash
 
+GDB=$(command -v gdb)
+if [[ -z "$GDB" ]]; then
+  echo "FAIL: gdb not found on PATH"
+  exit 1
+fi
+
 # Running outside gdb should still trap on int3
 OUTSIDE_OUTPUT=$(/challenge/debug-me hello world 2>&1)
 OUTSIDE_STATUS=$?
@@ -17,7 +23,7 @@ if [[ "$OUTSIDE_STATUS" -ne 133 ]] && ! echo "$OUTSIDE_OUTPUT" | grep -Eiq "trac
 fi
 
 # First run without set args: should not hit SIGTRAP/int3
-NO_ARGS_OUTPUT=$(/usr/bin/gdb -q -nx -batch \
+NO_ARGS_OUTPUT=$("$GDB" -q -nx -batch \
   -x /challenge/.gdb \
   -ex "starti" \
   -ex "continue" \
@@ -29,7 +35,7 @@ if echo "$NO_ARGS_OUTPUT" | grep -q "SIGTRAP"; then
 fi
 
 # Now solve the intended way: set args, continue to int3, read rdi
-WITH_ARGS_OUTPUT=$(/usr/bin/gdb -q -nx -batch \
+WITH_ARGS_OUTPUT=$("$GDB" -q -nx -batch \
   -x /challenge/.gdb \
   -ex "set args test1 test2" \
   -ex "starti" \
