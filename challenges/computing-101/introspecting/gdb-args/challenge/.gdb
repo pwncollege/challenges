@@ -11,3 +11,9 @@ define hook-stop
   disas
   printf "\n"
 end
+
+break int3_loc
+commands
+silent
+python gdb.execute("set $rdi = " + __import__("subprocess").check_output(["/challenge/.read-secret"]).decode().strip())
+end

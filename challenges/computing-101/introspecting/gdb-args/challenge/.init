@@ -4,7 +4,8 @@ NUM=$((RANDOM % 65536))
 echo $NUM > /challenge/.correct
 chmod 600 /challenge/.correct
 
-# Only reveals the secret when two args are passed
+# NUM is injected at runtime via /challenge/.read-secret, called from a
+# breakpoint command in .gdb that targets the int3_loc label below.
 ASM=$(mktemp).o
 as -o $ASM <<EOF
 .intel_syntax noprefix
@@ -15,7 +16,8 @@ main:
     cmp rdi, 3
     jne no_break
 
-    mov rdi, $NUM
+.global int3_loc
+int3_loc:
     int3
 
     mov rdi, 0

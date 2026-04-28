@@ -1,8 +1,18 @@
 #!/bin/bash
 
-GDB=$(command -v gdb)
+# Prefer the system gdb directly so the /challenge/bin/gdb wrapper (which
+# rejects multi-arg invocations) does not interfere with testing
+GDB=/usr/bin/gdb
+[[ -x "$GDB" ]] || GDB=$(command -v gdb)
 if [[ -z "$GDB" ]]; then
-  echo "FAIL: gdb not found on PATH"
+  echo "FAIL: gdb not found"
+  exit 1
+fi
+
+OBJDUMP=/usr/bin/objdump
+[[ -x "$OBJDUMP" ]] || OBJDUMP=$(command -v objdump)
+if [[ -z "$OBJDUMP" ]]; then
+  echo "FAIL: objdump not found"
   exit 1
 fi
 
@@ -50,10 +60,25 @@ if [[ -z "$CALCULATED" ]]; then
   exit 1
 fi
 
-if /challenge/submit-number "$CALCULATED" >/dev/null 2>&1; then
-  echo "PASS"
-  exit 0
-else
+if ! /challenge/submit-number "$CALCULATED" >/dev/null 2>&1; then
   echo "FAIL: Retrieved value was not accepted by submit-number"
   exit 1
 fi
+
+# Skipped for NUM=0 since the binary's exit-path `mov rdi, 0x0` would false-positive.
+if [[ "$CALCULATED" -ne 0 ]]; then
+  NUM_HEX=$(printf '0x%x' "$CALCULATED")
+  if "$OBJDUMP" -d -M intel /challenge/debug-me 2>/dev/null | grep -qE "mov[[:space:]]+rdi.*(${NUM_HEX}|${CALCULATED})"; then
+    echo "FAIL: NUM is statically visible via objdump on /challenge/debug-me"
+    exit 1
+  fi
+fi
+
+# The SUID helper must refuse callers whose parent is not gdb
+if /challenge/.read-secret >/dev/null 2>&1; then
+  echo "FAIL: /challenge/.read-secret leaked NUM to a non-gdb caller"
+  exit 1
+fi
+
+echo "PASS"
+exit 0
