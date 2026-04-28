@@ -3,15 +3,15 @@
 # Prefer the system gdb directly so the /challenge/bin/gdb wrapper (which
 # rejects multi-arg invocations) does not interfere with testing
 GDB=/usr/bin/gdb
-[[ -x "$GDB" ]] || GDB=$(command -v gdb)
-if [[ -z "$GDB" ]]; then
+[[ -x "$GDB" ]] || GDB=$(PATH=/usr/bin:/bin command -v gdb 2>/dev/null || true)
+if [[ -z "$GDB" || ! -x "$GDB" || "$GDB" == "/challenge/bin/gdb" ]]; then
   echo "FAIL: gdb not found"
   exit 1
 fi
 
 OBJDUMP=/usr/bin/objdump
-[[ -x "$OBJDUMP" ]] || OBJDUMP=$(command -v objdump)
-if [[ -z "$OBJDUMP" ]]; then
+[[ -x "$OBJDUMP" ]] || OBJDUMP=$(PATH=/usr/bin:/bin command -v objdump 2>/dev/null || true)
+if [[ -z "$OBJDUMP" || ! -x "$OBJDUMP" || "$OBJDUMP" == "/challenge/bin/objdump" ]]; then
   echo "FAIL: objdump not found"
   exit 1
 fi
