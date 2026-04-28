@@ -10,7 +10,7 @@ How do you solve this?
 You must read the disassembly of the program, analyze the `cmp` instructions, understand the password that the program needs, then run it with the correct argument.
 
 You already have the tools for this!
-From the [Software Introspection](/computing-101/software-introspection) module, remember: `objdump -d -M intel /challenge/reverse-me` disassembles the binary and shows its assembly instructions.
+From the [Software Introspection](/computing-101/introspecting) module, remember: `objdump -d -M intel /challenge/reverse-me` disassembles the binary and shows its assembly instructions.
 You'll see familiar `cmp` instructions similar to those you wrote in the last challenge, but instead of the familiar `''`-quoted characters, the compared-against values will be written as hex.
 The immediate values in those comparisons _are_ the password characters, encoded as hexadecimal ASCII values.
 
