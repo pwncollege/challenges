@@ -44,6 +44,7 @@ if echo "$NO_ARGS_OUTPUT" | grep -q "SIGTRAP"; then
   exit 1
 fi
 
+
 # Now solve the intended way: set args, continue to int3, read rdi
 WITH_ARGS_OUTPUT=$("$GDB" -q -nx -batch \
   -x /challenge/.gdb \
@@ -51,7 +52,7 @@ WITH_ARGS_OUTPUT=$("$GDB" -q -nx -batch \
   -ex "starti" \
   -ex "continue" \
   -ex "print/d \$rdi" \
-  /challenge/debug-me 2>/dev/null || true)
+  /challenge/debug-me 2>&1 || true)
 
 CALCULATED=$(echo "$WITH_ARGS_OUTPUT" | sed -n 's/^\$[0-9][0-9]* = //p' | tail -n 1)
 
@@ -62,6 +63,10 @@ fi
 
 if ! /challenge/submit-number "$CALCULATED" >/dev/null 2>&1; then
   echo "FAIL: Retrieved value was not accepted by submit-number"
+  echo "--- gdb output ---"
+  echo "$WITH_ARGS_OUTPUT"
+  echo "--- end gdb output ---"
+  ls -la /challenge/
   exit 1
 fi
 

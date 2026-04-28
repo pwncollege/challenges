@@ -1,1 +1,7 @@
-{% include "../../../common/Dockerfile.j2" %}
+{%- extends "../../../common/Dockerfile.j2" %}
+
+{%- block after_setup %}
+{{- super() -}}
+# Set SUID so it can read /challenge/.correct and inject it to gdb
+RUN chmod 4755 /challenge/.read-secret
+{%- endblock %}
