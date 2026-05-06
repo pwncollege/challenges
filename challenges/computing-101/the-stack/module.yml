@@ -17,3 +17,6 @@ resources:
 - type: challenge
   id: mem-pop
   name: "Popping From the Stack"
+- type: challenge
+  id: mem-envp
+  name: "Environment Variables on the Stack"

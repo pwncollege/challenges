@@ -100,3 +100,6 @@ resources:
 - type: challenge
   id: gdb-int3
   name: "Cooperative Debugging"
+- type: challenge
+  id: gdb-environment
+  name: "GDB and the Stack Environment"

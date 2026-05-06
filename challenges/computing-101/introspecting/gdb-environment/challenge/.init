@@ -1,0 +1,22 @@
+#!/bin/bash
+
+CHARS=({A..Z})
+CHAR=${CHARS[$RANDOM % 26]}
+NUM=$(printf '%d' "'$CHAR")
+echo $NUM > /challenge/.correct
+chmod 600 /challenge/.correct
+
+echo "$CHAR" > /challenge/.envchar
+chmod 644 /challenge/.envchar
+
+ASM=$(mktemp).o
+as -o $ASM <<EOF
+.intel_syntax noprefix
+main:
+mov rdi, [rsp+24]
+movzx rdi, byte ptr [rdi]
+mov rax, 60
+syscall
+EOF
+ld -o /challenge/debug-me $ASM 2>/tmp/.init.log
+rm $ASM
