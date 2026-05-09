@@ -1,0 +1,48 @@
+#!/usr/bin/exec-suid --real -- /bin/bash -p
+
+# This wrapper makes gdb run as root so that the kernel preserves SUID elevation
+# on /challenge/program when ptraced (otherwise Yama strips it). It accepts
+# -ex/--eval-command/-batch/-q flags plus exactly one positional argument
+# (which must be /challenge/program).
+#
+# Safety rests on /challenge/.gdb (loaded via -x before any user commands)
+# redefining shell, pipe, python, source, add-symbol-file, dump, save as no-ops.
+
+allowed_args=()
+program=""
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		-batch|-q|--quiet|--silent)
+			allowed_args+=("$1")
+			shift
+			;;
+		-ex|--eval-command)
+			[ -z "${2+x}" ] && { fold -s <<<"$1 needs an argument"; exit 1; }
+			allowed_args+=("$1" "$2")
+			shift 2
+			;;
+		-*)
+			fold -s <<<"This wrapper rejects gdb flag: $1"
+			exit 1
+			;;
+		*)
+			[ -n "$program" ] && { fold -s <<<"Only one program argument allowed"; exit 1; }
+			program="$1"
+			shift
+			;;
+	esac
+done
+
+if [ -z "$program" ]; then
+	fold -s <<<"You called gdb without a program. Use: gdb /challenge/program"
+	exit 1
+fi
+
+if [ "$(realpath -- "$program")" != "/challenge/program" ]; then
+	fold -s <<<"This wrapper only debugs /challenge/program."
+	exit 1
+fi
+
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT GDBHISTFILE PYTHONPATH PYTHONHOME
+
+exec /usr/bin/gdb -nx -x /challenge/.gdb "${allowed_args[@]}" "$program"

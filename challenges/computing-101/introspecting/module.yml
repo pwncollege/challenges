@@ -101,5 +101,5 @@ resources:
   id: gdb-int3
   name: "Cooperative Debugging"
 - type: challenge
-  id: gdb-environment
-  name: "GDB and the Stack Environment"
+  id: gdb-stack-align
+  name: "Aligning the Stack Through GDB"

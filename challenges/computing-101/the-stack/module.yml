@@ -20,3 +20,6 @@ resources:
 - type: challenge
   id: mem-envp
   name: "Environment Variables on the Stack"
+- type: challenge
+  id: mem-stack-align
+  name: "Aligning the Stack Through the Environment"
