@@ -112,8 +112,7 @@ static int do_challenge_phase(int argc, char **argv)
 {
     if (argc != 1) {
         fprintf(stderr,
-                "I require argc == 1, but you launched me with argc == %d.\n"
-                "Run me with no extra arguments.\n",
+                "argc == %d, but I need argc == 1. Run me with no extra arguments.\n",
                 argc);
         return 1;
     }
@@ -121,8 +120,8 @@ static int do_challenge_phase(int argc, char **argv)
     unsigned long a0 = (unsigned long)argv[0];
     if ((a0 & 0xFFFF) != 0x5390) {
         fprintf(stderr,
-                "argv[0] = %p, but I need (argv[0] & 0xFFFF) == 0x5390.\n"
-                "(your environment variables sit on the stack and shift argv[0])\n",
+                "argv[0] = %p; I need (argv[0] & 0xFFFF) == 0x5390.\n"
+                "Tune the length of an environment variable to shift it.\n",
                 argv[0]);
         return 1;
     }

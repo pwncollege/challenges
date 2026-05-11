@@ -170,8 +170,7 @@ static int do_challenge_phase(int argc, char **argv)
 {
     if (argc != 1) {
         fprintf(stderr,
-                "I require argc == 1, but you launched me with argc == %d.\n"
-                "Run me with no extra arguments.\n",
+                "argc == %d, but I need argc == 1. Run me with no extra arguments.\n",
                 argc);
         return 1;
     }
@@ -179,8 +178,8 @@ static int do_challenge_phase(int argc, char **argv)
     unsigned long a0 = (unsigned long)argv[0];
     if ((a0 & 0xFFFF) != 0x5390) {
         fprintf(stderr,
-                "argv[0] = %p, but I need (argv[0] & 0xFFFF) == 0x5390.\n"
-                "(your environment variables sit on the stack and shift argv[0])\n",
+                "argv[0] = %p; I need (argv[0] & 0xFFFF) == 0x5390.\n"
+                "Tune the length of an environment variable to shift it.\n",
                 argv[0]);
         return 1;
     }
@@ -211,13 +210,12 @@ static int do_challenge_phase(int argc, char **argv)
 
     int traced = is_traced();
     fprintf(stderr,
-            "Aligned in this context (%s) --- but you also need to do the same "
-            "alignment in the OTHER context.\n"
-            "Run me %s and align argv[0] there too.\n",
+            "argv[0] aligned in the %s context. "
+            "Now align it %s to unlock the flag.\n",
             traced ? "GDB" : "shell",
-            traced ? "from your shell with `env -i FOO=... /challenge/program`"
-                   : "under GDB with `gdb /challenge/program` then "
-                     "`set exec-wrapper env -i FOO=...; run`");
+            traced ? "from a shell (`env -i FOO=... /challenge/program`)"
+                   : "under GDB (`gdb /challenge/program`, then "
+                     "`set exec-wrapper env -i FOO=...; run`)");
     return 1;
 }
 
