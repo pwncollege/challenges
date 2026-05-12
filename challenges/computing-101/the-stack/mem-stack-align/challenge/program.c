@@ -1,4 +1,18 @@
+/* Two-phase trick to keep the user-facing "just run /challenge/program" UX:
+ *
+ *   1. SUID phase opens /flag (stashed as FD 100, inherited across execve),
+ *      sets ADDR_NO_RANDOMIZE for the next exec, drops privileges, and
+ *      re-execs a non-SUID memfd copy of itself.
+ *   2. The re-exec'd phase has deterministic addresses (no ASLR) and a clean
+ *      FD 100 it can read the flag from. argv[0]'s low bits are now a pure
+ *      function of env-string lengths -- which is the lesson.
+ *
+ * Why memfd-copy for the re-exec? Re-execing the SUID binary triggers
+ * secureexec and clears ADDR_NO_RANDOMIZE. A memfd carries no SUID bit.
+ */
+
 #define _GNU_SOURCE
+#include <err.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/personality.h>
@@ -10,115 +24,52 @@ extern char **environ;
 
 #define FLAG_FD 100
 
-static int looks_like_post_exec(void)
-{
+static int re_exec_phase(void) {
     struct stat st;
     return fstat(FLAG_FD, &st) == 0;
 }
 
-static int read_flag_into_memfd(void)
-{
-    int file = open("/flag", O_RDONLY);
-    if (file < 0) {
-        perror("open /flag");
-        return -1;
-    }
-    int memfd = syscall(SYS_memfd_create, "f", 0);
-    if (memfd < 0) {
-        perror("memfd_create flag");
-        close(file);
-        return -1;
-    }
-    char buf[256];
-    ssize_t n;
-    while ((n = read(file, buf, sizeof buf)) > 0) {
-        if (write(memfd, buf, n) != n) {
-            perror("write flag");
-            close(file);
-            close(memfd);
-            return -1;
-        }
-    }
-    close(file);
-    lseek(memfd, 0, SEEK_SET);
-    if (dup2(memfd, FLAG_FD) < 0) {
-        perror("dup2");
-        close(memfd);
-        return -1;
-    }
-    close(memfd);
-    return 0;
+static void inherit_fd(const char *path, int target, int flags) {
+    int fd = open(path, flags);
+    if (fd < 0) err(1, "open %s", path);
+    if (dup2(fd, target) < 0) err(1, "dup2 %s", path);
+    close(fd);
 }
 
-static int copy_self_to_memfd(void)
-{
-    int self = open("/proc/self/exe", O_RDONLY);
-    if (self < 0) {
-        perror("open /proc/self/exe");
-        return -1;
-    }
-    int memfd = syscall(SYS_memfd_create, "p", 0);
-    if (memfd < 0) {
-        perror("memfd_create exe");
-        close(self);
-        return -1;
-    }
+static int memfd_clone(const char *path) {
+    int src = open(path, O_RDONLY);
+    if (src < 0) err(1, "open %s", path);
+    int dst = syscall(SYS_memfd_create, "clone", 0);
+    if (dst < 0) err(1, "memfd_create");
     char buf[8192];
     ssize_t n;
-    while ((n = read(self, buf, sizeof buf)) > 0) {
-        if (write(memfd, buf, n) != n) {
-            perror("write self");
-            close(self);
-            close(memfd);
-            return -1;
-        }
-    }
-    close(self);
-    return memfd;
+    while ((n = read(src, buf, sizeof buf)) > 0)
+        if (write(dst, buf, n) != n) err(1, "write");
+    close(src);
+    return dst;
 }
 
-static int do_setup_phase(int argc, char **argv)
-{
-    /* Stash the flag where the post-exec phase can find it. */
-    if (read_flag_into_memfd() < 0)
-        return 1;
+static void setup_phase(char **argv) {
+    inherit_fd("/flag", FLAG_FD, O_RDONLY);
 
-    /* Ask the kernel to disable ASLR for our next exec. */
-    int pers = personality(0xFFFFFFFF);
-    if (personality(pers | ADDR_NO_RANDOMIZE) == -1) {
-        perror("personality");
-        return 1;
-    }
+    if (personality(personality(0xFFFFFFFF) | ADDR_NO_RANDOMIZE) < 0)
+        err(1, "personality");
+    if (setresuid(getuid(), getuid(), getuid()) < 0)
+        err(1, "setresuid");
 
-    /* Drop the saved-uid so the next exec is a fully-unprivileged process. */
-    if (setresuid(getuid(), getuid(), getuid()) < 0) {
-        perror("setresuid");
-        return 1;
-    }
-
-    /* Re-exec from a memfd copy of ourselves: no SUID bit on the source means
-     * the kernel won't trigger secureexec, so the personality flag survives. */
-    int exe_memfd = copy_self_to_memfd();
-    if (exe_memfd < 0)
-        return 1;
+    int exe = memfd_clone("/proc/self/exe");
     char path[64];
-    snprintf(path, sizeof path, "/proc/self/fd/%d", exe_memfd);
+    snprintf(path, sizeof path, "/proc/self/fd/%d", exe);
     execve(path, argv, environ);
-    perror("execve");
-    return 1;
+    err(1, "execve");
 }
 
-static int do_challenge_phase(int argc, char **argv)
-{
+static int challenge_phase(int argc, char **argv) {
     if (argc != 1) {
-        fprintf(stderr,
-                "argc == %d, but I need argc == 1. Run me with no extra arguments.\n",
-                argc);
+        fprintf(stderr, "argc == %d, but I need argc == 1.\n", argc);
         return 1;
     }
-
-    unsigned long a0 = (unsigned long)argv[0];
-    if ((a0 & 0xFFFF) != 0x5390) {
+    if (((unsigned long)argv[0] & 0xFFFF) != 0x5390) {
         fprintf(stderr,
                 "argv[0] = %p; I need (argv[0] & 0xFFFF) == 0x5390.\n"
                 "Tune the length of an environment variable to shift it.\n",
@@ -128,15 +79,12 @@ static int do_challenge_phase(int argc, char **argv)
 
     char buf[256];
     ssize_t n = read(FLAG_FD, buf, sizeof buf);
-    if (n > 0)
-        write(1, buf, n);
-    close(FLAG_FD);
+    if (n > 0) write(1, buf, n);
     return 0;
 }
 
-int main(int argc, char **argv)
-{
-    if (looks_like_post_exec())
-        return do_challenge_phase(argc, argv);
-    return do_setup_phase(argc, argv);
+int main(int argc, char **argv) {
+    if (re_exec_phase()) return challenge_phase(argc, argv);
+    setup_phase(argv);
+    return 1; /* unreachable */
 }
