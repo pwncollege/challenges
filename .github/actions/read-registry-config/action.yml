@@ -1,0 +1,40 @@
+name: Read registry config
+description: Read registry bucket and host values from the Worker wrangler.toml.
+inputs:
+  wrangler_toml:
+    description: Path to the Worker wrangler.toml.
+    required: false
+    default: services/registry/wrangler.toml
+outputs:
+  bucket_name:
+    description: R2 bucket name for the registry bucket binding.
+    value: ${{ steps.read-registry-config.outputs.bucket_name }}
+  registry_host:
+    description: Registry hostname from the first Worker route pattern.
+    value: ${{ steps.read-registry-config.outputs.registry_host }}
+runs:
+  using: composite
+  steps:
+    - name: Read registry config
+      id: read-registry-config
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        WRANGLER_TOML: ${{ inputs.wrangler_toml }}
+      run: |
+        bucket_name="$(tq -o json -f "$WRANGLER_TOML" r2_buckets | jq -r '.[] | select(.binding == "REGISTRY_BUCKET") | .bucket_name')"
+        registry_host="$(tq -o json -f "$WRANGLER_TOML" routes | jq -r '.[0].pattern')"
+
+        if [ -z "$bucket_name" ] || [ "$bucket_name" = "null" ]; then
+          echo "::error::Could not find REGISTRY_BUCKET bucket_name in $WRANGLER_TOML"
+          exit 1
+        fi
+
+        case "$registry_host" in
+          ""|"null"|*'*'*|*/*|*:*)
+            echo "::error::Registry route pattern must be a bare hostname, got: $registry_host"
+            exit 1
+            ;;
+        esac
+
+        printf 'bucket_name=%s\n' "$bucket_name" >> "$GITHUB_OUTPUT"
+        printf 'registry_host=%s\n' "$registry_host" >> "$GITHUB_OUTPUT"

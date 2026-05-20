@@ -1,11 +1,16 @@
 name: Determine modified challenges
-description: Determine modified challenges and group them by top-level directory.
+description: Determine modified challenges, apply an optional glob filter, and group them for downstream jobs.
+inputs:
+  challenge_filter:
+    description: Challenge path glob under challenges/.
+    required: false
+    default: ""
 outputs:
   modified_since_ref:
     description: Base ref challenges have been modified since.
     value: ${{ steps.resolve-ref.outputs.ref }}
   challenges:
-    description: Top-level challenge groups.
+    description: Filtered top-level challenge groups.
     value: ${{ steps.resolve-challenges.outputs.challenges }}
 runs:
   using: composite
@@ -47,26 +52,30 @@ runs:
     - uses: actions/github-script@v8
       id: resolve-challenges
       env:
+        CHALLENGE_FILTER: ${{ inputs.challenge_filter || vars.CHALLENGE_FILTER || '**' }}
         MODIFIED_SINCE: ${{ steps.resolve-ref.outputs.ref }}
       with:
         script: |
-          const { execFileSync } = require("child_process");
+          const childProcess = require("child_process");
+          const path = require("path");
           const ref = process.env.MODIFIED_SINCE || "";
-          const output = execFileSync("./pwnshop", ["list", "./challenges", `--modified-since=${ref}`], {
+          const challengeFilter = process.env.CHALLENGE_FILTER.trim();
+          const output = childProcess.execFileSync("./pwnshop", ["list", "./challenges", `--modified-since=${ref}`], {
             stdio: ["ignore", "pipe", "inherit"],
           })
             .toString()
             .trim();
+          const listedChallenges = output.split("\n").map((line) => line.trim()).filter(Boolean);
+          const groupChallenge = (challenge) => {
+            const parts = challenge.split("/");
+            if (parts[0] === "legacy") return `legacy/${parts[1]}`;
+            return challenge;
+          };
           const challenges = Array.from(
             new Set(
-              output
-                .split("\n")
-                .map((line) => {
-                  const parts = line.trim().split("/");
-                  if (parts[0] === "legacy") return `legacy/${parts[1]}`;
-                  return parts[0];
-                })
-                .filter(Boolean),
+              listedChallenges
+                .filter((challenge) => path.matchesGlob(challenge, challengeFilter))
+                .map(groupChallenge),
             ),
           ).sort();
           core.setOutput("challenges", JSON.stringify(challenges));
