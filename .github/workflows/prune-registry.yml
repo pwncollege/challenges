@@ -18,6 +18,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-nix
 
+      - uses: ./.github/actions/read-registry-config
+        id: registry-config
+
       - name: Configure AWS credentials
         shell: 'nix shell nixpkgs#awscli2 --command bash --noprofile --norc -euo pipefail {0}'
         env:
@@ -32,12 +35,15 @@ jobs:
         shell: 'nix shell nixpkgs#awscli2 --command bash --noprofile --norc -euo pipefail {0}'
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ steps.registry-config.outputs.bucket_name }}
         run: |
           aws --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
-            s3 ls "s3://challenges-registry" --recursive > "$RUNNER_TEMP/registry-bucket.txt"
+            s3 ls "s3://${R2_BUCKET_NAME}" --recursive > "$RUNNER_TEMP/registry-bucket.txt"
 
       - name: Compute stale set
         shell: python
+        env:
+          REGISTRY_HOST: ${{ steps.registry-config.outputs.registry_host }}
         run: |
           import collections
           import concurrent.futures
@@ -54,7 +60,7 @@ jobs:
 
           def fetch(path):
               req = urllib.request.Request(
-                  f"https://challenges.pwn.college{path}",
+                  f"https://{os.environ['REGISTRY_HOST']}{path}",
                   headers={"User-Agent": "pwncollege-registry-prune/1"},
               )
               with urllib.request.urlopen(req, timeout=30) as resp:
@@ -118,6 +124,7 @@ jobs:
         shell: 'nix shell nixpkgs#awscli2 nixpkgs#jq --command bash --noprofile --norc -euo pipefail {0}'
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ steps.registry-config.outputs.bucket_name }}
         run: |
           shopt -s nullglob
 
@@ -125,7 +132,7 @@ jobs:
 
           for batch in "$RUNNER_TEMP"/stale-batch.*; do
             aws --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" s3api delete-objects \
-              --bucket "challenges-registry" \
+              --bucket "${R2_BUCKET_NAME}" \
               --delete "$(jq -Rn '{Objects:[inputs | {Key:.}]}' < "$batch")" \
               >/dev/null
           done

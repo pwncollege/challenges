@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      challenge_filter:
+        description: Challenge path glob to publish.
+        required: false
+        default: ""
 
 concurrency:
   group: publish-challenges-${{ github.ref }}
@@ -21,6 +26,8 @@ jobs:
     - name: Determine modified challenges
       id: determine-modified-challenges
       uses: ./.github/actions/determine-modified-challenges
+      with:
+        challenge_filter: ${{ inputs.challenge_filter || vars.CHALLENGE_FILTER || '**' }}
 
 
   publish:
@@ -51,11 +58,15 @@ jobs:
     - name: Install rclone
       run: sudo apt-get update && sudo apt-get install -y rclone
 
+    - uses: ./.github/actions/read-registry-config
+      id: registry-config
+
     - name: Publish challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
-        R2_BUCKET_NAME: challenges-registry
+        R2_BUCKET_NAME: ${{ steps.registry-config.outputs.bucket_name }}
+        REGISTRY_SECRET: ${{ secrets.REGISTRY_SECRET }}
         RCLONE_CONFIG_R2_TYPE: s3
         RCLONE_CONFIG_R2_PROVIDER: Cloudflare
         RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
@@ -69,6 +80,9 @@ jobs:
         while IFS= read -r line; do
           image_id="${line%% *}"
           challenge_slug="${line#* }"
+          if [ -n "$REGISTRY_SECRET" ]; then
+            challenge_slug="$REGISTRY_SECRET/$challenge_slug"
+          fi
           stack=("$image_id")
           while ((${#stack[@]})); do
             digest="${stack[-1]}"
@@ -96,12 +110,19 @@ jobs:
         echo "::endgroup::"
 
     - name: Update dojo
-      if: ${{ hashFiles(format('challenges/{0}/dojo.yml', matrix.challenges)) != '' }}
+      if: ${{ vars.DOJO_URL != '' && hashFiles(format('challenges/{0}/dojo.yml', matrix.challenges)) != '' }}
       env:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
-        DOJO_URL: https://pwn.college
+        DOJO_URL: ${{ vars.DOJO_URL }}
         DOJO_TOKEN: ${{ secrets.DOJO_TOKEN }}
-      run: ./tools/dojo/update-dojo --registry challenges.pwn.college "$CHALLENGES_DIR/dojo.yml"
+        REGISTRY_HOST: ${{ steps.registry-config.outputs.registry_host }}
+        REGISTRY_SECRET: ${{ secrets.REGISTRY_SECRET }}
+      run: |
+        registry="$REGISTRY_HOST"
+        if [ -n "$REGISTRY_SECRET" ]; then
+          registry="$registry/$REGISTRY_SECRET"
+        fi
+        ./tools/dojo/update-dojo --registry "$registry" "$CHALLENGES_DIR/dojo.yml"
 
     - name: Report runtime storage
       if: always()

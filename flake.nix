@@ -66,8 +66,10 @@
               docker
               git
               git-crypt
+              jq
               pwn-challenge-runtime
               pwnshop
+              tomlq
               uv
             ];
             shellHook = ''
