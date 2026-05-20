@@ -4,7 +4,7 @@ inputs:
   challenge_filter:
     description: Challenge path glob under challenges/.
     required: false
-    default: ""
+    default: "**"
 outputs:
   modified_since_ref:
     description: Base ref challenges have been modified since.
@@ -52,14 +52,14 @@ runs:
     - uses: actions/github-script@v8
       id: resolve-challenges
       env:
-        CHALLENGE_FILTER: ${{ inputs.challenge_filter || '**' }}
+        CHALLENGE_FILTER: ${{ inputs.challenge_filter }}
         MODIFIED_SINCE: ${{ steps.resolve-ref.outputs.ref }}
       with:
         script: |
           const childProcess = require("child_process");
           const path = require("path");
           const ref = process.env.MODIFIED_SINCE || "";
-          const challengeFilter = process.env.CHALLENGE_FILTER.trim();
+          const challengeFilter = process.env.CHALLENGE_FILTER.trim() || "**";
           const output = childProcess.execFileSync("./pwnshop", ["list", "./challenges", `--modified-since=${ref}`], {
             stdio: ["ignore", "pipe", "inherit"],
           })

@@ -27,7 +27,7 @@ jobs:
       id: determine-modified-challenges
       uses: ./.github/actions/determine-modified-challenges
       with:
-        challenge_filter: ${{ inputs.challenge_filter || vars.CHALLENGE_FILTER }}
+        challenge_filter: ${{ inputs.challenge_filter || vars.CHALLENGE_FILTER || '**' }}
 
 
   publish:
