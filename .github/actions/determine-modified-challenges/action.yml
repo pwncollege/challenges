@@ -69,7 +69,7 @@ runs:
           const groupChallenge = (challenge) => {
             const parts = challenge.split("/");
             if (parts[0] === "legacy") return `legacy/${parts[1]}`;
-            return challenge;
+            return parts[0];
           };
           const challenges = Array.from(
             new Set(
