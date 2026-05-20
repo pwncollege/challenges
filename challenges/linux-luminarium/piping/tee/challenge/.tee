@@ -1,6 +1,15 @@
 #!/usr/bin/exec-suid -- /bin/bash -p
 
 DIR=$(/bin/dirname ${BASH_SOURCE[0]})
+
+for arg in "$@"; do
+	real_arg=$(readlink -f "$arg" 2>/dev/null || echo "$arg")
+	if [ "$real_arg" = "/challenge/college" ]; then
+		fold -s <<< "WARNING: You are trying to overwrite /challenge/college! This corrupts the file needed to solve the dojo. Aborting."
+		exit 1
+	fi
+done
+
 if $DIR/chio.py --check_stdin_pipe challenge_shellscript 2>/dev/null && ! $DIR/chio.py --check_stdout_pipe challenge_shellscript 2>/dev/null
 then
 	fold -s <<< "You are trying to use 'tee' *instead* of /challenge/college. Use it *between* /challenge/pwn and /challenge/college!"
