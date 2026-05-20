@@ -52,7 +52,7 @@ runs:
     - uses: actions/github-script@v8
       id: resolve-challenges
       env:
-        CHALLENGE_FILTER: ${{ inputs.challenge_filter || vars.CHALLENGE_FILTER || '**' }}
+        CHALLENGE_FILTER: ${{ inputs.challenge_filter || '**' }}
         MODIFIED_SINCE: ${{ steps.resolve-ref.outputs.ref }}
       with:
         script: |
