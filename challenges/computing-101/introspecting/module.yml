@@ -98,5 +98,8 @@ resources:
   id: gdb-examine-argv1
   name: "Examining Stack Pointers"
 - type: challenge
+  id: gdb-args
+  name: "Passing Parameters to Programs"
+- type: challenge
   id: gdb-int3
   name: "Cooperative Debugging"
