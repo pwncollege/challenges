@@ -24,6 +24,8 @@ jobs:
     - name: Determine modified challenges
       id: determine-modified-challenges
       uses: ./.github/actions/determine-modified-challenges
+      with:
+        challenge_filter: ${{ vars.CHALLENGE_FILTER || '**' }}
 
 
   test-challenges:
