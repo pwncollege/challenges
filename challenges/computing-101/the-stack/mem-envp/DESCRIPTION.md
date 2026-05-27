@@ -1,8 +1,6 @@
-In the previous level, you read `argv[1]` from the stack.
-But the stack stores more than just `argc` and `argv`!
-
-Right after the argument list, the kernel places **environment variables**: the strings like `PATH=/usr/bin:...` or `HOME=/home/hacker` that you might have seen in your shell.
-Just like `argv`, these are stored on the stack as an array of pointers to strings.
+The stack stores more than just `argc` and `argv`!
+Right after the argument list, the kernel places the **environment variables** you learned about in the [Linux Luminarium](/linux-luminarium).
+Just like `argv`, these are stored on the stack as an array of pointers to strings, where the string includes both the name and value of the variable, as so: `PATH=/usr/bin:...`, `HOME=/home/hacker`, or `PWN=COLLEGE`.
 
 The structure looks like this (assuming `argc` is 1, so just the program name and no arguments):
 
@@ -36,6 +34,5 @@ Two new things to notice:
 In this challenge, we will run your program with **only one environment variable** (something like `A=hello`, `B=hello`, etc., chosen at random), and `argc` will be `1`.
 That means `[rsp+24]` will hold a pointer to a string like `"A=hello"`, and the first byte of that string will be the letter `A`.
 
-Read the first byte of the `envp[0]` string and exit with it!
-
-Just like `argv[1]`, this requires **two dereferences**: one to get the `envp[0]` pointer from the stack, and one to follow that pointer to read the first byte of the string.
+This challenge requires you to read the first byte of the `envp[0]` string and exit with it!
+Just like `argv[1]` previously, this requires **two dereferences**: one to get the `envp[0]` pointer from the stack, and one to follow that pointer to read the first byte of the string.
