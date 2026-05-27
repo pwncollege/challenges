@@ -1,7 +1,7 @@
 In the previous levels, you've read `argc`, `argv`, and `envp` from the stack.
-But where each of those values *sits* on the stack --- the actual addresses --- depends on **how the program was launched**.
+But the actual addresses of these strings depends on **how the program was launched**.
 
-When the kernel sets up the stack at `exec` time, it places all the strings (the program name, the arguments, and the environment variables) at the *top* of the stack region, and then computes the `argv[i]` and `envp[i]` pointers to point into them:
+When the program is launched, all the strings (the program name, the arguments, and the environment variables) are placed on the stack, and then computes the `argv[i]` and `envp[i]` pointers to point into them:
 
 ```text
 high addresses
