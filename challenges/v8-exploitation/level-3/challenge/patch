@@ -1,0 +1,108 @@
+diff --git a/src/d8/d8.cc b/src/d8/d8.cc
+index facf0d86d79..0299ed26802 100644
+--- a/src/d8/d8.cc
++++ b/src/d8/d8.cc
+@@ -1283,6 +1283,52 @@ struct ModuleResolutionData {
+ 
+ }  // namespace
+ 
++void Shell::GetAddressOf(const v8::FunctionCallbackInfo<v8::Value>& info) {
++  v8::Isolate* isolate = info.GetIsolate();
++
++  if (info.Length() == 0) {
++    isolate->ThrowError("First argument must be provided");
++    return;
++  }
++
++  internal::Handle<internal::Object> arg = Utils::OpenHandle(*info[0]);
++  if (!IsHeapObject(*arg)) {
++    isolate->ThrowError("First argument must be a HeapObject");
++    return;
++  }
++  internal::Tagged<internal::HeapObject> obj = internal::Cast<internal::HeapObject>(*arg);
++
++  uint32_t address = static_cast<uint32_t>(obj->address());
++  info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, address));
++}
++
++void Shell::GetFakeObject(const v8::FunctionCallbackInfo<v8::Value>& info) {
++	v8::Isolate *isolate = info.GetIsolate();
++	Local<v8::Context> context = isolate->GetCurrentContext();
++
++	if (info.Length() != 1) {
++		isolate->ThrowError("Need exactly one argument");
++		return;
++	}
++
++	Local<v8::Uint32> arg;
++	if (!info[0]->ToUint32(context).ToLocal(&arg)) {
++		isolate->ThrowError("Argument must be a number");
++		return;
++	}
++	
++	uint32_t addr = arg->Value();
++
++	internal::PtrComprCageBase cage_base = internal::GetPtrComprCageBase();
++	internal::Address base_addr = internal::V8HeapCompressionScheme::GetPtrComprCageBaseAddress(cage_base);
++	uint64_t full_addr = base_addr + (uint64_t)addr;
++
++	internal::Tagged<internal::HeapObject> obj = internal::HeapObject::FromAddress(full_addr);
++	internal::Isolate *i_isolate = reinterpret_cast<internal::Isolate*>(isolate);
++	internal::Handle<internal::Object> obj_handle(obj, i_isolate);
++	info.GetReturnValue().Set(ToApiHandle<v8::Value>(obj_handle));
++}
++
+ void Shell::ModuleResolutionSuccessCallback(
+     const FunctionCallbackInfo<Value>& info) {
+   DCHECK(i::ValidateCallbackInfo(info));
+@@ -3364,7 +3410,11 @@ Local<FunctionTemplate> Shell::CreateNodeTemplates(
+ 
+ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   Local<ObjectTemplate> global_template = ObjectTemplate::New(isolate);
+-  global_template->Set(Symbol::GetToStringTag(isolate),
++  global_template->Set(isolate, "GetAddressOf",
++                       FunctionTemplate::New(isolate, GetAddressOf));
++  global_template->Set(isolate, "GetFakeObject",
++                       FunctionTemplate::New(isolate, GetFakeObject));
++/*  global_template->Set(Symbol::GetToStringTag(isolate),
+                        String::NewFromUtf8Literal(isolate, "global"));
+   global_template->Set(isolate, "version",
+                        FunctionTemplate::New(isolate, Version));
+@@ -3385,13 +3435,13 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   global_template->Set(isolate, "readline",
+                        FunctionTemplate::New(isolate, ReadLine));
+   global_template->Set(isolate, "load",
+-                       FunctionTemplate::New(isolate, ExecuteFile));
++                       FunctionTemplate::New(isolate, ExecuteFile));*/
+   global_template->Set(isolate, "setTimeout",
+                        FunctionTemplate::New(isolate, SetTimeout));
+   // Some Emscripten-generated code tries to call 'quit', which in turn would
+   // call C's exit(). This would lead to memory leaks, because there is no way
+   // we can terminate cleanly then, so we need a way to hide 'quit'.
+-  if (!options.omit_quit) {
++/*  if (!options.omit_quit) {
+     global_template->Set(isolate, "quit", FunctionTemplate::New(isolate, Quit));
+   }
+   global_template->Set(isolate, "testRunner",
+@@ -3410,7 +3460,7 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   if (i::v8_flags.expose_async_hooks) {
+     global_template->Set(isolate, "async_hooks",
+                          Shell::CreateAsyncHookTemplate(isolate));
+-  }
++  }*/
+ 
+   return global_template;
+ }
+diff --git a/src/d8/d8.h b/src/d8/d8.h
+index a19d4a0eae4..fbb091afbaf 100644
+--- a/src/d8/d8.h
++++ b/src/d8/d8.h
+@@ -507,6 +507,8 @@ class Shell : public i::AllStatic {
+   };
+   enum class CodeType { kFileName, kString, kFunction, kInvalid, kNone };
+ 
++  static void GetAddressOf(const v8::FunctionCallbackInfo<v8::Value>& args);
++  static void GetFakeObject(const v8::FunctionCallbackInfo<v8::Value>& args);
+   static bool ExecuteString(Isolate* isolate, Local<String> source,
+                             Local<String> name,
+                             ReportExceptions report_exceptions,

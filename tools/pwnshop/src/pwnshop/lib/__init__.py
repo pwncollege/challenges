@@ -26,7 +26,10 @@ if not clang_format:
 
 class RelativeEnvironment(jinja2.Environment):
     def join_path(self, template: str, parent: str) -> str:
-        return posixpath.normpath(str(pathlib.PurePosixPath(parent).parent / template))
+        parent_path = pathlib.PurePosixPath(parent)
+        if template.startswith("common/") and len(parent_path.parts) >= 3 and parent_path.parts[-2] == "challenge":
+            return posixpath.normpath(str(parent_path.parents[2] / template))
+        return posixpath.normpath(str(parent_path.parent / template))
 
 
 def render(template: pathlib.Path) -> str:
@@ -180,17 +183,31 @@ def build_challenge(challenge_path: pathlib.Path) -> str:
     try:
         label = challenge_path.as_posix().removeprefix("challenges/")
         logger.debug("docker build context: %s", rendered_directory / "challenge")
-        image_id = subprocess.check_output(
-            [
+        # `docker build -q` is completely silent and can look "hung" for large
+        # builds (e.g. compiling V8). Use an iidfile so we can stream progress
+        # without buffering unbounded output in memory.
+        with tempfile.NamedTemporaryFile(prefix="pwnshop-iid-", delete=False) as iidfile:
+            iid_path = pathlib.Path(iidfile.name)
+        try:
+            cmd = [
                 "docker",
                 "build",
-                "-q",
+                "--iidfile",
+                str(iid_path),
                 "--label",
                 f"pwncollege.challenge={label}",
-                str(rendered_directory / "challenge"),
-            ],
-            text=True,
-        ).strip()
+            ]
+            # Only valid when BuildKit is enabled.
+            if os.environ.get("DOCKER_BUILDKIT") != "0":
+                cmd += ["--progress=plain"]
+            cmd.append(str(rendered_directory / "challenge"))
+
+            # Stream build output so long builds show progress.
+            subprocess.check_call(cmd)
+
+            image_id = iid_path.read_text().strip()
+        finally:
+            iid_path.unlink(missing_ok=True)
         logger.info("built image %s for %s", image_id[:19], challenge_path)
         return image_id
     except subprocess.CalledProcessError as error:

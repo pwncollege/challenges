@@ -1,0 +1,134 @@
+diff --git a/src/builtins/builtins-array.cc b/src/builtins/builtins-array.cc
+index ea45a7ada6b..d450412f3e6 100644
+--- a/src/builtins/builtins-array.cc
++++ b/src/builtins/builtins-array.cc
+@@ -407,6 +407,53 @@ BUILTIN(ArrayPush) {
+   return *isolate->factory()->NewNumberFromUint((new_length));
+ }
+ 
++BUILTIN(ArrayFunctionMap) {
++	HandleScope scope(isolate);
++	Factory *factory = isolate->factory();
++	Handle<Object> receiver = args.receiver();
++
++	if (!IsJSArray(*receiver) || !HasOnlySimpleReceiverElements(isolate, Cast<JSArray>(*receiver))) {
++	  THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++    	factory->NewStringFromAsciiChecked("Nope")));
++	}
++
++	Handle<JSArray> array = Cast<JSArray>(receiver);
++
++	ElementsKind kind = array->GetElementsKind();
++
++	if (kind != PACKED_DOUBLE_ELEMENTS) {
++	  THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++    	factory->NewStringFromAsciiChecked("Need an array of double numbers")));
++	}
++
++	if (args.length() != 2) {
++	  THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++    	factory->NewStringFromAsciiChecked("Need exactly one argument")));
++	}
++	
++	uint32_t len = static_cast<uint32_t>(Object::NumberValue(array->length()));
++
++	Handle<Object> func_obj = args.at(1);
++	if (!IsJSFunction(*func_obj)) {
++	  THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++    	factory->NewStringFromAsciiChecked("The argument must be a function")));
++	}
++	
++	for (uint32_t i = 0; i < len; i++) {
++		double elem = Cast<FixedDoubleArray>(array->elements())->get_scalar(i);
++		Handle<Object> elem_handle = factory->NewHeapNumber(elem);
++		Handle<Object> result = Execution::Call(isolate, func_obj, array, 1, &elem_handle).ToHandleChecked();
++		if (!IsNumber(*result)) {
++		  THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++    		factory->NewStringFromAsciiChecked("The function must return a number")));
++		}
++		double result_value = static_cast<double>(Object::NumberValue(*result));
++		Cast<FixedDoubleArray>(array->elements())->set(i, result_value);
++	}
++
++	return ReadOnlyRoots(isolate).undefined_value();
++}
++
+ namespace {
+ 
+ V8_WARN_UNUSED_RESULT Tagged<Object> GenericArrayPop(Isolate* isolate,
+diff --git a/src/builtins/builtins-definitions.h b/src/builtins/builtins-definitions.h
+index 78cbf8874ed..ede2775903e 100644
+--- a/src/builtins/builtins-definitions.h
++++ b/src/builtins/builtins-definitions.h
+@@ -394,6 +394,7 @@ namespace internal {
+       ArraySingleArgumentConstructor)                                          \
+   TFC(ArrayNArgumentsConstructor, ArrayNArgumentsConstructor)                  \
+   CPP(ArrayConcat)                                                             \
++  CPP(ArrayFunctionMap)                                                        \
+   /* ES6 #sec-array.prototype.fill */                                          \
+   CPP(ArrayPrototypeFill)                                                      \
+   /* ES7 #sec-array.prototype.includes */                                      \
+diff --git a/src/compiler/typer.cc b/src/compiler/typer.cc
+index 9a346d134b9..33cf2d2edad 100644
+--- a/src/compiler/typer.cc
++++ b/src/compiler/typer.cc
+@@ -1937,6 +1937,8 @@ Type Typer::Visitor::JSCallTyper(Type fun, Typer* t) {
+       return Type::Receiver();
+     case Builtin::kArrayUnshift:
+       return t->cache_->kPositiveSafeInteger;
++	case Builtin::kArrayFunctionMap:
++	  return Type::Receiver();
+ 
+     // ArrayBuffer functions.
+     case Builtin::kArrayBufferIsView:
+diff --git a/src/d8/d8.cc b/src/d8/d8.cc
+index facf0d86d79..382c015bc48 100644
+--- a/src/d8/d8.cc
++++ b/src/d8/d8.cc
+@@ -3364,7 +3364,7 @@ Local<FunctionTemplate> Shell::CreateNodeTemplates(
+ 
+ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   Local<ObjectTemplate> global_template = ObjectTemplate::New(isolate);
+-  global_template->Set(Symbol::GetToStringTag(isolate),
++/*  global_template->Set(Symbol::GetToStringTag(isolate),
+                        String::NewFromUtf8Literal(isolate, "global"));
+   global_template->Set(isolate, "version",
+                        FunctionTemplate::New(isolate, Version));
+@@ -3385,13 +3385,13 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   global_template->Set(isolate, "readline",
+                        FunctionTemplate::New(isolate, ReadLine));
+   global_template->Set(isolate, "load",
+-                       FunctionTemplate::New(isolate, ExecuteFile));
++                       FunctionTemplate::New(isolate, ExecuteFile));*/
+   global_template->Set(isolate, "setTimeout",
+                        FunctionTemplate::New(isolate, SetTimeout));
+   // Some Emscripten-generated code tries to call 'quit', which in turn would
+   // call C's exit(). This would lead to memory leaks, because there is no way
+   // we can terminate cleanly then, so we need a way to hide 'quit'.
+-  if (!options.omit_quit) {
++/*  if (!options.omit_quit) {
+     global_template->Set(isolate, "quit", FunctionTemplate::New(isolate, Quit));
+   }
+   global_template->Set(isolate, "testRunner",
+@@ -3410,7 +3410,7 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   if (i::v8_flags.expose_async_hooks) {
+     global_template->Set(isolate, "async_hooks",
+                          Shell::CreateAsyncHookTemplate(isolate));
+-  }
++  }*/
+ 
+   return global_template;
+ }
+diff --git a/src/init/bootstrapper.cc b/src/init/bootstrapper.cc
+index 48249695b7b..5e76e66bc15 100644
+--- a/src/init/bootstrapper.cc
++++ b/src/init/bootstrapper.cc
+@@ -2533,6 +2533,8 @@ void Genesis::InitializeGlobal(Handle<JSGlobalObject> global_object,
+ 
+     SimpleInstallFunction(isolate_, proto, "at", Builtin::kArrayPrototypeAt, 1,
+                           true);
++	SimpleInstallFunction(isolate_, proto, "functionMap",
++	                      Builtin::kArrayFunctionMap, 1, false);
+     SimpleInstallFunction(isolate_, proto, "concat",
+                           Builtin::kArrayPrototypeConcat, 1, false);
+     SimpleInstallFunction(isolate_, proto, "copyWithin",

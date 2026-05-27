@@ -1,0 +1,83 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index c0192593c4a..83e264723f7 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -1889,6 +1889,7 @@ if (v8_postmortem_support) {
+ }
+ 
+ torque_files = [
++  "src/builtins/array-setlength.tq",
+   "src/builtins/aggregate-error.tq",
+   "src/builtins/array-at.tq",
+   "src/builtins/array-concat.tq",
+diff --git a/src/builtins/array-setlength.tq b/src/builtins/array-setlength.tq
+new file mode 100644
+index 00000000000..4a2a864af44
+--- /dev/null
++++ b/src/builtins/array-setlength.tq
+@@ -0,0 +1,14 @@
++namespace array {
++transitioning javascript builtin
++ArrayPrototypeSetLength(
++  js-implicit context: NativeContext, receiver: JSAny)(length: JSAny): JSAny {
++    try {
++      const len: Smi = Cast<Smi>(length) otherwise ErrorLabel;
++      const array: JSArray = Cast<JSArray>(receiver) otherwise ErrorLabel;
++      array.length = len;
++    } label ErrorLabel {
++        Print("Nope");
++    }
++    return receiver;
++}
++}
+diff --git a/src/d8/d8.cc b/src/d8/d8.cc
+index facf0d86d79..382c015bc48 100644
+--- a/src/d8/d8.cc
++++ b/src/d8/d8.cc
+@@ -3364,7 +3364,7 @@ Local<FunctionTemplate> Shell::CreateNodeTemplates(
+ 
+ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   Local<ObjectTemplate> global_template = ObjectTemplate::New(isolate);
+-  global_template->Set(Symbol::GetToStringTag(isolate),
++/*  global_template->Set(Symbol::GetToStringTag(isolate),
+                        String::NewFromUtf8Literal(isolate, "global"));
+   global_template->Set(isolate, "version",
+                        FunctionTemplate::New(isolate, Version));
+@@ -3385,13 +3385,13 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   global_template->Set(isolate, "readline",
+                        FunctionTemplate::New(isolate, ReadLine));
+   global_template->Set(isolate, "load",
+-                       FunctionTemplate::New(isolate, ExecuteFile));
++                       FunctionTemplate::New(isolate, ExecuteFile));*/
+   global_template->Set(isolate, "setTimeout",
+                        FunctionTemplate::New(isolate, SetTimeout));
+   // Some Emscripten-generated code tries to call 'quit', which in turn would
+   // call C's exit(). This would lead to memory leaks, because there is no way
+   // we can terminate cleanly then, so we need a way to hide 'quit'.
+-  if (!options.omit_quit) {
++/*  if (!options.omit_quit) {
+     global_template->Set(isolate, "quit", FunctionTemplate::New(isolate, Quit));
+   }
+   global_template->Set(isolate, "testRunner",
+@@ -3410,7 +3410,7 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   if (i::v8_flags.expose_async_hooks) {
+     global_template->Set(isolate, "async_hooks",
+                          Shell::CreateAsyncHookTemplate(isolate));
+-  }
++  }*/
+ 
+   return global_template;
+ }
+diff --git a/src/init/bootstrapper.cc b/src/init/bootstrapper.cc
+index 48249695b7b..f3379ac47ec 100644
+--- a/src/init/bootstrapper.cc
++++ b/src/init/bootstrapper.cc
+@@ -2531,6 +2531,8 @@ void Genesis::InitializeGlobal(Handle<JSGlobalObject> global_object,
+     JSObject::AddProperty(isolate_, proto, factory->constructor_string(),
+                           array_function, DONT_ENUM);
+ 
++    SimpleInstallFunction(isolate_, proto, "setLength",
++                          Builtin::kArrayPrototypeSetLength, 1, true);
+     SimpleInstallFunction(isolate_, proto, "at", Builtin::kArrayPrototypeAt, 1,
+                           true);
+     SimpleInstallFunction(isolate_, proto, "concat",
