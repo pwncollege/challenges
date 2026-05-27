@@ -44,27 +44,29 @@ runs:
       with:
         fetch-depth: 0
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        cache-dependency-glob: tools/pwnshop/**
+    - uses: ./.github/actions/setup-nix
+
+    - name: List modified challenges
+      id: list-challenges
+      shell: 'nix shell nixpkgs#uv nixpkgs#git --command bash --noprofile --norc -euo pipefail {0}'
+      env:
+        MODIFIED_SINCE: ${{ steps.resolve-ref.outputs.ref }}
+      run: |
+        challenges_file="$RUNNER_TEMP/modified-challenges.txt"
+        ./pwnshop list ./challenges --modified-since="$MODIFIED_SINCE" > "$challenges_file"
+        echo "challenges_file=$challenges_file" >> "$GITHUB_OUTPUT"
 
     - uses: actions/github-script@v8
       id: resolve-challenges
       env:
         CHALLENGE_FILTER: ${{ inputs.challenge_filter }}
-        MODIFIED_SINCE: ${{ steps.resolve-ref.outputs.ref }}
+        CHALLENGES_FILE: ${{ steps.list-challenges.outputs.challenges_file }}
       with:
         script: |
-          const childProcess = require("child_process");
+          const fs = require("fs");
           const path = require("path");
-          const ref = process.env.MODIFIED_SINCE || "";
           const challengeFilter = process.env.CHALLENGE_FILTER.trim() || "**";
-          const output = childProcess.execFileSync("./pwnshop", ["list", "./challenges", `--modified-since=${ref}`], {
-            stdio: ["ignore", "pipe", "inherit"],
-          })
-            .toString()
-            .trim();
+          const output = fs.readFileSync(process.env.CHALLENGES_FILE, "utf8").trim();
           const listedChallenges = output.split("\n").map((line) => line.trim()).filter(Boolean);
           const groupChallenge = (challenge) => {
             const parts = challenge.split("/");
