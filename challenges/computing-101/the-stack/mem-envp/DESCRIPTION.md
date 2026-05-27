@@ -2,25 +2,32 @@ The stack stores more than just `argc` and `argv`!
 Right after the argument list, the kernel places the **environment variables** you learned about in the [Linux Luminarium](/linux-luminarium).
 Just like `argv`, these are stored on the stack as an array of pointers to strings, where the string includes both the name and value of the variable, as so: `PATH=/usr/bin:...`, `HOME=/home/hacker`, or `PWN=COLLEGE`.
 
-The structure looks like this (assuming `argc` is 1, so just the program name and no arguments):
+The structure looks like this (assuming `argc` is 1, so just the program name and no arguments, plus a single environment variable `A=hello`):
 
 ```text
-    Address    │ Contents
-  +────────────────────────+
-  │ rsp + 0    │ 1         │  ◀── argc
-  +────────────────────────+
-  │ rsp + 8    │ argv[0]   │──── pointer to the program name
-  +────────────────────────+
-  │ rsp + 16   │ 0         │  ◀── NULL (end of argv)
-  +────────────────────────+
-  │ rsp + 24   │ envp[0]   │──── pointer to the first env var string
-  +────────────────────────+
-  │ rsp + 32   │ envp[1]   │──── pointer to the second env var string
-  +────────────────────────+
-  │ ...        │ ...       │
-  +────────────────────────+
-  │ rsp + N    │ 0         │  ◀── NULL (end of envp)
-  +────────────────────────+
+     Address    │ Contents
+   +────────────────────────+
+   │ rsp + 0    │ 1         │ ◀─── argc
+   +────────────────────────+
+   │ rsp + 8    │ rsp + 128 │───────┐  argv[0]: pointer to the program name
+   +────────────────────────+       │
+   │ rsp + 16   │ 0         │       │  NULL (end of argv)
+   +────────────────────────+       │
+   │ rsp + 24   │ rsp + 200 │─────┐ │  envp[0]: pointer to the first env var
+   +────────────────────────+     │ │
+   │ rsp + 32   │ 0         │     │ │  NULL (end of envp)
+   +────────────────────────+     │ │
+                                  │ │
+  ┌───────────────────────────────│─┘
+  │                               │
+  │   Address   │ Contents        │
+  │ +──────────────────────────+  │
+  │ │ rsp + 128 │ "/tmp/..."   │◀─┘ the program name
+  │ +──────────────────────────+
+  │ │ ...       │ ...          │
+  │ +──────────────────────────+
+  └▸│ rsp + 200 │ "HACK=planet"│ ◀─ the first env var --- variable `A` with value `hello`
+    +──────────────────────────+
 ```
 
 Two new things to notice:
