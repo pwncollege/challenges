@@ -30,15 +30,15 @@ The `solve:` label gives the symbol a target.
 
 You already know how to assemble a program with `as` and link it with `ld`. To produce a shared library instead of an executable, pass `-shared` to `ld`:
 
-```sh
-as --64 your-solve.s -o your-solve.o
-ld -shared your-solve.o -o your-solve.so
+```console
+hacker@dojo:~$ as -o your-solve.o your-solve.s
+hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
 ```
 
 Submit the `.so` to the grader:
 
-```sh
-/challenge/check your-solve.so
+```console
+hacker@dojo:~$ /challenge/check your-solve.so
 ```
 
 ## The contract

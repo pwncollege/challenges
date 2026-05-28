@@ -79,9 +79,9 @@ The grader will generate a different random secret for each run, so hardcoding w
 
 As before, build a shared library and pass it to the grader:
 
-```sh
-as --64 your-solve.s -o your-solve.o
-ld -shared your-solve.o -o your-solve.so
-/challenge/check your-solve.so
+```console
+hacker@dojo:~$ as -o your-solve.o your-solve.s
+hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
+hacker@dojo:~$ /challenge/check your-solve.so
 ```
 
