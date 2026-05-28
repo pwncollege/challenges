@@ -5,6 +5,7 @@ os.environ["PATH"] = "/challenge/bin:/bin:/usr/bin:/usr/local/bin"
 os.environ["TERM"] = "xterm-256color"
 
 import pwnlib.tubes.process
+import pwnlib.elf
 import subprocess
 import capstone
 import tempfile
@@ -62,10 +63,10 @@ def dramatic_command(command, stdin=None, actual_command=None):
     slow_pause()
     return exit_code
 
-def build_input(elf_path, input_file=None):
+def build_input(binary_path, input_file=None):
     raw_path = tempfile.mktemp(prefix="check-raw-")
     user_raw_path = tempfile.mktemp(prefix="check-user-raw-")
-    cmd = ["builder", "-i", "--output-raw", raw_path, "--output-user-raw", user_raw_path, "--output-elf", elf_path]
+    cmd = ["builder", "-i", "--output-raw", raw_path, "--output-user-raw", user_raw_path, "--output-elf", binary_path]
     if not getattr(chal, "allow_asm", False):
         cmd += ["--reject-asm"]
     if not getattr(chal, "allow_elf", True):
@@ -93,6 +94,49 @@ def build_input(elf_path, input_file=None):
     os.unlink(user_raw_path)
     return raw_binary, user_raw_binary
 
+
+def load_shared_input(binary_path, input_file=None):
+    if input_file is None:
+        raise ChallengeFailedPrint(
+            "This challenge requires you to pass the path to your shared "
+            "library:\n\n    /challenge/check your-solve.so\n"
+        )
+    try:
+        content = open(input_file, "rb").read()
+    except FileNotFoundError:
+        raise ChallengeFailedPrint(f"File {input_file} not found.")
+    except PermissionError:
+        raise ChallengeFailedPrint(f"Permission denied when opening {input_file}.")
+
+    import magic
+    fmt = magic.from_buffer(content)
+    if "ELF 64-bit LSB shared object" not in fmt:
+        raise ChallengeFailedPrint(
+            f"Expected an ELF 64-bit shared object, but {input_file} is:\n  {fmt}\n\n"
+            "Build your library like this:\n"
+            "    as --64 your-solve.s -o your-solve.o\n"
+            "    ld -shared your-solve.o -o your-solve.so\n"
+        )
+
+    elf = pwnlib.elf.ELF(input_file)
+    if "solve" not in elf.symbols:
+        raise ChallengeFailedPrint(
+            f"Your shared library does not export a `solve` symbol.\n"
+            "Make sure your assembly contains `.global solve` and a `solve:` label."
+        )
+
+    with open(binary_path, "wb") as f:
+        f.write(content)
+    os.chmod(binary_path, 0o755)
+
+    text = elf.get_section_by_name(".text")
+    raw_bytes = text.data() if text else b""
+
+    solve_addr = elf.symbols["solve"]
+    solve_offset = solve_addr - text["sh_addr"] if text else 0
+    user_raw = raw_bytes[solve_offset:] if 0 <= solve_offset < len(raw_bytes) else raw_bytes
+    return raw_bytes, user_raw
+
 console = rich.console.Console(highlight=False)
 err_console = rich.console.Console(stderr=True, highlight=False)
 
@@ -111,17 +155,31 @@ def do_check(stage_id, stage_description, *args, **kwargs):
         console.print(str(_e), style="bold red")
         raise
 
+def read_flag():
+    saved = os.geteuid()
+    try:
+        os.seteuid(0)
+        with open("/flag", "rb") as f:
+            return f.read()
+    finally:
+        os.seteuid(saved)
+
 def main():
     # --- drop privileges ---
     if os.geteuid() == 0:
         os.seteuid(os.getuid() or 65534)
 
     global display_filename
-    elf_filename = getattr(chal, 'final_filename', "/tmp/your-program")
+    shared = getattr(chal, "shared", False)
+    default_filename = "/tmp/your-program.so" if shared else "/tmp/your-program"
+    binary_filename = getattr(chal, 'final_filename', default_filename)
     input_file = sys.argv[1] if len(sys.argv) == 2 else None
-    if input_file and input_file != elf_filename:
-        display_filename = (input_file, elf_filename)
-    raw_binary, user_raw_binary = build_input(elf_filename, input_file)
+    if input_file and input_file != binary_filename:
+        display_filename = (input_file, binary_filename)
+    if shared:
+        raw_binary, user_raw_binary = load_shared_input(binary_filename, input_file)
+    else:
+        raw_binary, user_raw_binary = build_input(binary_filename, input_file)
 
     disas = list(cs.disasm(raw_binary, 0))
     if not disas:
@@ -135,7 +193,7 @@ def main():
 
     do_check("check_raw_binary", "Checking the binary code", raw_binary)
     do_check("check_disassembly", "Checking the assembly code", user_disas)
-    do_check("check_runtime", "Checking runtime behavior", elf_filename)
+    do_check("check_runtime", "Checking runtime behavior", binary_filename)
 
     if getattr(chal, "give_flag", False):
         print("")

@@ -100,8 +100,3 @@ resources:
 - type: challenge
   id: gdb-int3
   name: "Cooperative Debugging"
-- type: challenge
-  id: gdb-stack-align
-  name: "Aligning the Stack Through GDB"
-  visibility:
-    start: "2099-01-01T00:00:00+00:00"

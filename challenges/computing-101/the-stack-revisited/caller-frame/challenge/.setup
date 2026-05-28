@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+
+gcc -O0 -o /challenge/harness /challenge/harness.c /challenge/caller.S -ldl
+rm /challenge/harness.c /challenge/caller.S

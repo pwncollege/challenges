@@ -17,13 +17,3 @@ resources:
 - type: challenge
   id: mem-pop
   name: "Popping From the Stack"
-- type: challenge
-  id: mem-envp
-  name: "Environment Variables on the Stack"
-  visibility:
-    start: "2099-01-01T00:00:00+00:00"
-- type: challenge
-  id: mem-stack-align
-  name: "Aligning the Stack Through the Environment"
-  visibility:
-    start: "2099-01-01T00:00:00+00:00"

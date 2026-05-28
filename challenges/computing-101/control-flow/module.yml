@@ -31,3 +31,18 @@ resources:
 - type: challenge
   id: loop
   name: "Looping"
+- type: challenge
+  id: solve-write
+  name: "Writing From a Shared Library"
+  visibility:
+    start: "2099-01-01T00:00:00+00:00"
+- type: challenge
+  id: solve-return
+  name: "Returning a Value"
+  visibility:
+    start: "2099-01-01T00:00:00+00:00"
+- type: challenge
+  id: solve-callback
+  name: "Calling Through a Pointer"
+  visibility:
+    start: "2099-01-01T00:00:00+00:00"
