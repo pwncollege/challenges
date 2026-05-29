@@ -2,17 +2,27 @@ So far, every program you've written has been a complete executable: it starts a
 In this challenge, your code will be **a single function inside a shared library**, not a standalone executable.
 
 A shared library (called a `.so` file on Linux) is a chunk of compiled code that some _other_ program loads at runtime and calls into.
-Typically, such libraries perform some utility functions, such as parsing image files (e.g., `libpng` parses PNG files) or handling general system-facing tasks (`libc` provides a lot of memory management, file management, and system interaction code).
+Typically, such libraries perform utility functions, such as parsing image files (e.g., `libpng` parses PNG files) or handling general system-facing tasks (`libc` provides a lot of memory management, file management, and system interaction code).
 Deep inside, the actual interaction with the operating system takes place using system calls, but libraries provide a better interface to interact with than raw system calls.
 
-In this challenge, the grader plays the role of program that loads your library (using `libc`'s `dlopen` functionality, looks up finds your function, and **calls it** with arguments).
-Your code is the _callee_; the grader is the _caller_.
+This challenge plays the role of a program that loads your library (using `libc`'s `dlopen` functionality), looks up your function by name, and **calls** it with arguments.
+In Computer Science nomenclature, your code is the _callee_ and the challenge is the _caller_.
 
-This is different than anything you've written so far in several ways:
+**The `call` instruction.**  
+How does the grader get into your code in the first place?
+It executes a new instruction you haven't met yet: `call`.
 
-- You don't write `_start` --- the grader is the one with an entry point.
-- You don't exit (`mov rax, 60; syscall`) at the end --- exit only makes sense for a whole program. Your function just hands control back to its caller using the **`ret`** (return) instruction.
-- Rather than `_start`, you need to mark your function as a global symbol named `solve` so the grader can find it by name in your library.
+`call <target>` is x86's function-call instruction. It does two things:
+
+1. Pushes the address of the next instruction after the `call` instruction (the _return address_) onto the stack.
+2. Jumps to `<target>`.
+
+In our case, the grader runs the equivalent of `call solve`, and execution lands at the top of your `solve` function.
+You don't have to do anything special to "receive" the call --- you just start running.
+
+For this first challenge, you also don't have to do anything special to _finish_ the call.
+We'll deal with the saved return address in the next challenge; for now, just end your code with the `exit` syscall you already know.
+This is the same shape as every program you've written so far --- the only thing that has changed is _who_ started executing you.
 
 **Writing the function.**  
 Your assembly should look like this:
@@ -21,8 +31,7 @@ Your assembly should look like this:
 .intel_syntax noprefix
 .global solve
 solve:
-    <your code>
-    ret
+    <your code, ending in an exit syscall>
 ```
 
 The `.global solve` line tells the assembler "expose this code so other code can find it" --- just like `.global _start` did for executables back in the [building](/computing-101/your-first-program) level.
@@ -45,14 +54,18 @@ hacker@dojo:~$ /challenge/check your-solve.so
 
 **The calling convention.**  
 When the grader calls `solve`, it passes arguments in registers.
-In the case of this challenge, your `solve` function must take two arguments:
+In the case of this challenge, your `solve` function takes two arguments:
 
 | Register | Role on entry                                   |
 |----------|-------------------------------------------------|
 | `rdi`    | First argument (a pointer to a buffer of bytes) |
 | `rsi`    | Second argument (the length of that buffer)     |
 
-You've already seen `rdi` used to hold the first argument of a syscall (the exit code, an fd, etc.).
+You've already seen `rdi` used to hold the first argument of a syscall (the exit code, a file descriptor, etc.).
 That's because Linux syscalls and Linux functions use the same convention for the first few argument registers.
 
-For this challenge, write the `rsi` bytes starting at `rdi` to file descriptor 1 (stdout) using the `write` syscall (just like before!), then `ret`.
+For this challenge, write the `rsi` bytes starting at `rdi` to file descriptor 1 (stdout) using the `write` syscall (just like before!), and then `exit` the process cleanly with code `0`.
+
+----
+**Hint:** Keep in mind that `write()` takes arguments in the order of: file descriptor (1 in `rdi` for stdout), buffer (pointer to memory, in `rsi`), and size (in `rdx`).
+This is _different_ from the arguments your function will be called with, so you'll need to move some stuff around!
