@@ -24,8 +24,9 @@ The mechanics:
 
 For this challenge:
 
-- `rdi` will contain a secret 64-bit value chosen at random by the grader.
-- Your function must return `rdi + 1` in `rax`.
+- `rdi` will contain a secret 64-bit value chosen at random by the challenge.
+- Your function must return that same value back, in `rax`.
 
 That's it!
+The lesson here is the calling convention, not any actual computation --- all you have to do is shuffle `rdi` into `rax` and `ret`.
 Once the challenge receives the correct value, it will give you the flag!

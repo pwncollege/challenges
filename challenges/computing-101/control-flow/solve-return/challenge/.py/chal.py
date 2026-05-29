@@ -7,7 +7,7 @@ give_flag = True
 
 check_runtime_prologue = (
     "Let's load your shared library and call solve(secret) "
-    "with a few random secrets to see if you return secret + 1..."
+    "with a few random secrets to see if you return them back..."
 )
 check_runtime_success = "Your function returned the right value every time!"
 check_runtime_failure = "Hmm, that's not right:\n"
@@ -16,7 +16,7 @@ check_runtime_failure = "Hmm, that's not right:\n"
 def check_runtime(so_path):
     for _ in range(3):
         secret = random.randrange(0, 2**63)
-        expected = (secret + 1) % (2**64)
+        expected = secret
 
         driver = (
             "import ctypes\n"
@@ -56,6 +56,6 @@ def check_runtime(so_path):
         if got != expected:
             raise AssertionError(
                 f"Your function returned {got} when called with secret {secret}.\n"
-                f"Expected {expected} (= secret + 1).\n"
+                f"Expected {expected} (the same value back).\n"
                 "Make sure you put your return value in `rax` before `ret`."
             )
