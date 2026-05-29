@@ -1,4 +1,4 @@
-So far you've been on the *callee* side of a function call: the grader called your `solve`, and you did the work.
+So far you've been on the _callee_ side of a function call: the challenge called your `solve`, and you did the work.
 Now we flip it: your `solve` will receive a function pointer as an argument, and **you have to call that function** from your code.
 
 A function pointer is just an address: a 64-bit value that names the location of some code in memory.
@@ -10,22 +10,15 @@ call rdi
 
 This does exactly what `call <label>` does, except the target is taken from a register instead of a literal:
 
-1. Push the address of the next instruction onto the stack (the return address).
-2. Jump to the address held in `rdi`.
+1. Pushes the address of the instruction after the `call` (the _return address_) onto the stack.
+2. Jumps to the address held in `rdi`.
 
-When the callee eventually executes `ret`, it pops that return address and you continue from right after your `call`.
+When _that_ callee eventually executes `ret`, it pops the return address and execution continues from right after your `call rdi`, exactly the same `call`/`ret` pair you learned about in the previous two challenges.
 
 For this challenge:
 
-- `rdi` will contain a function pointer.
-- Your job: call the function in `rdi`, then `ret` to return control to the grader.
+- `rdi` will contain a pointer pointing to a function that will print the flag.
+- You have to call the function in `rdi`, then `ret` to return control back to the challenge.
 
-The grader will verify that the function in `rdi` got called.
-
-As before, build a shared library and pass it to the grader:
-
-```console
-hacker@dojo:~$ as -o your-solve.o your-solve.s
-hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
-hacker@dojo:~$ /challenge/check your-solve.so
-```
+That's it!
+The challenge will verify that the function in `rdi` actually got called, and once it does, it will give you the flag!

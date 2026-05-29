@@ -1,14 +1,16 @@
-You've now seen the `solve` shape from a few angles: you've received arguments, returned values, and called through a function pointer.
-This challenge is also a `solve` function inside a shared library --- but **the grader passes you no arguments**.
-Nothing in `rdi`, nothing in `rsi`. Just `call solve`.
+Let's dig a bit into the stack.
+In addition to storing scratch data and return addresses, the stack stores the _local variables_ of functions: data they use for functionality that's not necessarily needed by other functions of a program.
+In security situations where a hacker gets ``code execution'' inside a process, these variables are an open book: there is nothing preventing code in a process from reading data from all over the stack!
 
+This challenge explores this concept.
+Once again, you write a `solve` function that the challenge calls, but **the challenge passes you no arguments**.
 The secret you have to return isn't anywhere obvious.
-It's sitting on the **stack**, inside the caller's own frame, and you have to reach over and grab it.
+It's sitting on the **stack**, inside the caller's own "frame" (what we call the part of the stack including a function's local variables and the saved return address to which it will return), and you have to reach over and grab it.
 
-**How is that possible?**  
-Because of what `call solve` actually did. Let's walk through it.
-
-Right before the grader's `caller` function executed `call solve`, the stack looked like this:
+**Wait, what?**  
+Let's walk through why this is possible.
+In this challenge, the `main` function calls the `caller` functionm, which then calls your `solve` function.
+Right before the challenge's `caller` function executed `call solve`, the stack looked like this:
 
 ```text
                                           [higher addresses]
@@ -27,14 +29,22 @@ Right before the grader's `caller` function executed `call solve`, the stack loo
 
 The `call solve` instruction does two things:
 
-1. Pushes the return address onto the stack (8 bytes). **Pushing decrements `rsp`**, so the return address ends up at a _lower_ address than what was already on the stack.
+1. Pushes the return address onto the stack (8 bytes). **Pushing decrements `rsp`**, so the return address ends up at a _smaller_ address than what was already on the stack.
 2. Jumps to your code.
 
-That first step is what "the stack grows downward" actually means.
-Every `push`, every `call`, every `sub rsp, N` --- they all move `rsp` _down_ in memory.
-Whatever was on the stack before you arrived sits at _higher_ addresses than your current `rsp`.
+That first step is critical: the stack grows backwards from what you might expect.
+`pop` actually adds 8 to `rsp`, and `push` subtracts 8.
+This is counter-intuitive and is a concept that often confuses learners.
+If you think of the stack as a page that is 8 bytes wide, you would start writing in this page at the very bottom, and move one line upwards on the page every time you `push`.
+In other words, say, `pop rdi` is equivalent to `mov rdi, [rsp]; add rsp, 8` and `push rdi` is equivalent to `mov [rsp], rdi; sub rsp, 8`.
 
-So at the moment your `solve` starts running, the stack looks like this:
+Note that this makes talking about the stack without confusion borderline impossible.
+For example, people with a math background tend to thing of a coordinate of 0 as being on the bottom or the left of a page, whereas people with a video game or web development background tend to think of 0 as being on the top or the left.
+This leads to massive confusion about the definition of "higher address", "lower address", and so on.
+Everyone has different ways of dealing with this.
+In this document, because horizontal space is at a premium, we put diagrams from 0 (top) to 0xffffffff (bottom), but in everyday life when not restricted by horizontal space, we simply conceptualize memory from the "left" (0) to the "right" (0xffffffff).
+
+Anyways, at the moment your `solve` starts running, the stack looks like this:
 
 ```text
                                           [higher addresses]
@@ -61,7 +71,7 @@ There's nothing useful for you down there.
 The lesson here is structural: **your caller is above you**, because the act of calling you pushed the stack downward.
 
 **The task.**  
-The grader's `caller` is laid out very specifically (it's hand-written assembly, so the offsets are guaranteed).
+The challenge's `caller` is laid out very specifically (it's hand-written assembly, so the offsets are guaranteed).
 When your `solve` starts running, the layout is:
 
 ```text
@@ -74,12 +84,5 @@ When your `solve` starts running, the layout is:
 ```
 
 Read the secret at `[rsp + 0x40]`, put it in `rax` (the return-value register), and `ret`.
-The grader will generate a different random secret for each run, so hardcoding won't work --- but the offset is always the same.
-
-As before, build a shared library and pass it to the grader:
-
-```console
-hacker@dojo:~$ as -o your-solve.o your-solve.s
-hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
-hacker@dojo:~$ /challenge/check your-solve.so
-```
+The challenge will generate a different random secret each run, so hardcoding won't work --- but the offset is always the same.
+Get the secret back to the challenge, and it'll give you the flag!
