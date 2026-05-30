@@ -4,24 +4,24 @@ But the actual addresses of these strings depends on **how the program was launc
 When the program is launched, all the strings (the program name, the arguments, and the environment variables) are placed on the stack, and then computes the `argv[i]` and `envp[i]` pointers to point into them:
 
 ```text
-high addresses
-  +──────────────────────────+
-  │ env strings              │  ◀── "PATH=...\0" "HOME=...\0" ...
-  +──────────────────────────+
-  │ arg strings              │  ◀── "/challenge/program\0"  (argv[0] points here)
-  +──────────────────────────+
-  │ auxv                     │
-  +──────────────────────────+
-  │ envp[]  (pointers)       │
-  +──────────────────────────+
-  │ argv[]  (pointers)       │
+smaller addresses
   +──────────────────────────+
   │ argc                     │  ◀── rsp
   +──────────────────────────+
-low addresses
+  │ argv[]  (pointers)       │
+  +──────────────────────────+
+  │ envp[]  (pointers)       │
+  +──────────────────────────+
+  │ auxv                     │
+  +──────────────────────────+
+  │ arg strings              │  ◀── "/challenge/program\0"  (argv[0] points here)
+  +──────────────────────────+
+  │ env strings              │  ◀── "PATH=...\0" "HOME=...\0" ...
+  +──────────────────────────+
+larger addresses
 ```
 
-The argument strings sit *below* the environment strings, so each byte you add to the environment pushes the arg strings down by one byte --- and the value of `argv[0]` (the address it points to) shifts by the same amount.
+The argument strings sit at smaller addresses than the environment strings (above them in the diagram). Each byte you add to the environment pushes the arg strings to even smaller addresses --- and the value of `argv[0]` (the address it points to) shifts by the same amount.
 
 We've turned address-space-layout randomization off for this challenge, so addresses are deterministic: the same launch always produces the same `argv[0]`.
 

@@ -13,18 +13,18 @@ In this challenge, the `main` function calls the `caller` functionm, which then 
 Right before the challenge's `caller` function executed `call solve`, the stack looked like this:
 
 ```text
-                                          [higher addresses]
-   +───────────────────────────────────+
-   │ ... main's frame ...              │
-   +───────────────────────────────────+
-   │ return address (back to main)     │
+                                          [smaller addresses]
+   +───────────────────────────────────+  ◀── rsp, immediately before `call solve`
+   │ caller's local region (0x40 bytes)│
+   │ ... the secret is in here ...     │
    +───────────────────────────────────+
    │ caller's saved rbp                │
    +───────────────────────────────────+
-   │ caller's local region (0x40 bytes)│
-   │ ... the secret is in here ...     │
-   +───────────────────────────────────+  ◀── rsp, immediately before `call solve`
-                                          [lower addresses]
+   │ return address (back to main)     │
+   +───────────────────────────────────+
+   │ ... main's frame ...              │
+   +───────────────────────────────────+
+                                          [larger addresses]
 ```
 
 The `call solve` instruction does two things:
@@ -47,31 +47,31 @@ In this document, because horizontal space is at a premium, we put diagrams from
 Anyways, at the moment your `solve` starts running, the stack looks like this:
 
 ```text
-                                          [higher addresses]
+                                          [smaller addresses, where rsp goes if you grow your own frame]
    +───────────────────────────────────+
-   │ ... main's frame ...              │
-   +───────────────────────────────────+
-   │ return address (back to main)     │
-   +───────────────────────────────────+
-   │ caller's saved rbp                │
+   │ return address (back to caller)   │  ◀── rsp points here
    +───────────────────────────────────+
    │ caller's local region (0x40 bytes)│
    │ ... the secret is in here ...     │
    +───────────────────────────────────+
-   │ return address (back to caller)   │  ◀── rsp points here
+   │ caller's saved rbp                │
    +───────────────────────────────────+
-                                          [lower addresses, where rsp goes if you grow your own frame]
+   │ return address (back to main)     │
+   +───────────────────────────────────+
+   │ ... main's frame ...              │
+   +───────────────────────────────────+
+                                          [larger addresses]
 ```
 
-The caller's locals are _above_ your `rsp`. The secret is _above_ your `rsp`.
+The caller's locals sit at _larger_ addresses than your `rsp` --- below your `rsp` in the diagram. The secret is somewhere in that region.
 To find it, you index into memory with a **positive** offset from `rsp`.
 
-If you go the other way --- negative offsets, _below_ `rsp` --- you'll find unallocated stack space at best, and a guard-page segfault at worst.
-There's nothing useful for you down there.
-The lesson here is structural: **your caller is above you**, because the act of calling you pushed the stack downward.
+If you go the other way --- negative offsets, at addresses _smaller_ than `rsp` (above `rsp` in the diagram) --- you'll find unallocated stack space at best, and a program crash at worst.
+There's nothing useful for you up there (yet!).
+The lesson here is structural: **your caller lives at larger addresses than you**, because the act of calling you pushed `rsp` to a smaller address.
 
 **The task.**  
-The challenge's `caller` is laid out very specifically (it's hand-written assembly, so the offsets are guaranteed).
+The challenge's `caller` is laid out very specifically.
 When your `solve` starts running, the layout is:
 
 ```text
