@@ -16,17 +16,15 @@ The same register also holds the return value of a regular function.
 
 The mechanics:
 
-1. The challenge executes `call solve`, passing one argument in `rdi`.
+1. The challenge executes `call solve`, passing one argument in `rdi`. When it does this, the next instruction in the challenge _after_ `call solve` gets pushed onto the stack as the "saved return address".
 2. Your function does some work.
 3. Your function puts its result in `rax`.
 4. Your function executes `ret`, which pops the saved return address off the stack and jumps back to the challenge.
-5. The challenge reads `rax` and treats it as your function's return value.
+5. The challenge reads `rax` as your function's result ("return value").
 
 For this challenge:
 
 - `rdi` will contain a secret 64-bit value chosen at random by the challenge.
 - Your function must return that same value back, in `rax`.
 
-That's it!
-The lesson here is the calling convention, not any actual computation --- all you have to do is shuffle `rdi` into `rax` and `ret`.
 Once the challenge receives the correct value, it will give you the flag!
