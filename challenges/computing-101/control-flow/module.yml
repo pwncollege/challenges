@@ -46,3 +46,8 @@ resources:
   name: "Calling Through a Pointer"
   visibility:
     start: "2099-01-01T00:00:00+00:00"
+- type: challenge
+  id: solve-callback-arg
+  name: "Calling Through a Pointer with an Argument"
+  visibility:
+    start: "2099-01-01T00:00:00+00:00"

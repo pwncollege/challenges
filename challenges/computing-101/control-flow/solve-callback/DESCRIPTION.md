@@ -2,23 +2,13 @@ So far you've been on the _callee_ side of a function call: the challenge called
 Now we flip it: your `solve` will receive a function pointer as an argument, and **you have to call that function** from your code.
 
 A function pointer is just an address: a 64-bit value that names the location of some code in memory.
-To call a function whose address sits in a register, x86-64 gives you a register form of the `call` instruction:
+The challenge passes the pointer in `rdi` (the first argument to your function), so to call it you can use the register form of `call`:
 
 ```text
 call rdi
 ```
 
-This calls the fucntion pointed to by `rdi`.
-That means the CPU:
+This pushes the address of the instruction after the `call` (the _return address_) onto the stack, then jumps to the address held in `rdi`.
+When that callback eventually `ret`s, your function's execution will continue right after your `call rdi` --- the same `call`/`ret` pair you learned in the previous two levels.
 
-1. Pushes the address of the instruction after the `call` (the _return address_) onto the stack.
-2. Jumps to the address held in `rdi`.
-
-When _that_ callee eventually executes `ret`, it pops the return address and execution continues from right after your `call rdi`, exactly the same `call`/`ret` pair you learned about in the previous two challenges.
-
-For this challenge:
-
-- `rdi` will contain a pointer pointing to a function that will print the flag.
-- You have to call the function in `rdi`, then `ret` to return control back to the challenge.
-
-Go for it!
+The callback prints the flag for you. Go for it!

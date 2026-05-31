@@ -1,27 +1,21 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <stdio.h>
-#include <string.h>
 
 /*
  * Harness for solve-callback. The student's `solve(callback)` must invoke the
- * function pointer it receives in rdi. The callback below just stashes a token
- * (passed in argv[2]) into a static buffer; we print it from main() after the
- * call returns. Doing the printing in main() avoids triggering aligned-SSE
- * code paths inside the callback, which the student's `call rdi` would crash
- * on if they don't align rsp -- a wrinkle that isn't the lesson here.
+ * function pointer it receives in rdi. The callback below just prints the
+ * token (passed in argv[2]) to stdout.
+ *
+ * `force_align_arg_pointer` makes gcc emit a prologue that realigns rsp to
+ * 16 bytes, so the callback can safely do anything (SSE, printf, etc.) even
+ * when the student's `call rdi` lands here with an 8-byte-misaligned rsp.
  */
 
-static char captured[256];
-static int captured_len = 0;
 static const char *token;
-static int token_len;
 
-static void cb(void) {
-    if (captured_len + token_len <= (int)sizeof(captured)) {
-        memcpy(captured + captured_len, token, token_len);
-        captured_len += token_len;
-    }
+static void __attribute__((force_align_arg_pointer)) cb(void) {
+    printf("%s", token);
 }
 
 int main(int argc, char **argv) {
@@ -30,7 +24,6 @@ int main(int argc, char **argv) {
         return 2;
     }
     token = argv[2];
-    token_len = strlen(token);
 
     void *h = dlopen(argv[1], RTLD_NOW);
     if (!h) {
@@ -44,9 +37,5 @@ int main(int argc, char **argv) {
     }
 
     solve(cb);
-
-    if (captured_len > 0) {
-        fwrite(captured, 1, captured_len, stdout);
-    }
     return 0;
 }
