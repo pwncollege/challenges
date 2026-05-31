@@ -6,6 +6,9 @@ os.environ["TERM"] = "xterm-256color"
 
 import pwnlib.tubes.process
 import pwnlib.elf
+import logging
+# Silence pwnlib's stderr chatter like "Did not find any GOT entries".
+logging.getLogger("pwnlib").setLevel(logging.ERROR)
 import subprocess
 import capstone
 import tempfile
@@ -37,7 +40,7 @@ def slow_print(what):
     for c in what:
         print(c, end="", flush=True)
         slow_pause()
-    print("")
+    print("", flush=True)
 
 display_filename = None
 
@@ -152,7 +155,8 @@ def do_check(stage_id, stage_description, *args, **kwargs):
         return r
     except (ChallengeFailed, AssertionError) as _e:
         console.print(getattr(chal, stage_id+"_failure", "... oops, we found an issue! Details below:\n").format(**chal.__dict__), style="bold red")
-        console.print(str(_e), style="bold red")
+        # markup=False so brackets like [rsp+0x18] aren't parsed as rich markup tags
+        console.print(str(_e), style="bold red", markup=False)
         raise
 
 def read_flag():

@@ -1,5 +1,6 @@
 import __main__ as checker
 import subprocess
+import sys
 
 give_flag = False
 num_instructions = 8
@@ -45,6 +46,7 @@ def check_runtime(filename):
     checker.print_prompt()
     checker.slow_print(f"env -i 'FLAG=<the flag, padded to {FLAG_VAR_LEN - len(prefix)} bytes>' {filename}")
     print("")
+    sys.stdout.flush()
 
     subprocess.run(
         ["env", "-i", f"FLAG={env_value}", filename],

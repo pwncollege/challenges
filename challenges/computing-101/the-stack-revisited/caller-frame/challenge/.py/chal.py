@@ -1,5 +1,6 @@
 import __main__ as checker
 import subprocess
+import sys
 
 shared = True
 give_flag = False
@@ -24,6 +25,7 @@ def check_runtime(so_path):
     checker.print_prompt()
     checker.slow_print(f"/challenge/harness {so_path}")
     print("")
+    sys.stdout.flush()
 
     subprocess.run(
         ["/challenge/harness", so_path],

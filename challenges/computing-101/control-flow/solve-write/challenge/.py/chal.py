@@ -1,5 +1,6 @@
 import __main__ as checker
 import subprocess
+import sys
 
 shared = True
 give_flag = False
@@ -27,10 +28,11 @@ def check_runtime(so_path):
     print("")
     checker.print_prompt()
     checker.slow_print(
-        f"python3 -c 'lib = ctypes.CDLL({so_path!r}); "
-        f"lib.solve(<flag buffer>, {len(flag)})'"
+        f'python3 -c "lib = ctypes.CDLL({so_path!r}); '
+        f'lib.solve(<flag buffer>, {len(flag)})"'
     )
     print("")
+    sys.stdout.flush()
 
     subprocess.run(
         ["python3", "-I", "-c", driver],

@@ -1,5 +1,6 @@
 import __main__ as checker
 import random
+import signal
 import subprocess
 
 shared = True
@@ -29,8 +30,8 @@ def check_runtime(so_path):
         print("")
         checker.print_prompt()
         checker.slow_print(
-            f"python3 -c 'lib = ctypes.CDLL({so_path!r}); "
-            f"print(lib.solve({secret}))'"
+            f'python3 -c "lib = ctypes.CDLL({so_path!r}); '
+            f'print(lib.solve({secret}))"'
         )
 
         result = subprocess.run(
@@ -41,6 +42,14 @@ def check_runtime(so_path):
 
         if result.returncode != 0:
             stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            if result.returncode < 0:
+                signum = -result.returncode
+                signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
+                hint = " (probably because your function fell off the end without `ret`)" if signum == signal.SIGSEGV else ""
+                raise AssertionError(
+                    f"Your function crashed with {signame}{hint}.\n"
+                    f"Stderr from the loader:\n{stderr}"
+                )
             raise AssertionError(
                 f"Your function exited abnormally (return code {result.returncode}).\n"
                 f"Stderr from the loader:\n{stderr}"
