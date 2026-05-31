@@ -72,8 +72,7 @@ Get it right, and your `solve` will print your flag for you!
 **Hint:** Keep in mind that `write()` takes arguments in the order of: file descriptor (1 in `rdi` for stdout), buffer (pointer to memory, in `rsi`), and size (in `rdx`).
 This is _different_ from the arguments your function will be called with, so you'll need to move some stuff around!
 
-----
-**Debugging your `solve`:**
+**Debugging your solution:**
 Since your code is a function inside a shared library loaded by the grader, you can't just `gdb your-solve.so` directly --- there's no entry point to start from.
 And `/challenge/check` is a SUID binary, so when you launch it under a debugger its SUID privileges get dropped and it can't read your flag.
 
@@ -81,10 +80,5 @@ The fix: launch this challenge in **practice mode** (which gives you `sudo`), an
 
 ```console
 hacker@dojo:~$ sudo gdb /challenge/check
-(gdb) r /tmp/your-solve.so
+(gdb) r your-solve.so
 ```
-
-To stop _inside_ your own code so you can inspect registers, drop an `int3` at the top of `solve` (just like in the [cooperative-debugging](/computing-101/introspecting) level).
-Gdb will stop at the trap with `rdi` pointing at the buffer and `rsi` holding its length, and you can `si` to step further, `print $rdi` / `info reg` to inspect, and `x/32bx $rdi` to peek at the buffer contents.
-
-(Practice mode runs without a real flag, so don't be surprised when your write produces a placeholder string instead of `pwn.college{...}`. Once your solve works in practice mode, the real run picks up the real flag automatically.)
