@@ -1,4 +1,5 @@
 import __main__ as checker
+import signal
 import subprocess
 import sys
 
@@ -14,30 +15,24 @@ check_runtime_failure = "Hmm, that's not right:\n"
 
 
 def check_runtime(so_path):
-    flag = checker.read_flag().rstrip(b"\n")
-
-    driver = (
-        "import ctypes\n"
-        f"lib = ctypes.CDLL({so_path!r})\n"
-        f"buf = ctypes.create_string_buffer({bytes(flag)!r}, {len(flag)})\n"
-        "lib.solve.argtypes = [ctypes.c_void_p, ctypes.c_uint64]\n"
-        "lib.solve.restype = None\n"
-        f"lib.solve(ctypes.addressof(buf), {len(flag)})\n"
-    )
+    flag = checker.read_flag().rstrip(b"\n").decode()
 
     print("")
     checker.print_prompt()
-    checker.slow_print(
-        f'python3 -c "lib = ctypes.CDLL({so_path!r}); '
-        f'lib.solve(<flag buffer>, {len(flag)})"'
-    )
+    checker.slow_print(f"/challenge/harness {so_path} <flag>")
     print("")
     sys.stdout.flush()
 
-    subprocess.run(
-        ["python3", "-I", "-c", driver],
+    result = subprocess.run(
+        ["/challenge/harness", so_path, flag],
         timeout=5,
     )
     print("")
+
+    if result.returncode < 0:
+        signum = -result.returncode
+        signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
+        hint = " (probably because your function fell off the end without `ret` or exiting)" if signum == signal.SIGSEGV else ""
+        raise AssertionError(f"The harness crashed with {signame}{hint}.")
 
     return True
