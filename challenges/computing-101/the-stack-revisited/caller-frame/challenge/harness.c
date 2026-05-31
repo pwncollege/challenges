@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
+
 #define FLAG_LEN 64
 
 extern void caller(void (*solve)(void), const char *flag_buf);
@@ -14,28 +16,39 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    LOG("loading shared library %s ...", argv[1]);
     void *h = dlopen(argv[1], RTLD_NOW);
     if (!h) {
-        fprintf(stderr, "dlopen: %s\n", dlerror());
+        LOG("dlopen failed: %s", dlerror());
         return 2;
     }
+    LOG("resolving `solve` symbol ...");
     void (*solve)(void) = (void (*)(void))dlsym(h, "solve");
     if (!solve) {
-        fprintf(stderr, "missing `solve` symbol\n");
+        LOG("missing `solve` symbol --- did you `.global solve` in your assembly?");
         return 2;
     }
+    LOG("found solve at %p", (void *)solve);
 
+    LOG("reading %d bytes of flag from stdin ...", FLAG_LEN);
     char flag_buf[FLAG_LEN];
     ssize_t got = 0;
     while (got < FLAG_LEN) {
         ssize_t n = read(0, flag_buf + got, FLAG_LEN - got);
         if (n <= 0) {
-            fprintf(stderr, "harness: short flag read (%zd of %d bytes)\n", got, FLAG_LEN);
+            LOG("short flag read (%zd of %d bytes)", got, FLAG_LEN);
             return 2;
         }
         got += n;
     }
 
+    LOG("calling caller(solve, flag_buf) --- caller stashes the flag in its local frame at [rsp+0x40] (from solve's view) and then calls into your solve");
+    LOG("your `solve` should `write` 64 bytes from [rsp+0x40] to stdout:");
+    fflush(stderr);
+
     caller(solve, flag_buf);
+
+    fflush(stdout);
+    LOG("caller() returned. (If your write was correct, the flag printed above.)");
     return 0;
 }

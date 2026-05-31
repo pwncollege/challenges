@@ -12,6 +12,8 @@
  * and the flag is passed as argv[3].
  */
 
+#define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
+
 int main(int argc, char **argv) {
     if (argc != 4) {
         fprintf(stderr, "usage: %s lib.so secret flag\n", argv[0]);
@@ -21,24 +23,33 @@ int main(int argc, char **argv) {
     uint64_t secret = strtoull(argv[2], NULL, 0);
     const char *flag = argv[3];
 
+    LOG("loading shared library %s ...", argv[1]);
     void *h = dlopen(argv[1], RTLD_NOW);
     if (!h) {
-        fprintf(stderr, "dlopen: %s\n", dlerror());
+        LOG("dlopen failed: %s", dlerror());
         return 2;
     }
+    LOG("resolving `solve` symbol ...");
     uint64_t (*solve)(uint64_t) = dlsym(h, "solve");
     if (!solve) {
-        fprintf(stderr, "missing `solve` symbol\n");
+        LOG("missing `solve` symbol --- did you `.global solve` in your assembly?");
         return 2;
     }
+    LOG("found solve at %p", (void *)solve);
+    LOG("calling solve(0x%lx) --- your code should return that value back unchanged in rax", secret);
+    fflush(stderr);
 
     uint64_t got = solve(secret);
+
+    LOG("solve() returned 0x%lx", got);
     if (got == secret) {
+        LOG("match! return value == secret. here is the flag:");
+        fflush(stderr);
         printf("%s\n", flag);
         return 0;
     }
-    printf("You returned 0x%lx (%lu), but we sent in 0x%lx (%lu) --- "
-           "return the secret back, untouched!\n",
-           got, got, secret, secret);
+    LOG("mismatch: you returned 0x%lx (%lu), but we sent in 0x%lx (%lu).",
+        got, got, secret, secret);
+    LOG("return the secret back, untouched!");
     return 1;
 }

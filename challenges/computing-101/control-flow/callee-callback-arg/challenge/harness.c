@@ -13,6 +13,8 @@
  * `call <reg>` lands here with an 8-byte-misaligned rsp.
  */
 
+#define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
+
 #define EXPECTED 1337
 
 static const char *flag;
@@ -35,20 +37,31 @@ int main(int argc, char **argv) {
     }
     flag = argv[2];
 
+    LOG("loading shared library %s ...", argv[1]);
     void *h = dlopen(argv[1], RTLD_NOW);
     if (!h) {
-        fprintf(stderr, "dlopen: %s\n", dlerror());
+        LOG("dlopen failed: %s", dlerror());
         return 2;
     }
+    LOG("resolving `solve` symbol ...");
     void (*solve)(void (*)(uint64_t)) = dlsym(h, "solve");
     if (!solve) {
-        fprintf(stderr, "missing `solve` symbol\n");
+        LOG("missing `solve` symbol --- did you `.global solve` in your assembly?");
         return 2;
     }
+    LOG("found solve at %p", (void *)solve);
+    LOG("calling solve(callback) --- your code receives the callback in rdi");
+    LOG("the callback prints the flag if you call it with rdi == %d, or a hint otherwise:", EXPECTED);
+    fflush(stderr);
 
     solve(cb);
-    if (!called) {
-        printf("Your `solve` returned without calling the callback in rdi.\n");
+
+    fflush(stdout);
+    if (called) {
+        LOG("the callback ran. solve() returned cleanly.");
+        return 0;
     }
-    return 0;
+    LOG("your `solve` returned without calling the callback in rdi.");
+    LOG("save the function pointer somewhere safe (e.g. `mov rax, rdi`), set rdi = %d, then call.", EXPECTED);
+    return 1;
 }

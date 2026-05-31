@@ -13,9 +13,13 @@
  * when the student's `call rdi` lands here with an 8-byte-misaligned rsp.
  */
 
+#define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
+
 static const char *flag;
+static int callback_ran = 0;
 
 static void __attribute__((force_align_arg_pointer)) cb(void) {
+    callback_ran = 1;
     printf("%s\n", flag);
 }
 
@@ -26,17 +30,31 @@ int main(int argc, char **argv) {
     }
     flag = argv[2];
 
+    LOG("loading shared library %s ...", argv[1]);
     void *h = dlopen(argv[1], RTLD_NOW);
     if (!h) {
-        fprintf(stderr, "dlopen: %s\n", dlerror());
+        LOG("dlopen failed: %s", dlerror());
         return 2;
     }
+    LOG("resolving `solve` symbol ...");
     void (*solve)(void (*)(void)) = dlsym(h, "solve");
     if (!solve) {
-        fprintf(stderr, "missing `solve` symbol\n");
+        LOG("missing `solve` symbol --- did you `.global solve` in your assembly?");
         return 2;
     }
+    LOG("found solve at %p", (void *)solve);
+    LOG("calling solve(callback) --- your code receives the callback in rdi and should call it");
+    LOG("if the callback runs, it prints the flag for you:");
+    fflush(stderr);
 
     solve(cb);
-    return 0;
+
+    fflush(stdout);
+    if (callback_ran) {
+        LOG("the callback ran. solve() returned cleanly.");
+        return 0;
+    }
+    LOG("your `solve` returned without calling the callback in rdi.");
+    LOG("make sure your assembly does `call rdi` (or moves rdi elsewhere and calls from there).");
+    return 1;
 }

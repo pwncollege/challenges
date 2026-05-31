@@ -12,6 +12,8 @@
  * appear naturally on the learner's terminal.
  */
 
+#define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
+
 int main(int argc, char **argv) {
     if (argc != 3) {
         fprintf(stderr, "usage: %s lib.so flag\n", argv[0]);
@@ -20,17 +22,25 @@ int main(int argc, char **argv) {
     const char *flag = argv[2];
     size_t len = strlen(flag);
 
+    LOG("loading shared library %s ...", argv[1]);
     void *h = dlopen(argv[1], RTLD_NOW);
     if (!h) {
-        fprintf(stderr, "dlopen: %s\n", dlerror());
+        LOG("dlopen failed: %s", dlerror());
         return 2;
     }
+    LOG("resolving `solve` symbol ...");
     void (*solve)(const char *, uint64_t) = dlsym(h, "solve");
     if (!solve) {
-        fprintf(stderr, "missing `solve` symbol\n");
+        LOG("missing `solve` symbol --- did you `.global solve` in your assembly?");
         return 2;
     }
+    LOG("found solve at %p", (void *)solve);
+    LOG("calling solve(<%zu-byte flag buffer>, %zu) --- your code should write those bytes to stdout:", len, len);
+    fflush(stderr);
 
     solve(flag, len);
+
+    fflush(stdout);
+    LOG("solve() returned. (If your write was correct, the flag printed above.)");
     return 0;
 }
