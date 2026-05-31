@@ -11,6 +11,12 @@
 extern void caller(void (*solve)(void), const char *flag_buf);
 
 int main(int argc, char **argv) {
+    // Unbuffer both streams so the [harness] narration and the solve's own
+    // writes appear in real chronological order, even when stdout/stderr are
+    // pipes rather than a tty.
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     if (argc != 2) {
         fprintf(stderr, "usage: %s lib.so\n", argv[0]);
         return 2;
@@ -44,11 +50,9 @@ int main(int argc, char **argv) {
 
     LOG("calling caller(solve, flag_buf) --- caller stashes the flag in its local frame at [rsp+0x40] (from solve's view) and then calls into your solve");
     LOG("your `solve` should `write` 64 bytes from [rsp+0x40] to stdout:");
-    fflush(stderr);
 
     caller(solve, flag_buf);
 
-    fflush(stdout);
     LOG("caller() returned. (If your write was correct, the flag printed above.)");
     return 0;
 }

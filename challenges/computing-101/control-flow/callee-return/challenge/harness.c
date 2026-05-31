@@ -15,6 +15,12 @@
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
 
 int main(int argc, char **argv) {
+    // Unbuffer both streams so the [harness] narration and the solve's own
+    // writes appear in real chronological order, even when stdout/stderr are
+    // pipes rather than a tty.
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     if (argc != 4) {
         fprintf(stderr, "usage: %s lib.so secret flag\n", argv[0]);
         return 2;
@@ -37,14 +43,12 @@ int main(int argc, char **argv) {
     }
     LOG("found solve at %p", (void *)solve);
     LOG("calling solve(0x%lx) --- your code should return that value back unchanged in rax", secret);
-    fflush(stderr);
 
     uint64_t got = solve(secret);
 
     LOG("solve() returned 0x%lx", got);
     if (got == secret) {
         LOG("match! return value == secret. here is the flag:");
-        fflush(stderr);
         printf("%s\n", flag);
         return 0;
     }

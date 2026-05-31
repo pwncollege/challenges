@@ -31,6 +31,12 @@ static void __attribute__((force_align_arg_pointer)) cb(uint64_t arg) {
 }
 
 int main(int argc, char **argv) {
+    // Unbuffer both streams so the [harness] narration and the solve's own
+    // writes appear in real chronological order, even when stdout/stderr are
+    // pipes rather than a tty.
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     if (argc != 3) {
         fprintf(stderr, "usage: %s lib.so flag\n", argv[0]);
         return 2;
@@ -52,11 +58,9 @@ int main(int argc, char **argv) {
     LOG("found solve at %p", (void *)solve);
     LOG("calling solve(callback) --- your code receives the callback in rdi");
     LOG("the callback prints the flag if you call it with rdi == %d, or a hint otherwise:", EXPECTED);
-    fflush(stderr);
 
     solve(cb);
 
-    fflush(stdout);
     if (called) {
         LOG("the callback ran. solve() returned cleanly.");
         return 0;

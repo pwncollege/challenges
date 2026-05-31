@@ -15,6 +15,12 @@
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
 
 int main(int argc, char **argv) {
+    // Unbuffer both streams so the [harness] narration and the solve's own
+    // writes appear in real chronological order, even when stdout/stderr are
+    // pipes rather than a tty.
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     if (argc != 3) {
         fprintf(stderr, "usage: %s lib.so flag\n", argv[0]);
         return 2;
@@ -36,11 +42,9 @@ int main(int argc, char **argv) {
     }
     LOG("found solve at %p", (void *)solve);
     LOG("calling solve(<%zu-byte flag buffer>, %zu) --- your code should write those bytes to stdout:", len, len);
-    fflush(stderr);
 
     solve(flag, len);
 
-    fflush(stdout);
     LOG("solve() returned. (If your write was correct, the flag printed above.)");
     return 0;
 }
