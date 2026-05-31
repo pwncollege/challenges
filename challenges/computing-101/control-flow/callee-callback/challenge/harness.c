@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 /*
- * Harness for solve-callback. The student's `solve(callback)` must invoke the
+ * Harness for callee-callback. The student's `solve(callback)` must invoke the
  * function pointer it receives in rdi. The callback below just prints the
  * flag (passed in argv[2]) to stdout, so a successful solve makes the flag
  * appear naturally.

@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 /*
- * Harness for solve-callback-arg. The student's `solve(callback)` must invoke
+ * Harness for callee-callback-arg. The student's `solve(callback)` must invoke
  * the function pointer it receives in rdi, passing 1337 as the callback's
  * first argument (also in rdi).
  *

@@ -5,7 +5,7 @@
 #include <string.h>
 
 /*
- * Harness for solve-write. Loads the student's shared library and calls
+ * Harness for callee-write. Loads the student's shared library and calls
  * solve(buf, len) where `buf` is the flag bytes and `len` is the flag
  * length, both passed via argv. The student's solve is expected to
  * `write` the buffer to stdout, so a correct solve makes the flag

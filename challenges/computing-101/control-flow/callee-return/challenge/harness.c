@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 /*
- * Harness for solve-return. Loads the student's shared library, calls
+ * Harness for callee-return. Loads the student's shared library, calls
  * solve(secret), and prints the flag if `solve` returns the secret back
  * unchanged. The secret is a random 64-bit value passed as argv[2] (so a
  * hardcoded `mov rax, N; ret` only "wins" with negligible probability),
