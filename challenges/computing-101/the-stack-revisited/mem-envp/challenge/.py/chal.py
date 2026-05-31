@@ -1,4 +1,5 @@
 import __main__ as checker
+import signal
 import subprocess
 import sys
 
@@ -48,10 +49,18 @@ def check_runtime(filename):
     print("")
     sys.stdout.flush()
 
-    subprocess.run(
+    # Direct subprocess (no bash -c) so the FLAG=... value never appears in a
+    # bash signal message on a deliberately-broken solve. On a signal exit we
+    # surface the signal name ourselves via AssertionError below.
+    result = subprocess.run(
         ["env", "-i", f"FLAG={env_value}", filename],
         timeout=5,
     )
     print("")
+
+    if result.returncode < 0:
+        signum = -result.returncode
+        signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
+        raise AssertionError(f"Your program crashed with {signame}.")
 
     return True

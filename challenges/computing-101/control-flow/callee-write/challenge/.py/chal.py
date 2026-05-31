@@ -1,4 +1,5 @@
 import __main__ as checker
+import shlex
 import signal
 import subprocess
 import sys
@@ -15,22 +16,27 @@ check_runtime_failure = "Hmm, that's not right:\n"
 
 
 def check_runtime(so_path):
-    flag = checker.read_flag().rstrip(b"\n").decode()
+    flag = checker.read_flag().rstrip(b"\n")
 
     print("")
     checker.print_prompt()
-    checker.slow_print(f"/challenge/harness {so_path} <flag>")
+    checker.slow_print(f"/challenge/harness {so_path}   # flag piped via stdin")
     print("")
     sys.stdout.flush()
 
+    # `bash -c 'cmd; exit $?'` keeps bash alive past a SIGSEGV in the child
+    # so it prints its natural "Segmentation fault" message + reports 139.
+    # Flag goes via stdin so it never appears in the bash-displayed command.
+    inner = "/challenge/harness " + shlex.quote(so_path)
     result = subprocess.run(
-        ["/challenge/harness", so_path, flag],
+        ["bash", "-c", f"{inner}; exit $?"],
+        input=flag,
         timeout=5,
     )
     print("")
 
-    if result.returncode < 0:
-        signum = -result.returncode
+    if 128 < result.returncode < 192:
+        signum = result.returncode - 128
         signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
         hint = " (probably because your function fell off the end without `ret` or exiting)" if signum == signal.SIGSEGV else ""
         raise AssertionError(f"The harness crashed with {signame}{hint}.")
