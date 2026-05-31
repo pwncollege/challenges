@@ -1,7 +1,7 @@
 In the previous levels, you've read `argc`, `argv`, and `envp` from the stack.
-But the actual addresses of these strings depends on **how the program was launched**.
+But the actual addresses of these strings depend on **how the program was launched**.
 
-When the program is launched, all the strings (the program name, the arguments, and the environment variables) are placed on the stack, and then computes the `argv[i]` and `envp[i]` pointers to point into them:
+When the program is launched, the kernel places all the strings (the program name, the arguments, and the environment variables) on the stack, then computes the `argv[i]` and `envp[i]` pointers to point into them:
 
 ```text
 smaller addresses
@@ -38,3 +38,4 @@ hacker@dojo:~$ env -i FOO=xxxxxxxx /challenge/program
 ```
 
 You're not modifying the program at all --- you're just changing **how it's launched**, which controls **where its data ends up**.
+Get the alignment right, and the challenge gives you the flag!

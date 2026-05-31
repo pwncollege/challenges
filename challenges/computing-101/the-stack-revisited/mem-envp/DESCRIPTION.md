@@ -1,8 +1,8 @@
 The stack stores more than just `argc` and `argv`!
 Right after the argument list, the kernel places the **environment variables** you learned about in the [Linux Luminarium](/linux-luminarium).
-Just like `argv`, these are stored on the stack as an array of pointers to strings, where the string includes both the name and value of the variable, as so: `PATH=/usr/bin:...`, `HOME=/home/hacker`, or `PWN=COLLEGE`.
+Just like `argv`, these are stored on the stack as an array of pointers to strings, where each string includes both the name and value of the variable, as so: `PATH=/usr/bin:...`, `HOME=/home/hacker`, or `PWN=COLLEGE`.
 
-The structure looks like this (assuming `argc` is 1, so just the program name and no arguments, plus a single environment variable `A=hello`):
+The structure looks like this (assuming `argc` is 1, so just the program name and no arguments, plus a single environment variable `FLAG=...`):
 
 ```text
      Address    │ Contents
@@ -26,7 +26,7 @@ The structure looks like this (assuming `argc` is 1, so just the program name an
   │ +──────────────────────────+
   │ │ ...       │ ...          │
   │ +──────────────────────────+
-  └▸│ rsp + 200 │ "HACK=planet"│ ◀─ the first env var --- variable `A` with value `hello`
+  └▸│ rsp + 200 │ "FLAG=..."   │ ◀─ the first env var: the `FLAG` variable
     +──────────────────────────+
 ```
 
@@ -36,10 +36,22 @@ Two new things to notice:
    The kernel uses this NULL to mark the end of `argv` --- that's how programs (and you!) tell where `argv` ends and `envp` begins.
 
 2. The `envp` strings look like `NAME=VALUE` (e.g., `PATH=/usr/bin:/bin`).
-   The first byte of `envp[0]`'s string is just the first character of the *name* of the first environment variable.
+   So `envp[0]` points to a string that starts with the first env var's name.
 
-In this challenge, we will run your program with **only one environment variable** (something like `A=hello`, `B=hello`, etc., chosen at random), and `argc` will be `1`.
-That means `[rsp+24]` will hold a pointer to a string like `"A=hello"`, and the first byte of that string will be the letter `A`.
+In this challenge, we will set the `FLAG` environment variable **to your actual flag** (padded out with `=` characters so that the whole `envp[0]` string is always **exactly 64 bytes long**), and run your program with no other env vars.
+That means `[rsp+24]` will hold a pointer to those 64 bytes --- with the flag content sitting right there in memory, waiting to be written out.
 
-This challenge requires you to read the first byte of the `envp[0]` string and exit with it!
-Just like `argv[1]` previously, this requires **two dereferences**: one to get the `envp[0]` pointer from the stack, and one to follow that pointer to read the first byte of the string.
+Your task: write those 64 bytes from `envp[0]` straight to stdout!
+
+1. Load the `envp[0]` pointer from `[rsp+24]`.
+2. Use the `write` syscall to write 64 bytes starting at that pointer to file descriptor 1 (stdout).
+3. `exit` cleanly with code `0`.
+
+Recall that the `write` syscall takes:
+
+- `rax`: `1` (the syscall number)
+- `rdi`: the file descriptor (`1` for stdout)
+- `rsi`: the buffer pointer (your `envp[0]` pointer)
+- `rdx`: the number of bytes to write (`64`)
+
+Get it right, and your program will print the flag for you, no further questions asked!

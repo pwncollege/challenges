@@ -1,16 +1,17 @@
 import __main__ as checker
-import random
-import string
+import subprocess
 
-give_flag = True
-num_instructions = 4
+give_flag = False
+num_instructions = 8
 
-check_disassembly_prologue = "Checking that your assembly reads the envp[0] pointer from the stack..."
-check_disassembly_success = "Your assembly looks correct!"
+FLAG_VAR_LEN = 64  # envp[0] string is padded to exactly this many bytes
+
+check_disassembly_prologue = "Checking that your assembly reads envp[0] and writes its bytes to stdout..."
+check_disassembly_success = "Your assembly looks correct! Let's see what it prints..."
 check_disassembly_failure = "There's an issue with your assembly:\n"
 
-check_runtime_prologue = "Let's run your program with different first env vars to check that it reads the first byte of envp[0]!"
-check_runtime_success = "Neat! Your program correctly exits with the first byte of envp[0] every time! Great job!"
+check_runtime_prologue = "Running your program with FLAG set in the environment..."
+check_runtime_success = "If your program is right, the flag is printed above!"
 check_runtime_failure = "Hmm, that's not right:\n"
 
 
@@ -24,37 +25,31 @@ def check_disassembly(disas):
         "Remember: [rsp]=argc, [rsp+8]=argv[0], [rsp+16]=NULL (end of argv), [rsp+24]=envp[0]."
     )
 
-    all_derefs = [d for d in disas if "[" in d.op_str]
-    assert len(all_derefs) >= 2, (
-        "You need to dereference twice: once to get the envp[0] pointer from the stack,\n"
-        "and once to read the first byte of the env var string!"
-    )
-
+    assert ["rax", "1"] in mov_operands, "You need to set rax to 1, the syscall number for write!"
     assert ["rax", "0x3c"] in mov_operands, "You need to set rax to 60 (0x3c), the syscall number for exit!"
 
-    assert (
-        disas[-1].mnemonic == "syscall"
-    ), f"Your last instruction should be 'syscall', but you used '{disas[-1].mnemonic}'!"
+    syscalls = [d for d in disas if d.mnemonic == "syscall"]
+    assert len(syscalls) >= 2, "You need two syscalls: one to write envp[0] out, and one to exit!"
 
     return True
 
 
 def check_runtime(filename):
-    try:
-        for _ in range(3):
-            char = random.choice(string.ascii_uppercase)
-            expected = ord(char)
+    flag = checker.read_flag().rstrip(b"\n")
+    prefix = b"FLAG="
+    pad_count = FLAG_VAR_LEN - len(prefix) - len(flag)
+    assert pad_count >= 0, f"flag too long ({len(flag)} bytes) for FLAG_VAR_LEN={FLAG_VAR_LEN}"
+    env_value = (flag + b"=" * pad_count).decode()
 
-            print("")
-            cmd = f"env -i {char}=hello {filename}"
-            returncode = checker.dramatic_command(cmd)
-            checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")
-            assert returncode == expected, (
-                f"With envp[0]='{char}=hello', your program should exit with code {expected} "
-                f"(the byte for '{char}'), but it exited with code {returncode}!"
-            )
-    finally:
-        checker.dramatic_command("")
-        print("")
+    print("")
+    checker.print_prompt()
+    checker.slow_print(f"env -i 'FLAG=<the flag, padded to {FLAG_VAR_LEN - len(prefix)} bytes>' {filename}")
+    print("")
+
+    subprocess.run(
+        ["env", "-i", f"FLAG={env_value}", filename],
+        timeout=5,
+    )
+    print("")
 
     return True

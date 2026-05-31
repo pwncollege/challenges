@@ -64,8 +64,27 @@ In the case of this challenge, your `solve` function takes two arguments:
 You've already seen `rdi` used to hold the first argument of a syscall (the exit code, a file descriptor, etc.).
 That's because Linux syscalls and Linux functions use the same convention for the first few argument registers.
 
-For this challenge, write the `rsi` bytes starting at `rdi` to file descriptor 1 (stdout) using the `write` syscall (just like before!), and then `exit` the process cleanly with code `0`.
+For this challenge, the challenge will pass you **your flag** as the buffer, with the flag's length in `rsi`.
+Write the `rsi` bytes starting at `rdi` to file descriptor 1 (stdout) using the `write` syscall (just like before!), and then `exit` the process cleanly with code `0`.
+Get it right, and your `solve` will print your flag for you!
 
 ----
 **Hint:** Keep in mind that `write()` takes arguments in the order of: file descriptor (1 in `rdi` for stdout), buffer (pointer to memory, in `rsi`), and size (in `rdx`).
 This is _different_ from the arguments your function will be called with, so you'll need to move some stuff around!
+
+----
+**Debugging your `solve`:**
+Since your code is a function inside a shared library loaded by the grader, you can't just `gdb your-solve.so` directly --- there's no entry point to start from.
+And `/challenge/check` is a SUID binary, so when you launch it under a debugger its SUID privileges get dropped and it can't read your flag.
+
+The fix: launch this challenge in **practice mode** (which gives you `sudo`), and debug the whole flow as root, passing your `.so` to `check` via gdb's `run` --- exactly like you did back in the [running-with-arguments](/computing-101/introspecting) level:
+
+```console
+hacker@dojo:~$ sudo gdb /challenge/check
+(gdb) r /tmp/your-solve.so
+```
+
+To stop _inside_ your own code so you can inspect registers, drop an `int3` at the top of `solve` (just like in the [cooperative-debugging](/computing-101/introspecting) level).
+Gdb will stop at the trap with `rdi` pointing at the buffer and `rsi` holding its length, and you can `si` to step further, `print $rdi` / `info reg` to inspect, and `x/32bx $rdi` to peek at the buffer contents.
+
+(Practice mode runs without a real flag, so don't be surprised when your write produces a placeholder string instead of `pwn.college{...}`. Once your solve works in practice mode, the real run picks up the real flag automatically.)

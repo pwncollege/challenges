@@ -4,8 +4,8 @@ In security situations where a hacker gets ``code execution'' inside a process, 
 
 This challenge explores this concept.
 Once again, you write a `solve` function that the challenge calls, but **the challenge passes you no arguments**.
-The secret you have to return isn't anywhere obvious.
-It's sitting on the **stack**, inside the caller's own "frame" (what we call the part of the stack including a function's local variables and the saved return address to which it will return), and you have to reach over and grab it.
+Instead, the challenge's `caller` function has stashed **your flag** in its own local variables before calling you.
+You have to reach over into the caller's "frame" (what we call the part of the stack including a function's local variables and the saved return address to which it will return) and grab those bytes.
 
 **Wait, what?**  
 Let's walk through why this is possible.
@@ -15,8 +15,8 @@ Right before the challenge's `caller` function executed `call solve`, the stack 
 ```text
                                           [smaller addresses]
    +───────────────────────────────────+  ◀── rsp, immediately before `call solve`
-   │ caller's local region (0x40 bytes)│
-   │ ... the secret is in here ...     │
+   │ caller's local region             │
+   │ ... your flag is in here ...      │
    +───────────────────────────────────+
    │ caller's saved rbp                │
    +───────────────────────────────────+
@@ -51,8 +51,8 @@ Anyways, at the moment your `solve` starts running, the stack looks like this:
    +───────────────────────────────────+
    │ return address (back to caller)   │  ◀── rsp points here
    +───────────────────────────────────+
-   │ caller's local region (0x40 bytes)│
-   │ ... the secret is in here ...     │
+   │ caller's local region             │
+   │ ... your flag is in here ...      │
    +───────────────────────────────────+
    │ caller's saved rbp                │
    +───────────────────────────────────+
@@ -63,7 +63,7 @@ Anyways, at the moment your `solve` starts running, the stack looks like this:
                                           [larger addresses]
 ```
 
-The caller's locals sit at _larger_ addresses than your `rsp` --- below your `rsp` in the diagram. The secret is somewhere in that region.
+The caller's locals sit at _larger_ addresses than your `rsp` --- below your `rsp` in the diagram. The data you want is somewhere in that region.
 To find it, you index into memory with a **positive** offset from `rsp`.
 
 If you go the other way --- negative offsets, at addresses _smaller_ than `rsp` (above `rsp` in the diagram) --- you'll find unallocated stack space at best, and a program crash at worst.
@@ -71,18 +71,29 @@ There's nothing useful for you up there (yet!).
 The lesson here is structural: **your caller lives at larger addresses than you**, because the act of calling you pushed `rsp` to a smaller address.
 
 **The task.**  
-The challenge's `caller` is laid out very specifically.
-When your `solve` starts running, the layout is:
+The challenge's `caller` stashes **your flag** in its own local region before calling your `solve`.
+When your `solve` starts running, the layout looks like this:
 
 ```text
    [rsp + 0x00]   return address (back into caller's code)
-   [rsp + 0x08]   first byte of caller's 0x40-byte local region
+   [rsp + 0x08]   first byte of caller's local region
    ...
-   [rsp + 0x40]   the secret (an 8-byte value)
-   [rsp + 0x48]   caller's saved rbp
-   [rsp + 0x50]   return address (back to main)
+   [rsp + 0x40]   the 64-byte flag (copied here by the caller)
+   ...
+   [rsp + 0x80]   caller's stashed solve fn pointer (internal bookkeeping)
+   [rsp + 0x88]   caller's saved rbp
+   [rsp + 0x90]   return address (back to main)
 ```
 
-Read the secret at `[rsp + 0x40]`, put it in `rax` (the return-value register), and `ret`.
-The challenge will generate a different random secret each run, so hardcoding won't work --- but the offset is always the same.
-Get the secret back to the challenge, and it'll give you the flag!
+Your job: reach into the caller's frame, grab those 64 bytes at `[rsp + 0x40]`, and `write` them to stdout.
+Then `ret` to hand control back to `caller`.
+
+You already know how to issue a `write` syscall (from earlier challenges):
+
+- `rax`: `1` (the syscall number for `write`)
+- `rdi`: the file descriptor (`1` for stdout)
+- `rsi`: the buffer pointer (this time: `rsp + 0x40`, _inside the caller's frame_)
+- `rdx`: the number of bytes to write (`64`)
+
+The flag's offset from your `rsp` is always `0x40` --- but the flag itself is your actual flag, so writing it out organically prints it to your terminal.
+Get it right, and your `solve` will print the flag for you!
