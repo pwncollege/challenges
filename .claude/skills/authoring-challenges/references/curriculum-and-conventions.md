@@ -124,14 +124,38 @@ Some archetypes set a var before including (program-misuse: `{% set program_name
   `~/pwncollege/challenges*/.git/git-crypt/keys/` rather than prompting for a passphrase.
 - Always run via `nix develop --command pwnshop test <path>`.
 
-## DESCRIPTION.md house style
+## Writing the DESCRIPTION.md
 
-- Three possible levels: dojo intro (`<module>/DESCRIPTION.md`), sub-module intro, and
-  per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in module.yml).
-- **Voice scales with difficulty.** Beginner (computing-101, linux-luminarium): warm,
-  explains everything, "In this challenge, …", shows console examples, ASCII diagrams,
-  at most a single `NOTE:`/`---` separator. Advanced (legacy exploitation): terse, often
-  a single imperative sentence ("Overwrite a return address to trigger a win function!").
-- **Always read the immediate siblings and match their length, cadence, and formatting.**
-  Direct address ("you"), real console blocks, no sermons. Don't spoil the solution —
-  describe the goal and the concept.
+Learner-facing prose — treat it as carefully as the code. It's a recurring source of
+corrections: a shipped **false** claim ("GDB does not pass your shell's environment"),
+and "explain *why*, in the same educational philosophy as the others" / "tighten the text
+so it flows with the rest of the module."
+
+**Three levels:** dojo intro (`<module>/DESCRIPTION.md`), sub-module intro, and
+per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `module.yml`).
+
+**Per-challenge structure** — the house shape (see `the-stack-revisited/mem-stack-align`,
+`mem-envp`, any `control-flow/*`):
+1. **Recap** the thread from the previous level in a sentence, so it reads as a *direct
+   continuation*, not a standalone ("In the previous levels, you've read `argc`/`argv`/
+   `envp` from the stack. But the actual addresses depend on **how the program was
+   launched**…").
+2. **Introduce the ONE new concept and *why* it's true** — teach the mechanism, not just
+   the task. Use an ASCII diagram for memory/stack layout where it helps.
+3. **State what the program does / what counts as success** ("Requires `argc == 1`; hands
+   you the flag if `(argv[0] & 0xFFFF) == 0x5390`").
+4. **Show how to interact, then the win condition** — a fenced ```` ```console ```` block
+   with the `hacker@dojo:~$` prompt, ending on the payoff ("Get the alignment right, and
+   the challenge gives you the flag!").
+
+**House-style checklist:**
+- Direct address ("you"); warm and explanatory in beginner modules, terse in advanced
+  ones — **read the immediate siblings first and match their length and cadence.**
+- Fenced blocks tagged ```` ```console ````/```` ```asm ````/```` ```text ````; real
+  `hacker@dojo:~$` prompts; at most a single `NOTE:` / `---` separator; no sermons.
+- **Explain the *why*, not just the *what*** — that's the educational philosophy the
+  module is held to.
+- **Every technical claim must be verified** (a 3-line test), never asserted from memory,
+  and the phenomenon must be *real*, not produced by the challenge's own scaffolding.
+- **No spoilers:** describe the goal and the concept, not the exploit steps (those live in
+  `tests_private`). Don't hardcode randomized names in prose — refer to them generically.

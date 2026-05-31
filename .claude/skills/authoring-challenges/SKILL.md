@@ -54,7 +54,10 @@ your archetype.
   ranked by honesty/cleanliness — don't keep patching and defending the contrivance.
 - **Match the house voice, scaled to the module.** Beginner modules (computing-101,
   linux-luminarium) explain everything warmly; advanced modules are terse. Read siblings
-  to calibrate; keep DESCRIPTIONs to the length and cadence of their neighbors.
+  to calibrate; keep DESCRIPTIONs to the length and cadence of their neighbors. For the
+  per-challenge DESCRIPTION structure (recap → one new concept + *why* → success
+  condition → how-to + win) and a writing checklist, see
+  `references/curriculum-and-conventions.md` → "Writing the DESCRIPTION.md".
 
 ## 2. Determinism & flag delivery (the rule that got over-generalized — read carefully)
 - **The intended solution must be deterministic — it works every time, no guessing.**

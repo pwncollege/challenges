@@ -54,6 +54,16 @@ exploitation** — e.g. printed on admin login (sqli/auth-bypass), returned when
 succeeds (cmdi/path-traversal), or exfiltrated by a victim (xss/csrf). Don't invent a
 side channel.
 
+## DESCRIPTION.md
+
+Same structure as everywhere (recap → the one new concept/vuln + *why* it works → the
+goal → how to reach the service), but framed as an attack scenario: set the scene, name
+the target, and pose the goal as a question — "We've implemented a simple web server that
+serves files from `/challenge/files`. Can you trick it into giving you the flag?" State
+the goal, not the payload (no spoilers); keep every claim about the app's behavior true to
+the code. See `curriculum-and-conventions.md` → "Writing the DESCRIPTION.md" for the full
+checklist.
+
 ## Victims (XSS/CSRF)
 
 For challenges needing a "victim" to visit attacker content, reuse a victim template
