@@ -1,34 +1,19 @@
-You've used GDB to inspect registers, step through instructions, examine memory, and even cooperate with the debugger via `int3`.
-This level brings back the alignment exercise from `mem-stack-align`, but now you have to do it from inside GDB too.
+In the previous level, you tuned `argv[0]` from the shell with `env -i FOO=xxxxxxxx`.
+The same trick from inside gdb is trickier: by default, gdb launches the inferior with its own full environment (your shell's env plus a few of gdb's own additions), so `argv[0]` ends up at a different address than the bare shell launch.
 
-`/challenge/program` here is the same kind of binary as before: `argc` must be 1, and `(argv[0] & 0xFFFF)` must equal `0x5390`.
-The new wrinkle is that **you have to solve it twice** --- once from a shell, once from inside GDB.
-The flag only appears after both contexts have aligned `argv[0]` correctly.
-
-First, do it from the shell --- exactly like in `mem-stack-align`:
-
-```text
-hacker@dojo:~$ env -i FOO=xxxxxxxx /challenge/program
-```
-
-Tune the length of `FOO` until the low 16 bits of `argv[0]` are `0x5390`.
-On success, the program tells you to do it under GDB next.
-
-Then do it inside GDB:
+Gdb's fix is `set exec-wrapper`, which prepends a command to the inferior's `execve`:
 
 ```text
 (gdb) set exec-wrapper env -i FOO=xxxxxxxx
 (gdb) run
 ```
 
-`set exec-wrapper` tells GDB to prepend a command to the inferior's launch.
-`env -i FOO=xxxxxxxx` is exactly what you did in the shell --- a clean environment with one variable --- so the final `execve` GDB makes is identical to the one your shell made.
+The `env -i FOO=xxxxxxxx` part is identical to what you did in the shell, so gdb's `execve` becomes identical to the shell's --- and your alignment math from the previous level carries over unchanged.
 
-If you skip `set exec-wrapper` and just `run`, you'll see `argv[0]` at a different address: GDB's process has its own environment (your shell's env, plus a few of GDB's own additions), and the inferior inherits all of it.
-With `set exec-wrapper env -i FOO=xxxxxxxx`, you put GDB on the same footing as the bare shell launch, and your alignment math from the previous step works identically.
+This level uses the same `/challenge/program` as before, but you have to align `argv[0]` to `0x5390` from **both** contexts: from the shell, and from inside gdb.
+The flag appears once you've solved it in both.
 
 ----
 
 **NOTE:**
-The order doesn't matter --- you can solve under GDB first and from the shell second.
-The flag appears the moment both contexts have aligned `argv[0]` correctly.
+Order doesn't matter --- solve under gdb first or from the shell first, whichever you like.

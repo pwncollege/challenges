@@ -1,41 +1,47 @@
-In the previous levels, you've read `argc`, `argv`, and `envp` from the stack.
-But the actual addresses of these strings depend on **how the program was launched**.
-
-When the program is launched, the kernel places all the strings (the program name, the arguments, and the environment variables) on the stack, then computes the `argv[i]` and `envp[i]` pointers to point into them:
+In the previous level, you read `envp[0]` --- a pointer that the kernel placed on the stack, pointing _into_ the strings region above the pointer tables.
+The same layout applies here:
 
 ```text
-smaller addresses
-  +──────────────────────────+
-  │ argc                     │  ◀── rsp
-  +──────────────────────────+
-  │ argv[]  (pointers)       │
-  +──────────────────────────+
-  │ envp[]  (pointers)       │
-  +──────────────────────────+
-  │ auxv                     │
-  +──────────────────────────+
-  │ arg strings              │  ◀── "/challenge/program\0"  (argv[0] points here)
-  +──────────────────────────+
-  │ env strings              │  ◀── "PATH=...\0" "HOME=...\0" ...
-  +──────────────────────────+
-larger addresses
+     Address    │ Contents
+   +────────────────────────+
+   │ rsp + 0    │ 1         │ ◀─── argc
+   +────────────────────────+
+   │ rsp + 8    │ rsp + 128 │───────┐  argv[0]: pointer to the program name
+   +────────────────────────+       │
+   │ rsp + 16   │ 0         │       │  NULL (end of argv)
+   +────────────────────────+       │
+   │ rsp + 24   │ rsp + 200 │─────┐ │  envp[0]: pointer to the first env var
+   +────────────────────────+     │ │
+   │ rsp + 32   │ 0         │     │ │  NULL (end of envp)
+   +────────────────────────+     │ │
+                                  │ │
+  ┌───────────────────────────────│─┘
+  │                               │
+  │   Address   │ Contents        │
+  │ +──────────────────────────+  │
+  │ │ rsp + 128 │ "/tmp/..."   │◀─┘ the program name
+  │ +──────────────────────────+
+  │ │ ...       │ ...          │
+  │ +──────────────────────────+
+  └▸│ rsp + 200 │ "FOO=..."    │ ◀─ the first env var
+    +──────────────────────────+
 ```
 
-The argument strings sit at smaller addresses than the environment strings (above them in the diagram). Each byte you add to the environment pushes the arg strings to even smaller addresses --- and the value of `argv[0]` (the address it points to) shifts by the same amount.
+But where do the actual addresses (`rsp`, or the actual address that `rsp+200` resolves to, etc.) come from?
 
-We've turned address-space-layout randomization off for this challenge, so addresses are deterministic: the same launch always produces the same `argv[0]`.
+When your program is launched, the kernel **fills the stack backwards** from some chosen starting address.
+From there, it lays down the env strings ("growing" toward smaller addresses), then the arg strings, other metadata, then the `envp[]` and `argv[]` pointer tables, and finally `argc` on the leftmost side of the structure.
+That's where `rsp` ends up pointing.
 
-`/challenge/program`:
+This has an interesting consequence: **the more bytes you stuff into the environment (or the program arguments), the further "left" the stack the kernel pushes everything else**.
+An extra env byte means `rsp` ends up at a smaller address, the arg-strings region sits one byte further "left", and `argv[0]` (a pointer into that region) holds a one-byte-smaller value.
 
-1. Requires `argc == 1` (no extra arguments).
-2. Reads `argv[0]` from the stack.
-3. Hands you the flag if `(argv[0] & 0xFFFF) == 0x5390`.
-
-In this challenge, run `/challenge/program` with a clean environment to see where `argv[0]` lands, then tune the length of an environment variable until the low 16 bits of `argv[0]` are `0x5390`:
+This challenge will force you to confront this concept.
+In this challenge, `/challenge/program` checks the address of `argv[0]` and hands you the flag if its low 16 bits are `0x5390`.
+Run it with a single environment variable, see where `argv[0]` lands, then add or remove bytes from that variable until the alignment is right:
 
 ```text
 hacker@dojo:~$ env -i FOO=xxxxxxxx /challenge/program
 ```
 
-You're not modifying the program at all --- you're just changing **how it's launched**, which controls **where its data ends up**.
-Get the alignment right, and the challenge gives you the flag!
+You're not modifying the program at all, just changing how it's launched, which influences where its data ends up!
