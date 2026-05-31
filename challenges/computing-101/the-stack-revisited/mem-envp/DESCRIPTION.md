@@ -2,7 +2,7 @@ The stack stores more than just `argc` and `argv`!
 Right after the argument list, the kernel places the **environment variables** you learned about in the [Linux Luminarium](/linux-luminarium).
 Just like `argv`, these are stored on the stack as an array of pointers to strings, where each string includes both the name and value of the variable, as so: `PATH=/usr/bin:...`, `HOME=/home/hacker`, or `PWN=COLLEGE`.
 
-The structure looks like this (assuming `argc` is 1, so just the program name and no arguments, plus a single environment variable `FLAG=...`):
+If a program is called with no arguments (e.g., `argc` is 1 and the only string in `argv` is the name of the program itself) and a single environment variable named `FLAG`, its starting stack layout might look like this:
 
 ```text
      Address    │ Contents
@@ -32,26 +32,12 @@ The structure looks like this (assuming `argc` is 1, so just the program name an
 
 Two new things to notice:
 
-1. There is a **NULL pointer** between `argv` and `envp`.
-   The kernel uses this NULL to mark the end of `argv` --- that's how programs (and you!) tell where `argv` ends and `envp` begins.
+1. Both `argv` and `envp` are **NULL-pointer-terminated**: the kernel writes a `NULL` pointer at the end of each list of pointers.
+   That's how programs (and you!) know where each list ends --- walk the pointers until you hit a `NULL`.
+   In the diagram, you can see the `NULL` at `rsp+16` marking the end of `argv`, and another at `rsp+32` marking the end of `envp`.
 
 2. The `envp` strings look like `NAME=VALUE` (e.g., `PATH=/usr/bin:/bin`).
    So `envp[0]` points to a string that starts with the first env var's name.
 
-In this challenge, we will set the `FLAG` environment variable **to your actual flag** (padded out with `=` characters so that the whole `envp[0]` string is always **exactly 64 bytes long**), and run your program with no other env vars.
-That means `[rsp+24]` will hold a pointer to those 64 bytes --- with the flag content sitting right there in memory, waiting to be written out.
-
-Your task: write those 64 bytes from `envp[0]` straight to stdout!
-
-1. Load the `envp[0]` pointer from `[rsp+24]`.
-2. Use the `write` syscall to write 64 bytes starting at that pointer to file descriptor 1 (stdout).
-3. `exit` cleanly with code `0`.
-
-Recall that the `write` syscall takes:
-
-- `rax`: `1` (the syscall number)
-- `rdi`: the file descriptor (`1` for stdout)
-- `rsi`: the buffer pointer (your `envp[0]` pointer)
-- `rdx`: the number of bytes to write (`64`)
-
-Get it right, and your program will print the flag for you, no further questions asked!
+In this challenge, we will set the `FLAG` environment variable to the actual flag and run your program with no arguments and no other env vars.
+That means `[rsp+24]` will hold a pointer to those 64 bytes, and you can get the flag by `write()`ing them out!
