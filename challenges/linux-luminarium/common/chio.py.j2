@@ -142,6 +142,8 @@ def check_challenge_shellscript(process):
     script_path = process.cmdline()[1]
     if script_path == "-c":
         script_path = process.cmdline()[3]
+    elif script_path == "-p":
+        script_path = process.cmdline()[2]
 
     if not script_path.startswith("/"):
         script_path = os.path.abspath(script_path)
