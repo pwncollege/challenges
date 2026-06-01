@@ -3,7 +3,7 @@
 # opens these during its SUID-elevated setup phase to get FDs that survive
 # the privilege drop; the files themselves stay root-owned and unreachable
 # to the user.
-for f in /challenge/.shell-sentinel /challenge/.gdb-sentinel /challenge/.shell-target /challenge/.gdb-target; do
+for f in /challenge/.shell-sentinel /challenge/.gdb-sentinel /challenge/.target; do
 	: > "$f"
 	chown root:root "$f"
 	chmod 600 "$f"

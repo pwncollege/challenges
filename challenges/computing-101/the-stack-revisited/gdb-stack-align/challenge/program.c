@@ -28,14 +28,18 @@ extern char **environ;
 #define FLAG_FD            100
 #define MY_SENT_FD         101
 #define OTHER_SENT_FD      102
-#define MY_TARGET_FD       103
+#define TARGET_FD          103
 
 #define SHELL_SENTINEL "/challenge/.shell-sentinel"
 #define GDB_SENTINEL   "/challenge/.gdb-sentinel"
-#define SHELL_TARGET   "/challenge/.shell-target"
-#define GDB_TARGET     "/challenge/.gdb-target"
+#define TARGET_PATH    "/challenge/.target"
 
-#define BYTES_DELTA 0x80   /* same as mem-stack-align; small enough to type */
+/* Both contexts share one target so the desired address doesn't shift when
+ * the learner switches between shell and gdb. The delta is generous enough
+ * that the target sits below BOTH baselines regardless of which context
+ * gets the first run (gdb's inferior baseline is typically a few bytes
+ * lower than the bare shell's). */
+#define BYTES_DELTA 0x100
 
 static int re_exec_phase(void) {
     struct stat st;
@@ -86,7 +90,7 @@ static void setup_phase(char **argv) {
     inherit_fd("/flag", FLAG_FD, O_RDONLY);
     inherit_fd(traced ? GDB_SENTINEL : SHELL_SENTINEL, MY_SENT_FD,    O_WRONLY | O_APPEND);
     inherit_fd(traced ? SHELL_SENTINEL : GDB_SENTINEL, OTHER_SENT_FD, O_RDONLY);
-    inherit_fd_create(traced ? GDB_TARGET : SHELL_TARGET, MY_TARGET_FD, O_RDWR | O_CREAT);
+    inherit_fd_create(TARGET_PATH, TARGET_FD, O_RDWR | O_CREAT);
 
     if (personality(personality(0xFFFFFFFF) | ADDR_NO_RANDOMIZE) < 0)
         err(1, "personality");
@@ -102,8 +106,8 @@ static void setup_phase(char **argv) {
 
 static unsigned long read_persisted_target(void) {
     char buf[32];
-    if (lseek(MY_TARGET_FD, 0, SEEK_SET) < 0) return 0;
-    ssize_t n = read(MY_TARGET_FD, buf, sizeof buf - 1);
+    if (lseek(TARGET_FD, 0, SEEK_SET) < 0) return 0;
+    ssize_t n = read(TARGET_FD, buf, sizeof buf - 1);
     if (n <= 0) return 0;
     buf[n] = 0;
     return strtoul(buf, NULL, 0);
@@ -112,9 +116,9 @@ static unsigned long read_persisted_target(void) {
 static void write_persisted_target(unsigned long target) {
     char buf[32];
     int len = snprintf(buf, sizeof buf, "0x%lx", target);
-    if (ftruncate(MY_TARGET_FD, 0) < 0) err(1, "ftruncate target");
-    if (pwrite(MY_TARGET_FD, buf, len, 0) != len) err(1, "pwrite target");
-    fsync(MY_TARGET_FD);
+    if (ftruncate(TARGET_FD, 0) < 0) err(1, "ftruncate target");
+    if (pwrite(TARGET_FD, buf, len, 0) != len) err(1, "pwrite target");
+    fsync(TARGET_FD);
 }
 
 static int challenge_phase(int argc, char **argv) {
@@ -135,12 +139,12 @@ static int challenge_phase(int argc, char **argv) {
     if (current != target) {
         long delta = (long)(current - target);
         fprintf(stderr,
-                "argv[0] is at 0x%lx (running %s the %s); I want it at 0x%lx.\n"
+                "argv[0] is at 0x%lx (running %s); I want it at 0x%lx.\n"
                 "That's %ld bytes lower --- adjust your env padding.\n",
                 current,
-                traced ? "under" : "in",
-                traced ? "GDB" : "shell",
-                target, delta);
+                traced ? "under GDB" : "in the shell",
+                target,
+                delta);
         return 1;
     }
 
