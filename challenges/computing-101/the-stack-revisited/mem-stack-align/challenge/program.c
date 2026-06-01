@@ -112,13 +112,6 @@ static int challenge_phase(int argc, char **argv) {
     if (target == 0) {
         target = (current - BYTES_DELTA) & 0xFFFF;
         write_persisted_target(target);
-        fprintf(stderr,
-                "argv[0] = %p; on this first run I'm picking your target:\n"
-                "  (argv[0] & 0xFFFF) == 0x%lx --- %d bytes below the current value.\n"
-                "Tune an environment variable to shift argv[0] there.\n"
-                "For example: env -i FOO=$(printf 'x%%.0s' $(seq 1 %d)) /challenge/program\n",
-                argv[0], target, BYTES_DELTA, BYTES_DELTA - 5);
-        return 1;
     }
 
     if (current != target) {

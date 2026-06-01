@@ -127,18 +127,9 @@ static int challenge_phase(int argc, char **argv) {
     const char *ctx = traced ? "GDB" : "shell";
     unsigned long current = (unsigned long)argv[0] & 0xFFFF;
     unsigned long target = read_persisted_target();
-
     if (target == 0) {
         target = (current - BYTES_DELTA) & 0xFFFF;
         write_persisted_target(target);
-        fprintf(stderr,
-                "argv[0] = %p; first run in the %s context. I'm picking your target:\n"
-                "  (argv[0] & 0xFFFF) == 0x%lx --- %d bytes below the current value.\n"
-                "Tune an environment variable to shift argv[0] there%s.\n",
-                argv[0], ctx, target, BYTES_DELTA,
-                traced ? " (use `set exec-wrapper env -i FOO=...; run`)"
-                       : " (use `env -i FOO=... /challenge/program`)");
-        return 1;
     }
 
     if (current != target) {
