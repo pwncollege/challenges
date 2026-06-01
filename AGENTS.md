@@ -6,16 +6,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is the pwn.college challenge monorepo containing cybersecurity CTF challenges. Challenges are organized as directories under modules (e.g., `web-security`, etc.) and are built as Docker containers for deployment.
 
+## Authoring Rules (read before creating/reviewing challenges)
+
+Distilled from repeated past corrections. The full, archetype-specific playbook +
+copy-paste recipes are in the **`authoring-challenges` skill**
+(`.claude/skills/authoring-challenges/`); load it whenever you create, review, or revise a
+challenge, level, module, or dojo. Behavioral rules below are universal; mechanics adapt
+per archetype (templated web/service, interpreted checker, compiled SUID binary, legacy).
+
+- **Orient first.** Identify the archetype and **extend the module's `common/` templates
+  instead of hand-rolling** (flask/cmdi/sqli, `common/check`, `secret-value-checker.py`,
+  `Dockerfile.j2`). Put new levels in the active module (not `challenges/legacy/`). Read
+  2–3 sibling levels, and check how they solve a problem before declaring it impossible or
+  asking for internals.
+- **Pedagogy:** one new concept per level (split the surplus into its own level, don't
+  hide it in prose); don't introduce advanced topics early; the phenomenon taught must be
+  *real*, not manufactured by your own scaffolding; **never put an unverified factual claim
+  in learner-facing text** — test it first; match the module's voice.
+- **Determinism & flag:** the intended solve must work deterministically (no guessing).
+  Seeded build-time / per-instance randomness is fine and good (names, passwords, a secret
+  the learner *discovers* via the intended technique) — just not a coin-flip in the solve
+  path. Grant the flag only on a real solve, via the archetype's normal mechanism (SUID
+  binary prints it; checker `give_flag`; web app reveals on exploit; `submit-number` for
+  read-a-value levels). Don't add wrappers/extra binaries/indirection the spec doesn't need.
+- **Code:** lean, idiomatic, review-ready on the first pass, in every language (extend the
+  common base; C: `<err.h>`, helpers, why-comments; don't reimplement what the framework or
+  kernel already gives you).
+- **Testing integrity:** run `pwnshop test` **only inside `nix develop`** (outside it,
+  `personality`/ASLR challenges fail with `personality: Operation not permitted` — that
+  EPERM means *enter the dev shell*, not *patch pwnshop/the challenge*). `tests_private`
+  runs the real solve and greps the flag. **Never claim tests pass without running them**;
+  qualify a pass with its environment.
+- **Git/comms:** on an unpushed WIP branch just amend obvious fixes (no permission menus);
+  state persistence precisely (working-tree vs committed vs pushed); never assert an
+  uncommitted change is "the user's" without evidence.
+
 ## Key Commands
 
 ### Dev Environment (Nix)
 
-Preferred workflow is to use the repo's Nix flake dev shell:
+`nix develop` is required for `pwnshop`. Always enter the dev shell before invoking `pwnshop` (or `./pwnshop`) -- if anything fails unexpectedly, your first check should be whether you are inside the dev shell.
 
 ```bash
 nix develop
 pwnshop test challenges/web-security/path-traversal-1
 ```
+
+The dev shell starts a project-local `dockerd` (see `runtime/`) and exports `DOCKER_HOST` at it. That daemon ships with a patched seccomp profile (`runtime/seccomp.nix`) that allows extra `personality()` values including `ADDR_NO_RANDOMIZE` and `READ_IMPLIES_EXEC` -- challenges that disable ASLR via `personality()` rely on this. Outside the dev shell, `pwnshop` silently falls through to the host `dockerd` with stock moby seccomp, and those challenges fail with `personality: Operation not permitted`. Do not "fix" that EPERM by patching pwnshop; enter `nix develop`.
 
 Requirements for `nix develop`: Linux (`x86_64-linux`), `systemd`, `sudo`, and Nix flakes enabled (`experimental-features = nix-command flakes` in `~/.config/nix/nix.conf` or `/etc/nix/nix.conf`). See `docs/development.md`.
 

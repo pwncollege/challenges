@@ -1,6 +1,7 @@
 In the previous level, the filename was passed as an argument to your program.
 But what if you need to open a file whose path you already know?
-You can hardcode the filename string directly into your program by writing it onto the stack, byte by byte!
+There are many ways to hardcode strings in your code, but _for the purposes of the type of code you'll be writing in pwn.college_, we are going to go with a "hacker" way designed more for use during software exploitation than real software development.
+We will hardcode the filename string directly into your program by writing it onto the stack, byte by byte!
 
 The `open` syscall needs a _pointer_ to the filename, so you need the bytes `/ f l a g` stored somewhere in memory.
 You already know a writable memory address: `rsp` (the stack).
