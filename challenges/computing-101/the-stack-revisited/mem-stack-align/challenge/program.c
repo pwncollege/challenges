@@ -1,11 +1,18 @@
 /* Two-phase trick to keep the user-facing "just run /challenge/program" UX:
  *
  *   1. SUID phase opens /flag (stashed as FD 100, inherited across execve),
- *      sets ADDR_NO_RANDOMIZE for the next exec, drops privileges, and
- *      re-execs a non-SUID memfd copy of itself.
- *   2. The re-exec'd phase has deterministic addresses (no ASLR) and a clean
- *      FD 100 it can read the flag from. argv[0]'s low bits are now a pure
- *      function of env-string lengths -- which is the lesson.
+ *      opens a target file at FD 103 (created if missing), sets
+ *      ADDR_NO_RANDOMIZE for the next exec, drops privileges, and re-execs
+ *      a non-SUID memfd copy of itself.
+ *   2. The re-exec'd phase has deterministic addresses (no ASLR) and clean
+ *      FDs it can read/write. argv[0]'s low bits are now a pure function of
+ *      env-string lengths -- which is the lesson.
+ *
+ * On the first run we observe argv[0] and pick a target a fixed BYTES_DELTA
+ * (~128 bytes) below it, persist it in /challenge/.target via the inherited
+ * FD, and tell the user. On subsequent runs we read the persisted target
+ * and check. This keeps the required pad humanly typable instead of forcing
+ * an arbitrary ~40000-byte shift to a hardcoded address.
  *
  * Why memfd-copy for the re-exec? Re-execing the SUID binary triggers
  * secureexec and clears ADDR_NO_RANDOMIZE. A memfd carries no SUID bit.
@@ -15,6 +22,8 @@
 #include <err.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/personality.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -22,7 +31,10 @@
 
 extern char **environ;
 
-#define FLAG_FD 100
+#define FLAG_FD     100
+#define TARGET_FD   103
+#define TARGET_PATH "/challenge/.target"
+#define BYTES_DELTA 0x80     /* shift the target this many bytes below baseline */
 
 static int re_exec_phase(void) {
     struct stat st;
@@ -33,6 +45,13 @@ static void inherit_fd(const char *path, int target, int flags) {
     int fd = open(path, flags);
     if (fd < 0) err(1, "open %s", path);
     if (dup2(fd, target) < 0) err(1, "dup2 %s", path);
+    close(fd);
+}
+
+static void inherit_target_fd(void) {
+    int fd = open(TARGET_PATH, O_RDWR | O_CREAT, 0600);
+    if (fd < 0) err(1, "open %s", TARGET_PATH);
+    if (dup2(fd, TARGET_FD) < 0) err(1, "dup2 target");
     close(fd);
 }
 
@@ -51,6 +70,7 @@ static int memfd_clone(const char *path) {
 
 static void setup_phase(char **argv) {
     inherit_fd("/flag", FLAG_FD, O_RDONLY);
+    inherit_target_fd();
 
     if (personality(personality(0xFFFFFFFF) | ADDR_NO_RANDOMIZE) < 0)
         err(1, "personality");
@@ -64,16 +84,49 @@ static void setup_phase(char **argv) {
     err(1, "execve");
 }
 
+static unsigned long read_persisted_target(void) {
+    char buf[32];
+    if (lseek(TARGET_FD, 0, SEEK_SET) < 0) return 0;
+    ssize_t n = read(TARGET_FD, buf, sizeof buf - 1);
+    if (n <= 0) return 0;
+    buf[n] = 0;
+    return strtoul(buf, NULL, 0);
+}
+
+static void write_persisted_target(unsigned long target) {
+    char buf[32];
+    int len = snprintf(buf, sizeof buf, "0x%lx", target);
+    if (ftruncate(TARGET_FD, 0) < 0) err(1, "ftruncate target");
+    if (pwrite(TARGET_FD, buf, len, 0) != len) err(1, "pwrite target");
+    fsync(TARGET_FD);
+}
+
 static int challenge_phase(int argc, char **argv) {
     if (argc != 1) {
         fprintf(stderr, "argc == %d, but I need argc == 1.\n", argc);
         return 1;
     }
-    if (((unsigned long)argv[0] & 0xFFFF) != 0x5390) {
+
+    unsigned long current = (unsigned long)argv[0] & 0xFFFF;
+    unsigned long target = read_persisted_target();
+    if (target == 0) {
+        target = (current - BYTES_DELTA) & 0xFFFF;
+        write_persisted_target(target);
         fprintf(stderr,
-                "argv[0] = %p; I need (argv[0] & 0xFFFF) == 0x5390.\n"
-                "Tune the length of an environment variable to shift it.\n",
-                argv[0]);
+                "argv[0] = %p; on this first run I'm picking your target:\n"
+                "  (argv[0] & 0xFFFF) == 0x%lx --- %d bytes below the current value.\n"
+                "Tune an environment variable to shift argv[0] there.\n"
+                "For example: env -i FOO=$(printf 'x%%.0s' $(seq 1 %d)) /challenge/program\n",
+                argv[0], target, BYTES_DELTA, BYTES_DELTA - 5);
+        return 1;
+    }
+
+    if (current != target) {
+        long delta = (long)((current - target) & 0xFFFF);
+        fprintf(stderr,
+                "argv[0] = %p; I need (argv[0] & 0xFFFF) == 0x%lx --- %ld bytes below the current value.\n"
+                "Adjust your env padding to shift argv[0] there.\n",
+                argv[0], target, delta);
         return 1;
     }
 

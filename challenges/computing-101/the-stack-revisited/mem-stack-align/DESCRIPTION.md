@@ -37,7 +37,8 @@ This has an interesting consequence: **the more bytes you stuff into the environ
 An extra env byte means `rsp` ends up at a smaller address, the arg-strings region sits one byte further "left", and `argv[0]` (a pointer into that region) holds a one-byte-smaller value.
 
 This challenge will force you to confront this concept.
-In this challenge, `/challenge/program` checks the address of `argv[0]` and hands you the flag if its low 16 bits are `0x5390`.
+In this challenge, `/challenge/program` looks at its own `argv[0]`, picks a target a small number of bytes below the current value on first run, and tells you what target you have to hit.
+Hit that target with env padding, and it hands you the flag.
 Run it with a single environment variable, see where `argv[0]` lands, then add or remove bytes from that variable until the alignment is right:
 
 ```text

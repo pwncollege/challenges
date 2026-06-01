@@ -15,7 +15,8 @@ In the Linux Luminarium's [Variables module](/linux-luminarium/variables), you'v
 Since gdb appends your program name to the `exec-wrapper` command and invokes it, that's exactly what will happen!
 
 This challenge will force you to confront this concept.
-It uses the same `/challenge/program` as before, but you have to align `argv[0]` to `0x5390` from both contexts: once from the shell, and once from inside gdb.
+It uses the same kind of `/challenge/program` as before: it picks a target close to the current `argv[0]` on the first run and tells you what to hit.
+You have to hit that target from **both** contexts --- once from the shell, and once from inside gdb (and the two contexts get separate targets, since gdb's environment isn't quite the same as the shell's).
 The flag appears after you've solved it in both!
 
 ----
