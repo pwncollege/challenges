@@ -3,18 +3,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 
 /*
  * Harness for callee-write. Loads the student's shared library and calls
- * solve(buf, len) where `buf` is the flag bytes (read from stdin) and `len`
- * is its length. The student's solve is expected to `write` the buffer to
- * stdout, so a correct solve makes the flag appear naturally on the
- * learner's terminal.
- *
- * Why stdin and not argv? If the flag were in argv, bash's "Segmentation
- * fault" message on a deliberately-broken solve would expose the flag in
- * the displayed command-line. Reading from stdin keeps it out of argv.
+ * solve(buf, len) where `buf` is the flag bytes and `len` is the flag
+ * length, both passed via argv. The student's solve is expected to
+ * `write` the buffer to stdout, so a correct solve makes the flag
+ * appear naturally on the learner's terminal.
  */
 
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
@@ -26,10 +21,12 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s lib.so   (flag is read from stdin)\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s lib.so flag\n", argv[0]);
         return 2;
     }
+    const char *flag = argv[2];
+    size_t len = strlen(flag);
 
     LOG("loading shared library %s ...", argv[1]);
     void *h = dlopen(argv[1], RTLD_NOW);
@@ -44,21 +41,6 @@ int main(int argc, char **argv) {
         return 2;
     }
     LOG("found solve at %p", (void *)solve);
-
-    char flag[256];
-    ssize_t total = 0;
-    ssize_t n;
-    while ((n = read(0, flag + total, sizeof(flag) - total)) > 0) {
-        total += n;
-        if (total >= (ssize_t)sizeof(flag)) break;
-    }
-    if (total <= 0) {
-        LOG("expected the flag on stdin, but got nothing.");
-        return 2;
-    }
-    while (total > 0 && (flag[total - 1] == '\n' || flag[total - 1] == '\r')) total--;
-    size_t len = (size_t)total;
-
     LOG("calling solve(<%zu-byte flag buffer>, %zu) --- your code should write those bytes to stdout:", len, len);
 
     solve(flag, len);

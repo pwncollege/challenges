@@ -1,5 +1,4 @@
 import __main__ as checker
-import shlex
 import signal
 import subprocess
 import sys
@@ -29,19 +28,19 @@ def check_runtime(so_path):
     print("")
     sys.stdout.flush()
 
-    # `bash -c 'cmd; exit $?'` keeps bash alive past a SIGSEGV in the child
-    # so it prints its natural "Segmentation fault" message + reports 139.
-    inner = "/challenge/harness " + shlex.quote(so_path)
     result = subprocess.run(
-        ["bash", "-c", f"{inner}; exit $?"],
+        ["/challenge/harness", so_path],
         input=flag_buf,
         timeout=5,
     )
     print("")
 
-    if 128 < result.returncode < 192:
-        signum = result.returncode - 128
+    if result.returncode < 0:
+        signum = -result.returncode
         signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
+        # Mirror what an interactive bash prints when a foreground job dies.
+        sys.stderr.write(("Segmentation fault" if signum == signal.SIGSEGV else signame) + "\n")
+        sys.stderr.flush()
         raise AssertionError(f"The harness crashed with {signame}.")
 
     return True

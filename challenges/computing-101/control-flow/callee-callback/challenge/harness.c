@@ -1,14 +1,12 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <stdio.h>
-#include <unistd.h>
 
 /*
- * Harness for callee-callback. The student's `solve(callback)` must invoke
- * the function pointer it receives in rdi. The callback below just prints
- * the flag (read from stdin) to stdout, so a successful solve makes the flag
- * appear naturally. We read the flag from stdin --- not argv --- so bash's
- * "Segmentation fault" message on a broken solve never exposes the flag.
+ * Harness for callee-callback. The student's `solve(callback)` must invoke the
+ * function pointer it receives in rdi. The callback below just prints the
+ * flag (passed in argv[2]) to stdout, so a successful solve makes the flag
+ * appear naturally.
  *
  * `force_align_arg_pointer` makes gcc emit a prologue that realigns rsp to
  * 16 bytes, so the callback can safely do anything (SSE, printf, etc.) even
@@ -17,7 +15,7 @@
 
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
 
-static char flag[256];
+static const char *flag;
 static int callback_ran = 0;
 
 static void __attribute__((force_align_arg_pointer)) cb(void) {
@@ -32,23 +30,11 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s lib.so   (flag is read from stdin)\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s lib.so flag\n", argv[0]);
         return 2;
     }
-
-    ssize_t total = 0;
-    ssize_t n;
-    while ((n = read(0, flag + total, sizeof(flag) - 1 - total)) > 0) {
-        total += n;
-        if (total >= (ssize_t)sizeof(flag) - 1) break;
-    }
-    if (total <= 0) {
-        fprintf(stderr, "expected the flag on stdin, but got nothing\n");
-        return 2;
-    }
-    flag[total] = 0;
-    while (total > 0 && (flag[total - 1] == '\n' || flag[total - 1] == '\r')) flag[--total] = 0;
+    flag = argv[2];
 
     LOG("loading shared library %s ...", argv[1]);
     void *h = dlopen(argv[1], RTLD_NOW);
