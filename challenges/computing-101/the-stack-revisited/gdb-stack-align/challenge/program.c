@@ -125,19 +125,22 @@ static int challenge_phase(int argc, char **argv) {
 
     int traced = is_traced();
     const char *ctx = traced ? "GDB" : "shell";
-    unsigned long current = (unsigned long)argv[0] & 0xFFFF;
+    unsigned long current = (unsigned long)argv[0];
     unsigned long target = read_persisted_target();
     if (target == 0) {
-        target = (current - BYTES_DELTA) & 0xFFFF;
+        target = current - BYTES_DELTA;
         write_persisted_target(target);
     }
 
     if (current != target) {
-        long delta = (long)((current - target) & 0xFFFF);
+        long delta = (long)(current - target);
         fprintf(stderr,
-                "argv[0] = %p; in the %s context I need (argv[0] & 0xFFFF) == 0x%lx --- %ld bytes below the current value.\n"
-                "Adjust your env padding to shift argv[0] there.\n",
-                argv[0], ctx, target, delta);
+                "argv[0] is at 0x%lx (running %s the %s); I want it at 0x%lx.\n"
+                "That's %ld bytes lower --- adjust your env padding.\n",
+                current,
+                traced ? "under" : "in",
+                traced ? "GDB" : "shell",
+                target, delta);
         return 1;
     }
 

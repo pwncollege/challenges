@@ -36,10 +36,8 @@ That's where `rsp` ends up pointing.
 This has an interesting consequence: **the more bytes you stuff into the environment (or the program arguments), the further "left" the stack the kernel pushes everything else**.
 An extra env byte means `rsp` ends up at a smaller address, the arg-strings region sits one byte further "left", and `argv[0]` (a pointer into that region) holds a one-byte-smaller value.
 
-This challenge will force you to confront this concept.
-In this challenge, `/challenge/program` looks at its own `argv[0]`, picks a target a small number of bytes below the current value on first run, and tells you what target you have to hit.
-Hit that target with env padding, and it hands you the flag.
-Run it with a single environment variable, see where `argv[0]` lands, then add or remove bytes from that variable until the alignment is right:
+In this challenge, run `/challenge/program` to see what address it wants `argv[0]` at.
+Then add a single environment variable, with just the right number of `x`s in its value, to shift `argv[0]` to that address:
 
 ```text
 hacker@dojo:~$ env -i FOO=xxxxxxxx /challenge/program

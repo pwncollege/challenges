@@ -15,8 +15,8 @@ In the Linux Luminarium's [Variables module](/linux-luminarium/variables), you'v
 Since gdb appends your program name to the `exec-wrapper` command and invokes it, that's exactly what will happen!
 
 This challenge will force you to confront this concept.
-It uses the same kind of `/challenge/program` as before: it picks a target close to the current `argv[0]` on the first run and tells you what to hit.
-You have to hit that target from **both** contexts --- once from the shell, and once from inside gdb (and the two contexts get separate targets, since gdb's environment isn't quite the same as the shell's).
+It uses the same kind of `/challenge/program` as before: run it to see what address it wants `argv[0]` at, then shift `argv[0]` there with env padding.
+You have to hit it twice --- once from the shell, and once from inside gdb (and the two contexts want different addresses, since gdb's environment isn't quite the same as the shell's).
 The flag appears after you've solved it in both!
 
 ----
