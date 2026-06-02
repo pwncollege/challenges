@@ -16,3 +16,6 @@ resources:
 - type: challenge
   id: gdb-stack-align
   name: "Aligning the Stack Through GDB"
+- type: challenge
+  id: gdb-stack-align-2
+  name: "Aligning the Stack Through GDB, Generalized"

@@ -1,10 +1,27 @@
-#!/usr/bin/exec-suid --real -- /bin/bash -p
-# Run gdb as root so the kernel preserves SUID elevation on /challenge/program
-# under ptrace. Two defense layers:
-#   - this wrapper only forwards a small allowlist of flags and refuses
-#     anything other than /challenge/program as the inferior;
-#   - /challenge/.gdb (loaded via -x before any user input) redefines
-#     shell/pipe/python/source/dump/save/add-symbol-file as no-ops.
+#!/usr/bin/exec-suid --environ all -- /bin/bash -p
+# Give gdb euid 0 so the inferior (/challenge/program, itself SUID root) keeps
+# its elevation under ptrace and can open /flag. We deliberately do NOT pass
+# exec-suid's --real: leaving the *real* uid as the caller's keeps every process
+# in this chain AT_SECURE, so the dynamic loader ignores LD_PRELOAD/LD_* even
+# though we preserve the caller's environment below. (With --real, ruid==euid==0
+# clears AT_SECURE and an attacker-set LD_PRELOAD would run as root.)
+#
+# Why "--environ all": this challenge teaches that gdb shifts the stack by
+# adding a few env vars of its own *on top of the same environment the program
+# gets from the shell*. exec-suid's default "safe" policy instead scrubs our
+# environment down to a clean root env (dropping DOJO_AUTH_TOKEN, HOSTNAME,
+# SSL_CERT_FILE, ... — a few hundred bytes the real dojo shell carries). That
+# makes the inferior's stack *smaller* under gdb than in the shell, so the
+# captured target lands *above* the shell baseline and is unreachable by
+# additive env padding — i.e. the level becomes unsolvable. Preserving the
+# caller's environment makes the gdb shift small and forward, as DESCRIPTION.md
+# promises. (This is invisible to `pwnshop test`, whose CI shell carries almost
+# no environment; tests_private/test_solve.sh plants a big var to reproduce it.)
+#
+# Two more defense layers: forward only an allowlist of flags and refuse any
+# inferior but /challenge/program; /challenge/.gdb (loaded via -x before any
+# user input) no-ops the in-gdb command escapes; and we unset the
+# loader/interpreter knobs gdb itself would otherwise honor while euid 0.
 
 args=()
 program=""
@@ -25,4 +42,13 @@ done
 [ "$(realpath -- "$program")" = "/challenge/program" ] || { echo "this wrapper only debugs /challenge/program" >&2; exit 1; }
 
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT GDBHISTFILE PYTHONPATH PYTHONHOME
+
+# gdb already enlarges the inferior's environment with a couple of variables of
+# its own (LINES/COLUMNS). Add a fixed, clearly-named pad so the resulting shift
+# is *always* comfortably in the documented direction (gdb's argv[0] a stable,
+# humanly-typable distance below the shell's) instead of riding on the ~1-byte
+# margin between gdb's LINES/COLUMNS and the shell's "_=/challenge/program",
+# which a different gdb/terminal/locale could flip.
+export GDB_STACK_ALIGN_PAD=$(printf 'x%.0s' {1..64})
+
 exec /usr/bin/gdb -nx -x /challenge/.gdb "${args[@]}" "$program"

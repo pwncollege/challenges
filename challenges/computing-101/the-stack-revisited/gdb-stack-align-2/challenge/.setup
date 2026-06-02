@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+gcc -static -O2 -o /challenge/program /challenge/program.c
+chmod 4755 /challenge/program
+rm /challenge/program.c
+
+# /challenge/bin/gdb uses exec-suid via its shebang; the SUID bit on the
+# script itself is what tells exec-suid to elevate.
+chmod 4755 /challenge/bin/gdb
+chmod 644 /challenge/.gdb

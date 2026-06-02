@@ -1,0 +1,34 @@
+#!/usr/bin/exec-suid --real -- /bin/bash -p
+# Sequel to ../../gdb-stack-align/challenge/bin/gdb. Same job (run gdb as root so
+# the SUID inferior keeps its elevation under ptrace) and same two defense layers
+# (flag allowlist + inferior path check; /challenge/.gdb no-ops the in-gdb
+# command escapes; unset the loader/python knobs).
+#
+# The deliberate difference: we do NOT pass --environ all here, so exec-suid's
+# default "safe" policy scrubs the environment down to a clean root env. gdb
+# therefore runs with its own environment, nothing like the learner's shell ---
+# which is the whole point of this level: you can't pad your shell to match it,
+# you have to wipe your environment (`env -i`) and rebuild it. Because the
+# environment is scrubbed (no learner-controlled LD_PRELOAD survives), running
+# as root here is safe even though argv carries the real uid.
+
+args=()
+program=""
+while (( $# )); do
+	case "$1" in
+		-batch|-q|--quiet|--silent) args+=("$1"); shift ;;
+		-ex|--eval-command)
+			[ -n "${2+x}" ] || { echo "$1 needs an argument" >&2; exit 1; }
+			args+=("$1" "$2"); shift 2 ;;
+		-*) echo "rejected gdb flag: $1" >&2; exit 1 ;;
+		*)
+			[ -z "$program" ] || { echo "only one program argument allowed" >&2; exit 1; }
+			program="$1"; shift ;;
+	esac
+done
+
+[ -n "$program" ] || { echo "usage: gdb /challenge/program" >&2; exit 1; }
+[ "$(realpath -- "$program")" = "/challenge/program" ] || { echo "this wrapper only debugs /challenge/program" >&2; exit 1; }
+
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT GDBHISTFILE PYTHONPATH PYTHONHOME
+exec /usr/bin/gdb -nx -x /challenge/.gdb "${args[@]}" "$program"
