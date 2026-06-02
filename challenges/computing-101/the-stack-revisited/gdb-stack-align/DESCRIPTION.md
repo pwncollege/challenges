@@ -1,24 +1,12 @@
-By default, gdb launches programs with some changes to the environment, starting with your shell's env and adding a few environment variables of its own.
-As a result, as you learned in the previous level, the stack gets shifted, and subtle code like tricky exploits might behave differently, leading to frustration during debugging.
+A common stack-related snafu is the shift in stack addresses that happens when launching a program under gdb.
+By default, gdb passes its own environment (your shell's env, plus a few of gdb's own additions) to the debugged program, and these extra environment variables shift the stack to the left, so `argv[0]` ends up at a different address than it does when you run the program straight from your shell.
+This isn't so important right now, but it becomes a big bother later on when you're trying to figure out why your bit-precise exploit code works in gdb but not on a target running normally.
+In those cases, learning to "synchronize" the two environments is important.
 
-This challenge will teach you how to achieve identical stack layouts in and outside of gdb.
-We are going to use gdb's `set exec-wrapper` functionality, which prepends a command that will be used to actually run the program being debugged.
-In this case, we'll set this command to `env -i`, which will wipe the environment (including whatever gdb adds) and let us control it directly.
+This challenge will teach you the basics: making the addresses outside of gdb line up better with the addresses inside gdb.
 
-```text
-(gdb) set exec-wrapper env -i NAME=VALUE
-(gdb) run
-```
-
-This is a new use of `env` than what you've seen before.
-In the Linux Luminarium's [Variables module](/linux-luminarium/variables), you've used `env` to print out variables, but it can also be used as a variable-modifying launcher program: `env -i NAME=VALUE my_program` will launch `my_program` with an empty environment (`-i` means "re**i**nitialize environment") except for the `NAME` environment variable set to the value `VALUE`.
-Since gdb appends your program name to the `exec-wrapper` command and invokes it, that's exactly what will happen!
-
-This challenge will force you to confront this concept.
-It uses the same kind of `/challenge/program` as before: run it to see what address it wants `argv[0]` at, then shift `argv[0]` there with env padding.
-You have to hit it twice --- once from the shell, and once from inside gdb (and the two contexts want different addresses, since gdb's environment isn't quite the same as the shell's).
-The flag appears after you've solved it in both!
-
-----
-**NOTE:**
-Order doesn't matter, solve under gdb first or from the shell first, whichever you like.
+1. Run `/challenge/program` under gdb (`gdb /challenge/program`, then `run`).
+   The program records its own `argv[0]` as your target.
+2. Quit gdb. Run `/challenge/program` from your shell --- it'll tell you how far off your shell-context `argv[0]` is from the target.
+3. Use an environment variable to "pad" your shell environment until `argv[0]` lands at the gdb-captured target.
+4. Flag!

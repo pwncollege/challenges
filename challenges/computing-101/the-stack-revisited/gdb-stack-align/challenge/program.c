@@ -1,15 +1,22 @@
 /* See ../../../the-stack/mem-stack-align/challenge/program.c for the SUID +
  * memfd re-exec rationale (deterministic argv[0] without a privileged
- * container) and for the per-instance target-file idea.
+ * container).
  *
- * The added wrinkle here: the binary must be solved twice -- once from a
- * shell, once under GDB -- to make "GDB shapes the inferior's stack
- * differently" concrete. We keep two pieces of state per context: a
- * sentinel (proof the user hit the target there) and a target file
- * (chosen on the first run in that context, BYTES_DELTA below the
- * baseline argv[0]). All four files are root-owned mode-600; the program
- * only touches them via FDs inherited across the post-privilege-drop
- * execve.
+ * The lesson: gdb passes its own environment (a few variables beyond what
+ * the bare shell has) to the inferior, so a program's argv[0] lands at a
+ * different address under gdb than it does from a bare shell. To make the
+ * shift concrete we have the learner:
+ *
+ *   1. Run /challenge/program under gdb --- the program captures its own
+ *      argv[0] and persists it as the target.
+ *   2. Quit gdb. Run /challenge/program from the shell, padding the regular
+ *      shell environment (just `FOO=xxx /challenge/program` --- no env -i)
+ *      until the shell's argv[0] lands at the saved target.
+ *
+ * The target file is root-owned mode-600 and inherited as FD 103 across
+ * the privilege-drop execve. If the learner runs us from the shell before
+ * running under gdb at least once, we bail and tell them to start with
+ * gdb.
  */
 
 #define _GNU_SOURCE
@@ -25,21 +32,9 @@
 
 extern char **environ;
 
-#define FLAG_FD            100
-#define MY_SENT_FD         101
-#define OTHER_SENT_FD      102
-#define TARGET_FD          103
-
-#define SHELL_SENTINEL "/challenge/.shell-sentinel"
-#define GDB_SENTINEL   "/challenge/.gdb-sentinel"
-#define TARGET_PATH    "/challenge/.target"
-
-/* Both contexts share one target so the desired address doesn't shift when
- * the learner switches between shell and gdb. The delta is generous enough
- * that the target sits below BOTH baselines regardless of which context
- * gets the first run (gdb's inferior baseline is typically a few bytes
- * lower than the bare shell's). */
-#define BYTES_DELTA 0x100
+#define FLAG_FD     100
+#define TARGET_FD   103
+#define TARGET_PATH "/challenge/.target"
 
 static int re_exec_phase(void) {
     struct stat st;
@@ -86,10 +81,7 @@ static int memfd_clone(const char *path) {
 }
 
 static void setup_phase(char **argv) {
-    int traced = is_traced();
     inherit_fd("/flag", FLAG_FD, O_RDONLY);
-    inherit_fd(traced ? GDB_SENTINEL : SHELL_SENTINEL, MY_SENT_FD,    O_WRONLY | O_APPEND);
-    inherit_fd(traced ? SHELL_SENTINEL : GDB_SENTINEL, OTHER_SENT_FD, O_RDONLY);
     inherit_fd_create(TARGET_PATH, TARGET_FD, O_RDWR | O_CREAT);
 
     if (personality(personality(0xFFFFFFFF) | ADDR_NO_RANDOMIZE) < 0)
@@ -128,45 +120,50 @@ static int challenge_phase(int argc, char **argv) {
     }
 
     int traced = is_traced();
-    const char *ctx = traced ? "GDB" : "shell";
     unsigned long current = (unsigned long)argv[0];
+
+    if (traced) {
+        write_persisted_target(current);
+        fprintf(stderr,
+                "argv[0] is at 0x%lx (running under GDB) --- saved as your target.\n"
+                "Quit gdb, then run `/challenge/program` from your shell with environment\n"
+                "padding (`FOO=xxxxxxxx /challenge/program`) until argv[0] lands here.\n",
+                current);
+        return 1;
+    }
+
     unsigned long target = read_persisted_target();
     if (target == 0) {
-        target = current - BYTES_DELTA;
-        write_persisted_target(target);
+        fprintf(stderr,
+                "argv[0] is at 0x%lx (running in the shell), but I don't have a target yet.\n"
+                "Run me under gdb first (`gdb /challenge/program`, then `run`) so I can\n"
+                "capture the gdb-context argv[0].\n",
+                current);
+        return 1;
     }
 
     if (current != target) {
         long delta = (long)(current - target);
-        fprintf(stderr,
-                "argv[0] is at 0x%lx (running %s); I want it at 0x%lx.\n"
-                "That's %ld bytes lower --- adjust your env padding.\n",
-                current,
-                traced ? "under GDB" : "in the shell",
-                target,
-                delta);
+        if (delta > 0) {
+            fprintf(stderr,
+                    "argv[0] is at 0x%lx (running in the shell); I want it at 0x%lx "
+                    "(where gdb put it).\nThat's %ld bytes lower --- pad your shell "
+                    "environment to shift it there.\n",
+                    current, target, delta);
+        } else {
+            fprintf(stderr,
+                    "argv[0] is at 0x%lx (running in the shell); I want it at 0x%lx "
+                    "(where gdb put it).\nThat's %ld bytes higher --- you've overshot. "
+                    "Reduce your env padding.\n",
+                    current, target, -delta);
+        }
         return 1;
     }
 
-    if (write(MY_SENT_FD, "1", 1) != 1) err(1, "write sentinel");
-    fsync(MY_SENT_FD);
-
-    char marker;
-    int other_done = (read(OTHER_SENT_FD, &marker, 1) == 1);
-    if (other_done) {
-        char buf[256];
-        ssize_t n = read(FLAG_FD, buf, sizeof buf);
-        if (n > 0) write(1, buf, n);
-        return 0;
-    }
-
-    fprintf(stderr,
-            "argv[0] aligned in the %s context. Now align it %s to unlock the flag.\n",
-            ctx,
-            traced ? "from a shell (`env -i FOO=... /challenge/program`)"
-                   : "under GDB (`gdb /challenge/program`, then "
-                     "`set exec-wrapper env -i FOO=...; run`)");
-    return 1;
+    char buf[256];
+    ssize_t n = read(FLAG_FD, buf, sizeof buf);
+    if (n > 0) write(1, buf, n);
+    return 0;
 }
 
 int main(int argc, char **argv) {
