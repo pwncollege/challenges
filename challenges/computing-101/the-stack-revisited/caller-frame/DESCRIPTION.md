@@ -72,10 +72,10 @@ When your `solve` starts running, the layout looks like this:
    [rsp + 0x00]   your return address (back into caller's code)
    [rsp + 0x08]   first byte of caller's local region
    ...
-   [rsp + 0x40]   the 64-byte flag (copied here by the caller)
+   [rsp + 0x40]   the flag (copied here by the caller)
    ...
-   [rsp + 0x90]   caller's return address (back to main)
+   [rsp + 0x110]  caller's return address (back to main)
 ```
 
-Your job: reach into the caller's frame, grab those 64 bytes at `[rsp + 0x40]`, and `write` them to stdout (you already know how to issue a `write` syscall!).
+Your job: reach into the caller's frame, grab the flag at `[rsp + 0x40]`, and `write` it to stdout (you already know how to issue a `write` syscall!).
 Get it right, and your `solve` will print the flag for you!
