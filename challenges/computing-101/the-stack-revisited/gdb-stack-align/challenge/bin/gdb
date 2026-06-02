@@ -1,0 +1,28 @@
+#!/usr/bin/exec-suid --real -- /bin/bash -p
+# Run gdb as root so the kernel preserves SUID elevation on /challenge/program
+# under ptrace. Two defense layers:
+#   - this wrapper only forwards a small allowlist of flags and refuses
+#     anything other than /challenge/program as the inferior;
+#   - /challenge/.gdb (loaded via -x before any user input) redefines
+#     shell/pipe/python/source/dump/save/add-symbol-file as no-ops.
+
+args=()
+program=""
+while (( $# )); do
+	case "$1" in
+		-batch|-q|--quiet|--silent) args+=("$1"); shift ;;
+		-ex|--eval-command)
+			[ -n "${2+x}" ] || { echo "$1 needs an argument" >&2; exit 1; }
+			args+=("$1" "$2"); shift 2 ;;
+		-*) echo "rejected gdb flag: $1" >&2; exit 1 ;;
+		*)
+			[ -z "$program" ] || { echo "only one program argument allowed" >&2; exit 1; }
+			program="$1"; shift ;;
+	esac
+done
+
+[ -n "$program" ] || { echo "usage: gdb /challenge/program" >&2; exit 1; }
+[ "$(realpath -- "$program")" = "/challenge/program" ] || { echo "this wrapper only debugs /challenge/program" >&2; exit 1; }
+
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT GDBHISTFILE PYTHONPATH PYTHONHOME
+exec /usr/bin/gdb -nx -x /challenge/.gdb "${args[@]}" "$program"

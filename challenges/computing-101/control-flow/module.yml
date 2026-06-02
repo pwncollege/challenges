@@ -31,3 +31,15 @@ resources:
 - type: challenge
   id: loop
   name: "Looping"
+- type: challenge
+  id: callee-write
+  name: "Writing From a Shared Library"
+- type: challenge
+  id: callee-return
+  name: "Returning a Value"
+- type: challenge
+  id: callee-callback
+  name: "Calling Through a Pointer"
+- type: challenge
+  id: callee-callback-arg
+  name: "Calling Through a Pointer with an Argument"

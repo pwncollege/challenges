@@ -1,0 +1,18 @@
+name: The Stack, Revisited
+description: |
+  Back when you first met the stack, it was just some data the kernel had set up for you: argc, argv, a few pointers.
+  Now that you've written your own functions, made your own calls, and seen rsp move in response to push and pop, it's time to revisit the stack with sharper eyes.
+  How does it actually get laid out? Why does it "grow downwards," and what does that mean for the data you can reach? And how does the way *your program was launched* shape the addresses of everything on it?
+resources:
+- type: challenge
+  id: caller-frame
+  name: "Reaching Into the Caller's Frame"
+- type: challenge
+  id: mem-envp
+  name: "Environment Variables on the Stack"
+- type: challenge
+  id: mem-stack-align
+  name: "Aligning the Stack Through the Environment"
+- type: challenge
+  id: gdb-stack-align
+  name: "Aligning the Stack Through GDB"

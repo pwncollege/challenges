@@ -1,0 +1,90 @@
+#!/bin/bash
+
+FLAG=$(cat /flag)
+INSTRUCTIONS='This program needs an argument! Try: (gdb) run pwn'
+WRONG_PREFIX='You passed '
+WRONG_SUFFIX=" to the challenge, but we need you to pass the 'pwn' argument!"
+
+FLAG_LEN=$((${#FLAG} + 1))                    # bytes including trailing newline
+INSTR_LEN=$((${#INSTRUCTIONS} + 1))
+WRONG_PREFIX_LEN=${#WRONG_PREFIX}             # no trailing newline (argv[1] follows it)
+WRONG_SUFFIX_LEN=$((${#WRONG_SUFFIX} + 1))    # trailing newline at end
+
+# /challenge/debug-me only prints the flag when argv[1] is exactly "pwn".
+# Bare run: prints a hint pointing at `run pwn`.
+# Wrong arg: prints "You passed <arg> to the challenge, but we need ... 'pwn' ...".
+# Right arg: prints the flag.
+ASM=$(mktemp --suffix=.s)
+OBJ=$(mktemp --suffix=.o)
+cat > $ASM <<EOF
+.intel_syntax noprefix
+.global _start
+.text
+_start:
+    mov rdi, [rsp+16]
+    test rdi, rdi
+    jz no_arg
+
+    cmp BYTE PTR [rdi], 'p'
+    jne wrong_arg
+    cmp BYTE PTR [rdi+1], 'w'
+    jne wrong_arg
+    cmp BYTE PTR [rdi+2], 'n'
+    jne wrong_arg
+    cmp BYTE PTR [rdi+3], 0
+    jne wrong_arg
+
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + flag_str]
+    mov rdx, $FLAG_LEN
+    syscall
+    jmp exit
+
+no_arg:
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + instr_str]
+    mov rdx, $INSTR_LEN
+    syscall
+    jmp exit
+
+wrong_arg:
+    push rdi
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + wrong_prefix]
+    mov rdx, $WRONG_PREFIX_LEN
+    syscall
+    pop rsi
+    xor rcx, rcx
+strlen_loop:
+    cmp BYTE PTR [rsi + rcx], 0
+    je strlen_done
+    inc rcx
+    jmp strlen_loop
+strlen_done:
+    mov rax, 1
+    mov rdi, 1
+    mov rdx, rcx
+    syscall
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + wrong_suffix]
+    mov rdx, $WRONG_SUFFIX_LEN
+    syscall
+
+exit:
+    mov rdi, 0
+    mov rax, 60
+    syscall
+
+.section .rodata
+flag_str:      .ascii "$FLAG\n"
+instr_str:     .ascii "$INSTRUCTIONS\n"
+wrong_prefix:  .ascii "$WRONG_PREFIX"
+wrong_suffix:  .ascii "$WRONG_SUFFIX\n"
+EOF
+as -o $OBJ $ASM
+ld -o /challenge/debug-me $OBJ 2>/tmp/.init.log
+rm $ASM $OBJ

@@ -1,0 +1,8 @@
+#!/bin/bash
+# Pre-create the target file. The challenge binary opens it during its
+# SUID-elevated setup phase to get a writable FD that survives the
+# privilege drop; the file itself stays root-owned and unreachable to
+# the user.
+: > /challenge/.target
+chown root:root /challenge/.target
+chmod 600 /challenge/.target

@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+
+gcc -static -O2 -o /challenge/program /challenge/program.c
+chmod 4755 /challenge/program
+rm /challenge/program.c

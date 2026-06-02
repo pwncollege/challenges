@@ -120,6 +120,7 @@ def run_challenge(
                 "--detach",
                 "--init",
                 "--user=0:0",
+                "--env=PATH=/challenge/bin:/run/workspace/bin:/run/dojo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                 *runtime_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
                 challenge_image,
