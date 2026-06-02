@@ -34,20 +34,12 @@ resources:
 - type: challenge
   id: callee-write
   name: "Writing From a Shared Library"
-  visibility:
-    start: "2099-01-01T00:00:00+00:00"
 - type: challenge
   id: callee-return
   name: "Returning a Value"
-  visibility:
-    start: "2099-01-01T00:00:00+00:00"
 - type: challenge
   id: callee-callback
   name: "Calling Through a Pointer"
-  visibility:
-    start: "2099-01-01T00:00:00+00:00"
 - type: challenge
   id: callee-callback-arg
   name: "Calling Through a Pointer with an Argument"
-  visibility:
-    start: "2099-01-01T00:00:00+00:00"
