@@ -56,6 +56,14 @@ def check_runtime(filename):     # optional: actually run the learner's binary
 - **Helpers on `checker`:** `read_flag()` (privilege-bumped read of `/flag`),
   `print_prompt()`, `slow_print()`, `dramatic_command()` (run + echo like a shell;
   honors `FAST=1`). Error messages are learner-facing — make them instructive.
+- **Don't assume the flag's length.** When the learner hardcodes a `write` byte count (e.g.
+  `mem-envp`, `caller-frame`), pad `read_flag()`'s result to a fixed capacity **≥ 128 bytes**
+  — never to a tight bound around today's ~57-byte flags. Keep that size **out of the
+  learner-facing DESCRIPTION** (say "the flag"); let the runtime checker echo the actual count
+  instead. The capacity constant must match in `chal.py`, any C harness `#define`, the
+  hand-written asm frame/copy count, and the `tests_private` solve. A `assert pad_count >= 0,
+  "flag too long"` that can trip on a longer flag is a latent student-breaker — widen the
+  capacity instead. (See SKILL.md §2.)
 
 ## Memory/pointer levels: `secret-value-checker.py`
 

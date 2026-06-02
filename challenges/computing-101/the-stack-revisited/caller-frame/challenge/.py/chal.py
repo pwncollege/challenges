@@ -6,7 +6,12 @@ import sys
 shared = True
 give_flag = False
 
-FLAG_BUF_LEN = 64  # bytes that caller copies into its frame
+# Fixed-size flag field. The flag is padded to exactly this many bytes so the
+# student can write a constant byte count; it must be large enough to hold any
+# real flag (flags are an implementation detail and DO vary in length -- never
+# assume the current length). Keep in sync with FLAG_LEN in harness.c and the
+# copy count in caller.S.
+FLAG_BUF_LEN = 128  # bytes that caller copies into its frame
 
 check_runtime_prologue = (
     "Let's see if your solve reads the flag out of the caller's frame "

@@ -70,6 +70,25 @@ your archetype.
   learner discovers through the intended technique* (e.g. `secret_value = random.randint(...)`
   that the checker knows and validates). These prevent memorized/hardcoded solutions.
   Builds are seeded (`CHALLENGE_SEED`) so they're reproducible.
+- **Never hardcode or assume the flag's length — it's a variable-length implementation
+  detail.** Today's flags are `pwn.college{` + base64(32 bytes) + `}` ≈ 57 bytes, but that
+  is *not* a contract and has changed before. Two correct patterns:
+  - **Size dynamically from the real flag.** Read `/flag` and use its actual length — e.g.
+    `gdb-run-args/.init` bakes `FLAG_LEN=$((${#FLAG}+1))` into the generated asm;
+    `callee-write/harness.c` uses `strlen(flag)`. Prefer this whenever the *challenge code*
+    (not the learner) emits the flag.
+  - **When the learner must write a constant byte count** (they hardcode the `write` length),
+    pad the flag to a *fixed capacity comfortably larger than any real flag — ≥ 128 bytes*.
+    **Keep that size out of learner-facing text too** — say "the flag", not "the 128-byte
+    flag"; let the *runtime* checker/harness report the actual count (e.g. caller-frame's
+    harness logs `write N bytes from [rsp+0x40]` straight from its `#define`), so nothing goes
+    stale when the capacity changes. Keep the one capacity constant in sync across **every
+    coupled non-description file**: `chal.py`, the C harness/`#define`, the hand-written asm
+    frame/copy count, and the encrypted `tests_private` solve. A `assert pad_count >= 0,
+    "flag too long"` that can fire on a longer flag means the capacity is too small (it
+    silently breaks students when flags grow) — raise the capacity, don't ship the assumption.
+    (caller-frame/mem-envp shipped a 64-byte cap with only ~7 bytes of slack over current
+    flags; both had to be widened to 128 — and the descriptions kept size-agnostic.)
 - **Grant the flag only on a real solve, via the archetype's normal mechanism** — don't
   bolt on indirection the design doesn't need:
   - **SUID binary:** open `/flag` pre-drop and print it when the success condition is met.
@@ -155,6 +174,7 @@ your archetype.
 2. Added complexity nobody asked for (extra binary, wrapper, `privileged`, indirection).
 3. Made an unverified factual claim in learner text or to the user.
 4. Made the solve nondeterministic, or gated the flag behind a guess / needless side channel.
+   Or assumed a fixed flag length (hardcoded a byte count / too-small pad capacity) — flags vary.
 5. Crammed more than one concept into a level, or mismatched the module's voice.
 6. Didn't consult siblings / `runtime/` before building or before giving up.
 7. Claimed success (tests, push) without verifying, or attributed a change to the user.

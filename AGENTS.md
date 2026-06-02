@@ -29,6 +29,12 @@ per archetype (templated web/service, interpreted checker, compiled SUID binary,
   path. Grant the flag only on a real solve, via the archetype's normal mechanism (SUID
   binary prints it; checker `give_flag`; web app reveals on exploit; `submit-number` for
   read-a-value levels). Don't add wrappers/extra binaries/indirection the spec doesn't need.
+  **Never assume the flag's length** — it's a variable-length implementation detail (~57
+  bytes today, not a contract). Size buffers/byte-counts dynamically from the real `/flag`,
+  or pad to a fixed capacity **≥ 128 bytes** kept in sync across every coupled file; an
+  `assert "flag too long"` that can fire on a longer flag silently breaks students. Keep the
+  size out of learner-facing descriptions too (say "the flag", not "the 128-byte flag"; let
+  the runtime checker/harness report the count).
 - **Code:** lean, idiomatic, review-ready on the first pass, in every language (extend the
   common base; C: `<err.h>`, helpers, why-comments; don't reimplement what the framework or
   kernel already gives you).

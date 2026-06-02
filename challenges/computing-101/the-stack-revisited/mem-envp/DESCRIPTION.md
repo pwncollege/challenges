@@ -40,4 +40,4 @@ Two new things to notice:
    So `envp[0]` points to a string that starts with the first env var's name.
 
 In this challenge, we will set the `FLAG` environment variable to the actual flag and run your program with no arguments and no other env vars.
-That means `[rsp+24]` will hold a pointer to those 64 bytes, and you can get the flag by `write()`ing them out!
+That means `[rsp+24]` will hold a pointer to the `FLAG=...` string, and you can get the flag by `write()`ing it out!

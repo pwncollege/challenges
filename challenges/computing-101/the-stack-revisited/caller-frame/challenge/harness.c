@@ -6,7 +6,10 @@
 
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
 
-#define FLAG_LEN 64
+// Fixed-size flag field, big enough for any real flag (flags vary in length --
+// do not assume the current length). Keep in sync with FLAG_BUF_LEN in
+// .py/chal.py and the copy count in caller.S.
+#define FLAG_LEN 128
 
 extern void caller(void (*solve)(void), const char *flag_buf);
 
@@ -49,7 +52,7 @@ int main(int argc, char **argv) {
     }
 
     LOG("calling caller(solve, flag_buf) --- caller stashes the flag in its local frame at [rsp+0x40] (from solve's view) and then calls into your solve");
-    LOG("your `solve` should `write` 64 bytes from [rsp+0x40] to stdout:");
+    LOG("your `solve` should `write` %d bytes from [rsp+0x40] to stdout:", FLAG_LEN);
 
     caller(solve, flag_buf);
 

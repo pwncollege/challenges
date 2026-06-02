@@ -6,7 +6,12 @@ import sys
 give_flag = False
 num_instructions = 8
 
-FLAG_VAR_LEN = 64  # envp[0] string is padded to exactly this many bytes
+# envp[0] (the whole "FLAG=<value>" string) is padded to exactly this many
+# bytes so the student can write a constant byte count. It is the 5-byte
+# "FLAG=" name plus a 128-byte flag field, so any real flag up to 128 bytes
+# fits (flags are an implementation detail and DO vary in length -- never
+# assume the current length). The student is told this number in DESCRIPTION.md.
+FLAG_VAR_LEN = 5 + 128  # len("FLAG=") + 128-byte flag field = 133
 
 check_disassembly_prologue = "Checking that your assembly reads envp[0] and writes its bytes to stdout..."
 check_disassembly_success = "Your assembly looks correct! Let's see what it prints..."
