@@ -1,0 +1,48 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+import random
+import sys
+
+SRC = {{ src_base }}      # base the value is shown in (2, 16, or 10)
+DST = {{ dst_base }}      # base we want it written back in
+NBYTES = {{ n_bytes }}
+COUNT = {{ count }}
+SRC_NAME = "{{ src_name }}"
+DST_NAME = "{{ dst_name }}"
+
+WIDTH = NBYTES * 8
+
+# Read the flag now, while we have the privileges to (this program is SUID).
+with open("/flag") as f:
+    flag = f.read()
+
+
+def show(value, base):
+    if base == 2:
+        bits = format(value, f"0{WIDTH}b")
+        return " ".join(bits[i : i + 8] for i in range(0, WIDTH, 8))
+    if base == 16:
+        digits = format(value, f"0{2 * NBYTES}x")
+        return " ".join(digits[i : i + 2] for i in range(0, 2 * NBYTES, 2))
+    return str(value)
+
+
+plural = "s" if COUNT != 1 else ""
+print(f"Binary, hex, and decimal are just different ways to write the same number.")
+print(f"I'll show you {COUNT} value{plural} in {SRC_NAME}; write each one back to me in {DST_NAME}.\n")
+
+for i in range(1, COUNT + 1):
+    value = random.randint(1, (1 << WIDTH) - 1)
+    print(f"Value {i} of {COUNT} (in {SRC_NAME}):  {show(value, SRC)}")
+    try:
+        got = int(input(f"  the same value in {DST_NAME} > ").strip().replace(" ", ""), DST)
+    except (EOFError, ValueError):
+        print(f"  That doesn't look like a {DST_NAME} number. Run me again!")
+        sys.exit(1)
+    if got != value:
+        print(f"  Not quite --- in {DST_NAME} that value is {show(value, DST)}.")
+        sys.exit(1)
+    print("  Correct!\n")
+
+print("All correct --- you can move between the bases! Here is your flag:")
+print(flag)

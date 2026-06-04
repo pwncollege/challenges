@@ -1,0 +1,3 @@
+#!/bin/sh
+# Make the decoder SUID so it can read /flag (the exec-suid shebang does the rest).
+chmod 4755 /challenge/decode

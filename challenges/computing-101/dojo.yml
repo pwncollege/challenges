@@ -7,6 +7,7 @@ modules:
 - id: your-first-program
 - id: memory
 - id: the-stack
+- id: nibbling-on-numbers
 - id: introspecting
 - id: hello-hackers
 - id: control-flow
