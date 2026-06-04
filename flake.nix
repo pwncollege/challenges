@@ -62,6 +62,7 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
+              asciinema
               clang-tools
               docker
               git
