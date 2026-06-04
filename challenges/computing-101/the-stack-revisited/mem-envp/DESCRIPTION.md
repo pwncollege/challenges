@@ -9,25 +9,23 @@ If a program is called with no arguments (e.g., `argc` is 1 and the only string 
    +────────────────────────+
    │ rsp + 0    │ 1         │ ◀─── argc
    +────────────────────────+
-   │ rsp + 8    │ rsp + 128 │───────┐  argv[0]: pointer to the program name
-   +────────────────────────+       │
-   │ rsp + 16   │ 0         │       │  NULL (end of argv)
-   +────────────────────────+       │
-   │ rsp + 24   │ rsp + 200 │─────┐ │  envp[0]: pointer to the first env var
-   +────────────────────────+     │ │
-   │ rsp + 32   │ 0         │     │ │  NULL (end of envp)
-   +────────────────────────+     │ │
-                                  │ │
-  ┌───────────────────────────────│─┘
-  │                               │
-  │   Address   │ Contents        │
-  │ +──────────────────────────+  │
-  │ │ rsp + 128 │ "/tmp/..."   │◀─┘ the program name
-  │ +──────────────────────────+
-  │ │ ...       │ ...          │
-  │ +──────────────────────────+
-  └▸│ rsp + 200 │ "FLAG=..."   │ ◀─ the first env var: the `FLAG` variable
-    +──────────────────────────+
+   │ rsp + 8    │ rsp + 128 │──┐  argv[0]: pointer to the program name
+   +────────────────────────+  │
+   │ rsp + 16   │ 0         │  │  NULL (end of argv)
+   +────────────────────────+  │
+   │ rsp + 24   │ rsp + 200 │──┼──┐  envp[0]: pointer to the first env var
+   +────────────────────────+  │  │
+   │ rsp + 32   │ 0         │  │  │  NULL (end of envp)
+   +────────────────────────+  │  │
+                               │  │
+     Address    │ Contents     │  │
+   +────────────────────────+  │  │
+   │ rsp + 128  │ "/tmp/..."│◀─┘  │  the program name
+   +────────────────────────+     │
+   │ ...        │ ...       │     │
+   +────────────────────────+     │
+   │ rsp + 200  │ "FLAG=..."│◀────┘  the first env var: the `FLAG` variable
+   +────────────────────────+
 ```
 
 Two new things to notice:
