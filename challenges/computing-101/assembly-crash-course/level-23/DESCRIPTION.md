@@ -29,24 +29,26 @@ ret
 
 Notice how `rbp` is always used to restore the stack to where it originally was. If we don't restore the stack after use, we will eventually run out. In addition, notice how we subtracted from `rsp`, because the stack grows down. To make the stack have more space, we subtract the space we need. The `ret` and `call` still work the same.
 
-Consider the fact that to assign a value to `list[2]` we subtract 12 bytes (3 dwords). That is because the stack grows down and when we moved `rsp` our stack contains addresses <`rsp`, `rbp`.
+Consider the fact that to assign a value to `list[2]` we subtract 12 bytes (3 dwords). That is because the stack grows down, and after moving `rsp` the allocated stack space runs from `rsp` up to, but not including, `rbp`.
 
 Once again, please make function(s) that implement the following:
 
 ```plaintext
 most_common_byte(src_addr, size):
+  counting_list = rsp - 0x200
+
   i = 0
   while i <= size-1:
     curr_byte = [src_addr + i]
-    [stack_base - curr_byte * 2] += 1
+    [counting_list + curr_byte * 2] += 1
     i += 1
 
   b = 0
   max_freq = 0
   max_freq_byte = 0
   while b <= 0xff:
-    if [stack_base - b * 2] > max_freq:
-      max_freq = [stack_base - b * 2]
+    if [counting_list + b * 2] > max_freq:
+      max_freq = [counting_list + b * 2]
       max_freq_byte = b
     b += 1
 

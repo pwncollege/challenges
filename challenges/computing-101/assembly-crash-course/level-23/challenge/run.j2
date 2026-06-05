@@ -29,7 +29,7 @@ class ASMLevel30(ASMBase):
 
         self.init_memory = {
             self.LIB_ADDR: self.harness,
-            self.RSP_INIT - 0x100: b"\0" * 0x100,
+            self.RSP_INIT - 0x1000: b"\0" * 0x1000,
             self.init_rdi: bytes(self.test_list),
         }
 
@@ -63,7 +63,7 @@ class ASMLevel30(ASMBase):
         sub rsp, 0x14
         ; assign list[2] = 1337
         mov eax, 1337
-        mov [rbp-0x8], eax
+        mov [rbp-0xc], eax
         ; do more operations on the list ...
         ; restore the allocated space
         mov rsp, rbp
@@ -80,20 +80,26 @@ class ASMLevel30(ASMBase):
 
         The ret and call still works the same.
 
+        Consider the fact that to assign a value to list[2] we subtract 12 bytes (3 dwords).
+        That is because the stack grows down, and after moving rsp the allocated stack space runs
+        from rsp up to, but not including, rbp.
+
         Once, again, please make function(s) that implements the following:
         most_common_byte(src_addr, size):
+          counting_list = rsp - 0x200
+
           i = 0
           while i <= size-1:
             curr_byte = [src_addr + i]
-            [stack_base - curr_byte * 2] += 1
+            [counting_list + curr_byte * 2] += 1
             i += 1
 
           b = 0
           max_freq = 0
           max_freq_byte = 0
           while b <= 0xff:
-            if [stack_base - b * 2] > max_freq:
-              max_freq = [stack_base - b * 2]
+            if [counting_list + b * 2] > max_freq:
+              max_freq = [counting_list + b * 2]
               max_freq_byte = b
             b += 1
 
