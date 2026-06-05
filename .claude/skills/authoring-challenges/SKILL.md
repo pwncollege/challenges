@@ -54,7 +54,9 @@ your archetype.
   ranked by honesty/cleanliness — don't keep patching and defending the contrivance.
 - **Match the house voice, scaled to the module.** Beginner modules (computing-101,
   linux-luminarium) explain everything warmly; advanced modules are terse. Read siblings
-  to calibrate; keep DESCRIPTIONs to the length and cadence of their neighbors. For the
+  to calibrate; keep DESCRIPTIONs to the length and cadence of their neighbors — and to
+  their *format*: one sentence per line, fenced code flush-left, worked examples that label
+  every line, and no meta-commentary ("nothing new here", "your first X"). For the
   per-challenge DESCRIPTION structure (recap → one new concept + *why* → success
   condition → how-to + win) and a writing checklist, see
   `references/curriculum-and-conventions.md` → "Writing the DESCRIPTION.md".
