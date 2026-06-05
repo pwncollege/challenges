@@ -1,9 +1,8 @@
 name: Nibbling on Numbers
 description: |
-  A byte is eight bits; half of one --- four bits --- is a *nibble*. This module nibbles
-  at numbers from the bit up: how a pile of bits comes to mean a positive or a negative
-  number, and how those same bits get written --- and read, and encoded and decoded ---
-  in binary, hexadecimal, and decimal.
+  A byte is eight bits; half of one (four bits) is a *nibble*.
+  This module nibbles at numbers from the bit up: how a pile of bits comes to mean a positive or a negative number in binary, hexadecimal, and decimal.
+  Understanding this is critical to truly knowing how the CPU processes bits into something more meaningful!
 resources:
 - name: "Data"
   type: lecture
