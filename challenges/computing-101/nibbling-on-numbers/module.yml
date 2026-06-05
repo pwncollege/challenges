@@ -100,3 +100,6 @@ resources:
 - type: challenge
   id: decoding-hex
   name: "Decoding Hex"
+- type: challenge
+  id: mixed-conversions
+  name: "Mixed Conversions"
