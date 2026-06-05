@@ -9,8 +9,11 @@ NBYTES = {{ n_bytes }}
 COUNT = {{ count }}
 SRC_NAME = "{{ src_name }}"
 DST_NAME = "{{ dst_name }}"
+STRICT = {{ strict | default(true) }}  # require the full-width answer (leading zeros and all)
 
 WIDTH = NBYTES * 8
+DST_DIGITS = WIDTH if DST == 2 else 2 * NBYTES if DST == 16 else 0
+PREFIX = {2: "0b", 16: "0x"}.get(DST)
 
 # Read the flag now, while we have the privileges to (this program is SUID).
 with open("/flag") as f:
@@ -35,12 +38,17 @@ for i in range(1, COUNT + 1):
     value = random.randint(1, (1 << WIDTH) - 1)
     print(f"Value {i} of {COUNT} (in {SRC_NAME}):  {show(value, SRC)}")
     try:
-        got = int(input(f"  the same value in {DST_NAME} > ").strip().replace(" ", ""), DST)
+        raw = input(f"  the same value in {DST_NAME} > ").strip().replace(" ", "")
+        digits = raw[2:] if PREFIX and raw[:2].lower() == PREFIX else raw
+        got = int(digits, DST)
     except (EOFError, ValueError):
         print(f"  That doesn't look like a {DST_NAME} number. Run me again!")
         sys.exit(1)
     if got != value:
         print(f"  Not quite --- in {DST_NAME} that value is {show(value, DST)}.")
+        sys.exit(1)
+    if STRICT and DST_DIGITS and len(digits) != DST_DIGITS:
+        print(f"  Right value --- but write all {DST_DIGITS} digits, leading zeros and all: {show(value, DST)}.")
         sys.exit(1)
     print("  Correct!\n")
 

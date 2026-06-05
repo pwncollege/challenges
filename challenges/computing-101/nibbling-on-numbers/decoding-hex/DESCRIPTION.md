@@ -5,11 +5,12 @@ Each hex digit becomes its 4 bits, written out in order.
 Since a byte is two hex digits, decoding one byte means expanding two hex digits into 8 bits:
 
 ```
-  0x   e      3
-       1110   0011
-  ->   11100011
+0x   0      a
+     0000   1010
+->   00001010
 ```
 
 This is exactly what a program does when it receives hex-encoded data: it turns each pair of hex digits back into the byte it represents before working with it.
+Write out the full 8 bits, leading zeros and all --- each hex digit is always exactly 4 of them.
 
 Run `/challenge/convert` and get the flag!
