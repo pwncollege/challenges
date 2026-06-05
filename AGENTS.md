@@ -23,7 +23,9 @@ per archetype (templated web/service, interpreted checker, compiled SUID binary,
   hide it in prose); don't introduce advanced topics early; the phenomenon taught must be
   *real*, not manufactured by your own scaffolding; **never put an unverified factual claim
   in learner-facing text** — test it first; match the module's voice *and format* (one
-  sentence per line, fenced code flush-left, no meta-commentary like "nothing new here").
+  sentence per line, fenced code flush-left, lean and concise, no meta-commentary like
+  "nothing new here", no re-teaching prior levels, and let the program narrate its own
+  mechanics rather than the DESCRIPTION).
 - **Determinism & flag:** the intended solve must work deterministically (no guessing).
   Seeded build-time / per-instance randomness is fine and good (names, passwords, a secret
   the learner *discovers* via the intended technique) — just not a coin-flip in the solve
