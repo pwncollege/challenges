@@ -43,3 +43,9 @@ resources:
 - type: challenge
   id: callee-callback-arg
   name: "Calling Through a Pointer with an Argument"
+- type: challenge
+  id: caller-saved-registers
+  name: "Saving Caller-Saved Registers"
+- type: challenge
+  id: callee-saved-registers
+  name: "Saving Callee-Saved Registers"
