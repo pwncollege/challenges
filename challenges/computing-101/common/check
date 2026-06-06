@@ -122,10 +122,11 @@ def load_shared_input(binary_path, input_file=None):
         )
 
     elf = pwnlib.elf.ELF(input_file)
-    if "solve" not in elf.symbols:
+    sym = getattr(chal, "solve_symbol", "solve")
+    if sym not in elf.symbols:
         raise ChallengeFailedPrint(
-            f"Your shared library does not export a `solve` symbol.\n"
-            "Make sure your assembly contains `.global solve` and a `solve:` label."
+            f"Your shared library does not export a `{sym}` symbol.\n"
+            f"Make sure your assembly contains `.global {sym}` and a `{sym}:` label."
         )
 
     with open(binary_path, "wb") as f:
@@ -135,7 +136,7 @@ def load_shared_input(binary_path, input_file=None):
     text = elf.get_section_by_name(".text")
     raw_bytes = text.data() if text else b""
 
-    solve_addr = elf.symbols["solve"]
+    solve_addr = elf.symbols[sym]
     solve_offset = solve_addr - text["sh_addr"] if text else 0
     user_raw = raw_bytes[solve_offset:] if 0 <= solve_offset < len(raw_bytes) else raw_bytes
     return raw_bytes, user_raw

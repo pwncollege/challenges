@@ -14,5 +14,6 @@ modules:
 - id: assembly-assortment
 - id: the-stack-revisited
 - id: assembly-crash-course
+- id: fun-with-algorithms
 - id: building-a-web-server
 - id: debugging-refresher
