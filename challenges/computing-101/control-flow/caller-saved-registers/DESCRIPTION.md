@@ -19,4 +19,13 @@ Your `solve` function is given two arguments:
 
 You _must_ call `clobber_function` before `flag_function`.
 But you _must_ preserve your caller-saved registers before calling `clobber_function` and restore them afterwards.
+
+Build your shared library and hand it to the grader:
+
+```console
+hacker@dojo:~$ as -o your-solve.o your-solve.s
+hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
+hacker@dojo:~$ /challenge/check your-solve.so
+```
+
 Do it right, and the flag is yours!

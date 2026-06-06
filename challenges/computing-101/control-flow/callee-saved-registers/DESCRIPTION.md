@@ -17,4 +17,13 @@ Your job:
 5. `ret`.
 
 The challenge then checks that `rbx`, `r12`-`r15` came back exactly as it left them.
+
+Build your shared library and hand it to the grader:
+
+```console
+hacker@dojo:~$ as -o your-solve.o your-solve.s
+hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
+hacker@dojo:~$ /challenge/check your-solve.so
+```
+
 Borrow them, give them back, and claim the flag.
