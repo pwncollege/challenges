@@ -151,8 +151,24 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
 **Two sub-shapes for steps 3–4 — don't confuse them:**
 - **Code-writing levels** (write asm/a program that the harness grades): a brief task spec
   + numbered *conceptual* steps + a one-line win is the house pattern (see the
-  `nibbling-on-numbers` shift/compare/overflow levels). The learner must be told what to
-  compute, so this stays.
+  `nibbling-on-numbers` shift/compare/overflow levels). The learner must be told *what* to
+  compute, so this stays — but frame it as **requirements and constraints, not a
+  register-level recipe**, and never hand over the part that *is* the puzzle. From the
+  by-hand rewrite of `control-flow/caller-saved-registers` and `callee-saved-registers`:
+  - Refer to operands/registers by their **group** ("save the caller-saved registers",
+    "restore the callee-saved registers"), not an enumerated `push rax; push rcx; …`
+    sequence in the steps. Name the full register set once, where you *teach* the concept;
+    don't repeat it as a copy-paste solution in the task. (Concrete *values* are fine in
+    steps — "set them all to `0x1337`" stayed; it's the solution *mechanics* that get
+    abstracted.)
+  - State success as constraints ("you *must* call `clobber_function` before
+    `flag_function`; you *must* preserve your caller-saved registers across the clobber"),
+    and stop — don't spell out the `push`/`call`/`pop`/`call` ordering for them.
+  - **Never reveal the non-obvious gotcha that is the actual challenge.** The original
+    caller-saved DESCRIPTION wrote "push the seven, *and* `rsi`, because the `flag_function`
+    pointer is itself caller-saved and will be clobbered too" — that an *argument* register
+    is also caller-saved and must be saved is the whole puzzle; the user cut it. Teach the
+    rule; let the learner work out which registers it implicates.
 - **Interactive read/decode/encode/convert levels** (the program prompts, the learner
   types answers): **do NOT spec the I/O.** No "it shows you several bytes… for a positive
   one give X, for a negative one give *both* readings… miss it and it'll catch you." The
@@ -172,6 +188,14 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   and the phenomenon must be *real*, not produced by the challenge's own scaffolding.
 - **No spoilers:** describe the goal and the concept, not the exploit steps (those live in
   `tests_private`). Don't hardcode randomized names in prose — refer to them generically.
+- **Link canonical concepts; don't overstate them** (from the caller-saved rewrite): for a
+  standard, well-named idea (the calling convention, an ABI, an RFC), link the general term
+  to a reference (e.g. Wikipedia) and name it plainly for the platform ("the calling
+  convention of your architecture — here, 64-bit x86"), rather than dropping a spec acronym
+  ("the System V AMD64 ABI") cold. Fold concrete details into the explanation *with their
+  reason* ("`rax`, which callees clobber with the return value, …") instead of a bare
+  dash-delimited list. And don't present a convention as a hardware law — note it's a
+  convention code *can* violate, even if good code doesn't.
 - **Format like the house markdown** (distilled from an edit pass that rewrote three
   DESCRIPTIONs into this style):
   - **One sentence per line** (semantic line breaks), not packed multi-sentence
