@@ -24,8 +24,11 @@ per archetype (templated web/service, interpreted checker, compiled SUID binary,
   *real*, not manufactured by your own scaffolding; **never put an unverified factual claim
   in learner-facing text** — test it first; match the module's voice *and format* (one
   sentence per line, fenced code flush-left, lean and concise, no meta-commentary like
-  "nothing new here", no re-teaching prior levels, and let the program narrate its own
-  mechanics rather than the DESCRIPTION). For **interactive read/decode/encode/convert
+  "nothing new here", no re-teaching prior levels — a concept taught in an *earlier module*
+  is still prior knowledge, so grep the curriculum for where it first appears, then
+  acknowledge it in one line ("you've seen ASCII before") and teach only the new facet rather
+  than re-introducing it cold — and let the program narrate its own mechanics rather than the
+  DESCRIPTION). For **interactive read/decode/encode/convert
   levels, never spell out the program's prompts, the input format, or the mistake the
   checker catches** — teach the concept, then one line: "run `/challenge/X` and get the
   flag." For **code-writing levels, give the task and the success *constraints* but not the

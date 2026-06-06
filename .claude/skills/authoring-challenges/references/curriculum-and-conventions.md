@@ -217,6 +217,15 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   - In a later/capstone level, *name* the concepts the learner already practiced instead of
     re-explaining them — "the four interpretations we've studied (unsigned decimal, signed
     decimal, hex, two's-complement binary)", not a fresh bulleted re-listing with ranges.
+  - **A concept introduced in an earlier *module* is still prior knowledge — acknowledge it,
+    don't re-introduce it cold** (from the `fun-with-algorithms/atoi-digit` rewrite). Before
+    writing a concept's intro, find where it first appears in the dojo (grep the dojo's
+    `*/*/DESCRIPTION.md` for it; check module order in `dojo.yml`). If it's already taught,
+    open with a one-line nod and teach only the *new facet*. ASCII is first introduced back in
+    `hello-hackers` (with `man ascii`/`'x'` char-literals reinforced in `control-flow` and
+    `assembly-assortment`), so atoi-digit opens "you've seen ASCII in prior levels" and teaches
+    only the new bit — digits are consecutive, so `c - '0'` — instead of re-explaining ASCII
+    from scratch.
   - On a **scaling/"wider" sequel, state the delta and the new concrete numbers, don't
     re-derive the rule.** `twos-complement-short`/`-dword` had re-explained "bit N is the
     sign, a negative value is unsigned minus 2ⁿ…"; the user cut that to "you've done this a
