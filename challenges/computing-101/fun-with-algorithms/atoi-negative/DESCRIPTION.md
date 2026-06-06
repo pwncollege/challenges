@@ -14,4 +14,11 @@ Two's complement (which you met earlier) makes the negation a single instruction
 A positive number has no sign character, so it should still convert just like the previous level.
 
 Same contract as before: the string pointer comes in `rdi`, and your signed result goes in `rax`.
-Build it, run `/challenge/check solve.so`, and grab the flag.
+
+Build and submit as before:
+
+```console
+hacker@dojo:~$ /challenge/check your-solve.so
+```
+
+Handle the sign, return the value, and the flag is yours.

@@ -17,3 +17,11 @@ ja  done          ; unsigned "above 9" -> not a digit -> stop
 Keep your sign handling from the previous level: a leading `'-'` still means negative, and everything after the number is simply ignored.
 
 Same contract: string pointer in `rdi`, signed result in `rax`.
+
+Build and submit as before:
+
+```console
+hacker@dojo:~$ /challenge/check your-solve.so
+```
+
+Stop at the first non-digit, return the value, and the flag is yours.

@@ -15,6 +15,12 @@ This is the same kind of loop you've written before, except the body now does re
 
 Two things to keep straight:
 - Each pointer is 8 bytes, so stepping from `nums[i]` to `nums[i+1]` moves 8 bytes along the array (`[rdi + i*8]`).
-- Your `atoi` clobbers registers as it runs, so keep your loop counter, your running total, and the array base in registers that survive across it (the callee-saved registers: `rbx`, `r12`-`r15`), and remember to save and restore them.
+- Your `atoi` clobbers the caller-saved registers as it runs, so keep your loop counter, running total, and array base in callee-saved registers and preserve them across the call --- the same discipline you practiced in the [callee-saved-registers](/computing-101/control-flow) level.
+
+Build and submit as before:
+
+```console
+hacker@dojo:~$ /challenge/check your-solve.so
+```
 
 Sum them all, return the result, and the flag is yours.

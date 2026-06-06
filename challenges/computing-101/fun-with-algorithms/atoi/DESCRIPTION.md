@@ -1,5 +1,5 @@
 You can turn a single digit character into its value with `atoi_digit`: subtract `'0'`.
-Now let's handle a *whole* number --- a string of digits like `"12345"` --- by looping that digit-decode across every character.
+Now write the full `atoi` --- this level's `solve` --- which turns a *whole* number like `"12345"` into an integer by looping that digit-decode across every character.
 
 Read the digits left to right and build the number up one at a time.
 Start with a running total of `0`; for each digit, multiply the total by 10 (to shift the digits you already have one place to the left) and add the new digit's value:
@@ -18,9 +18,9 @@ For now, assume the input is a clean run of decimal digits, followed by that NUL
 
 Your `solve` receives a pointer to the string in `rdi` and must return the integer value in `rax`.
 
+Build and submit as before:
+
 ```console
-hacker@dojo:~$ as -o your-solve.o your-solve.s
-hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
 hacker@dojo:~$ /challenge/check your-solve.so
 ```
 
