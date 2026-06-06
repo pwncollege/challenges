@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/random.h>
+#include <unistd.h>
 
 /*
  * Harness for callee-saved-registers.
@@ -34,7 +35,8 @@ extern int clobber_ok;         /* set when check_callee_clobbered saw all 0x1337
 extern void enter_solve(void (*solve)(void (*)(void)), void (*checkfn)(void));
 extern void check_callee_clobbered(void);
 
-static const char *flag;
+static char flagbuf[4096];
+static size_t flaglen;
 static const char *regname[5] = {"rbx", "r12", "r13", "r14", "r15"};
 
 /* Called from check_callee_clobbered (asm) after it snapshots the registers. */
@@ -54,11 +56,17 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
-    if (argc != 3) {
-        fprintf(stderr, "usage: %s lib.so flag\n", argv[0]);
+    if (argc != 2) {
+        fprintf(stderr, "usage: %s lib.so   (the flag is read from stdin)\n", argv[0]);
         return 2;
     }
-    flag = argv[2];
+
+    /* Receive the flag on stdin, not argv: argv is world-readable via
+     * /proc/self/cmdline, which would let a solve dump the flag without doing
+     * the register work. Consume it now so a solve that read()s fd 0 gets nothing. */
+    ssize_t n;
+    while (flaglen < sizeof flagbuf && (n = read(0, flagbuf + flaglen, sizeof flagbuf - flaglen)) > 0)
+        flaglen += n;
 
     if (getrandom(expected, sizeof expected, 0) != (ssize_t)sizeof expected) {
         LOG("getrandom failed");
@@ -95,7 +103,7 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
-    printf("%s\n", flag);
+    fwrite(flagbuf, 1, flaglen, stdout);
     LOG("callee-saved registers restored --- flag released.");
     return 0;
 }
