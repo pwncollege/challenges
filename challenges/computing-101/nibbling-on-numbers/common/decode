@@ -1,0 +1,64 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+import random
+import sys
+
+WIDTH = {{ width }}
+NBYTES = WIDTH // 8
+
+MOD = 1 << WIDTH                  # 2**WIDTH
+HIGH = 1 << (WIDTH - 1)           # the sign bit
+UNIT = "byte" if NBYTES == 1 else "bytes"
+
+# Read the flag now, while we have the privileges to (this program is SUID).
+with open("/flag") as f:
+    flag = f.read()
+
+# A guaranteed mix: positive values (high bit clear) and negative ones (high bit set).
+order = [random.randint(1, HIGH - 1) for _ in range({{ n_pos }})] + \
+        [random.randint(HIGH, MOD - 1) for _ in range({{ n_neg }})]
+random.shuffle(order)
+
+print(f"Two's complement works the same at any width --- these are {NBYTES} {UNIT} ({WIDTH} bits) each.")
+print("The top bit is still the sign. If it's 0 the value is positive and its signed and")
+print("unsigned readings are identical; if it's 1 it's negative, and the signed value is")
+print(f"the unsigned value minus 2**{WIDTH} (= {MOD}).\n")
+print(f"I'll show you {len(order)} of them. Read each one for me.\n")
+
+
+def grouped(value):
+    bits = format(value, f"0{WIDTH}b")
+    return " ".join(bits[i : i + 8] for i in range(0, WIDTH, 8))
+
+
+def ask(prompt, expected, *, kind=None, value=None):
+    try:
+        answer = int(input(prompt).strip())
+    except (EOFError, ValueError):
+        print("\n  That wasn't a whole number. Run me again!")
+        sys.exit(1)
+    if answer != expected:
+        hint = ""
+        if kind == "signed" and answer == value:
+            hint = f" That's the UNSIGNED reading; subtract {MOD} for the signed value."
+        elif kind == "unsigned" and value is not None and answer == value - MOD:
+            hint = " That's the SIGNED reading; the unsigned value just adds the bits up."
+        print(f"  Not quite --- the answer was {expected}.{hint}")
+        sys.exit(1)
+    print("  Correct!")
+
+
+for i, value in enumerate(order, 1):
+    signed = value - MOD if value >= HIGH else value
+    print(f"Value {i} of {len(order)}:  {grouped(value)}")
+    if value < HIGH:
+        print("  The top bit is clear, so it's positive (both readings agree).")
+        ask("  What number is it? > ", value)
+    else:
+        print("  The top bit is set, so it's negative.")
+        ask("  As an UNSIGNED number, what is it? > ", value, kind="unsigned", value=value)
+        ask("  As a SIGNED (two's complement) number, what is it? > ", signed, kind="signed", value=value)
+    print()
+
+print("All correct --- you can read the sign at any width! Here is your flag:")
+print(flag)

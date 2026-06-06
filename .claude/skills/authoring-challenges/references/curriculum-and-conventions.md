@@ -159,3 +159,30 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   and the phenomenon must be *real*, not produced by the challenge's own scaffolding.
 - **No spoilers:** describe the goal and the concept, not the exploit steps (those live in
   `tests_private`). Don't hardcode randomized names in prose — refer to them generically.
+- **Format like the house markdown** (distilled from an edit pass that rewrote three
+  DESCRIPTIONs into this style):
+  - **One sentence per line** (semantic line breaks), not packed multi-sentence
+    paragraphs. "Run `/challenge/x`." and "It shows you …" go on separate lines.
+  - Keep fenced code-block contents **flush-left** — no leading indentation inside the
+    fence.
+  - **Worked examples show the whole progression and label every line** — starting form →
+    step(s) → result, each with a short label *including the final answer*, e.g.
+    `11100011  the byte, in binary` / `1110 0011  split into two nibbles` /
+    `e    3     each nibble → a hex digit` / `->  0xe3  the hex!`.
+- **Cut meta-commentary and hedging** — no "nothing new here", "that's your first real
+  encoding!", "you're not limited to a single byte!". State the task directly; a short
+  playful sign-off ("now go earn that flag!") is fine. Go easy on em-dash asides — prefer
+  complete sentences (parentheses are fine), and mind subject–verb agreement ("two hex
+  digits *are* one byte").
+- **Don't re-teach, don't narrate the binary, lean concise** (distilled from "fix" passes
+  that cut a 13-line capstone DESCRIPTION to 3):
+  - In a later/capstone level, *name* the concepts the learner already practiced instead of
+    re-explaining them — "the four interpretations we've studied (unsigned decimal, signed
+    decimal, hex, two's-complement binary)", not a fresh bulleted re-listing with ranges.
+  - Don't narrate the program's own mechanics or its failure behavior ("it shows you a
+    byte and asks…", "slip on one and it'll tell you…") — the program prints that itself
+    when it runs. The DESCRIPTION carries the *concept* and the win condition, not a
+    play-by-play of what the binary does.
+  - Default short, and shorter the later you are in a module: a capstone DESCRIPTION can be
+    two or three sentences. Skip the hype framing ("This is the capstone", "every
+    conversion you've learned, all at once").

@@ -1,0 +1,84 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+import random
+import sys
+
+# Read the flag now, while we have the privileges to (this program is SUID).
+with open("/flag") as f:
+    flag = f.read()
+
+ENCS = ["sdec", "udec", "hex", "bin"]
+NAME = {"sdec": "signed decimal", "udec": "unsigned decimal", "hex": "hex", "bin": "binary"}
+ASK = {
+    "sdec": "a signed (two's-complement) decimal number",
+    "udec": "an unsigned decimal number",
+    "hex": "two hex digits",
+    "bin": "8-bit binary",
+}
+
+
+def render(b, enc):
+    if enc == "sdec":
+        return str(b - 256 if b >= 128 else b)
+    if enc == "udec":
+        return str(b)
+    if enc == "hex":
+        return format(b, "02x")
+    return format(b, "08b")
+
+
+def parse(answer, enc):
+    a = answer.strip().replace(" ", "").lower()
+    if enc in ("sdec", "udec"):
+        return int(a, 10), None
+    if enc == "hex":
+        d = a[2:] if a.startswith("0x") else a
+        return int(d, 16), len(d)
+    d = a[2:] if a.startswith("0b") else a
+    return int(d, 2), len(d)
+
+
+# One value shown in each form; for each, you write it in all three of the other forms.
+# That sweeps every ordered pairing, including the signed <-> unsigned decimal flip.
+sources = ENCS[:]
+random.shuffle(sources)
+
+print("The whole point, all at once. A single byte can be written four ways:")
+print("  - an UNSIGNED decimal number, 0 to 255")
+print("  - a SIGNED decimal number, -128 to 127 (two's complement)")
+print("  - two HEX digits")
+print("  - eight BINARY bits")
+print(f"I'll show you {len(sources)} bytes. For each, write it in all three of the other forms.")
+print("Get every conversion right in a row, and the flag is yours.\n")
+
+for i, src in enumerate(sources, 1):
+    b = random.randint(128, 255)  # high bit set, so the signed and unsigned readings differ
+    signed = b - 256
+    print(f"Value {i} of {len(sources)}:  {render(b, src)}    [{NAME[src]}]")
+    dests = [e for e in ENCS if e != src]
+    random.shuffle(dests)
+    for dst in dests:
+        expected = signed if dst == "sdec" else b
+        want_digits = 2 if dst == "hex" else 8 if dst == "bin" else None
+        try:
+            got, dlen = parse(input(f"  write it as {ASK[dst]} > "), dst)
+        except (EOFError, ValueError):
+            print(f"  That doesn't parse as {NAME[dst]}. Run me again!")
+            sys.exit(1)
+        if got != expected:
+            if dst == "sdec" and got == b:
+                why = f"That's the unsigned reading. The top bit is set, so it's negative --- subtract 256 to get {signed}."
+            elif dst == "udec" and got == signed:
+                why = f"That's the signed reading. An unsigned byte is 0-255, never negative --- add 256 to get {b}."
+            else:
+                why = f"{render(b, src)} ({NAME[src]}) is {render(b, dst)} in {NAME[dst]}."
+            print(f"  Not quite. {why}")
+            sys.exit(1)
+        if want_digits and dlen != want_digits:
+            print(f"  Right value, but write all {want_digits} digits, leading zeros and all: {render(b, dst)}.")
+            sys.exit(1)
+        print("  Correct!")
+    print()
+
+print("All correct --- you can move a byte between any of its forms! Here is your flag:")
+print(flag)
