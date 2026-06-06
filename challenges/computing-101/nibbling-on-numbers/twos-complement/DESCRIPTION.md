@@ -1,29 +1,49 @@
-Every number you've worked with so far has been zero or positive.
-But programs need negatives too --- and a register is just 64 bits, all equal, with no special slot for a minus sign. So how can a pile of bits mean `-5`?
+Computers store data as bytes, which are made of bits.
+The registers you're used to so far, such as `rax`, are 64 bits _wide_, meaning that they can hold values from 0 (all 0 bits) to `2^64-1` (all 1 bits).
+But what if you wanted to store _negative_ numbers?
 
-The scheme nearly every CPU uses is called **two's complement**, and the cleverest way to understand it is to ask: *which* bit patterns should be the negatives? We want one rule above all --- `x + (-x)` must come out to `0`. Watch what that forces. In a single byte, `1` is `00000001`; for some pattern to deserve the name `-1`, adding it to `00000001` has to give zero:
+Early approaches to storing negative numbers included the use of a _sign_ bit: a positive decimal `5` might be stored as the byte `00000101`, while a negative `5` would be `10000101`.
+This makes sense, but it has a very important problem: math.
 
+Deep inside your computer's CPU is a subcomponent called an _Arithmetic Logical Unit_ (ALU), which is responsible for arithmetic.
+This critical component needs to be very optimized, so the less complexity is needed to, say, add units, the better.
+At the same time, the math needs to check out.
+This leads to two issues:
+
+1. A signed bit system has _two_ different values for zero: `00000000` (positive zero) and `10000000` (negative zero). This is terrible for many reasons, including having to complicate the ALU.
+2. In a signed bit system, different arithmetic algorithms need to be used for signed versus unsigned numbers. You can add `00000010` (decimal `2`) and `00000001` (decimal `1`) easily with normal binary math, but `10000010` (decimal `-2`) and `00000001` (decimal `1`) need to instead be modeled partially as subtractive.
+
+This is not great.
+Luckily, some smart minds came up with a brilliant scheme called [Twos Complement](https://en.wikipedia.org/wiki/Two%27s_complement).
+Twos complement solves both problems by modeling half of the bit space as negative _in a way compatible with unsigned arithmetic_.
+Consider this subtraction:
+
+```text
+  00000001    a positive 1
+- 00000010    a negative 2
 ```
-  00000001    1
-+ 11111111    -1
-  --------
- 100000000    the 1 carries off the top of the byte, into nowhere...
-  00000000    ...leaving zero.
+
+There aren't enough bits to service this subtraction, so we introduce a _borrow_ bit:
+
+```text
+  1 00000001    a positive 1 (with a borrow bit)
+- 0 00000010    a negative 2
+  ----------
+- 0 11111111    the result of the normal *sign-agnostic* subtraction
 ```
 
-So `11111111` *is* `-1`: add it to `1` and they cancel, with the leftover bit falling off the end of the byte and vanishing. Work it out for any value and you reach one simple rule: **the top bit is the sign.** If the highest bit is set, the number is negative, and its value is exactly *(the unsigned reading) − 256*.
+So `11111111` *is* `-1`: add it to `1` and they cancel, with the leftover bit falling off the end of the byte and vanishing.
+This has a few advantages:
 
-That's why the same byte is two numbers at once. `11111111` is `255` if you read all eight bits as a plain magnitude, or `-1` if you read it as two's complement. `10000000` is `128`, or `-128`. The bits don't know which they are --- only your interpretation decides. (For a *positive* byte the two readings happen to be the same, because subtracting 256 only comes into play when the top bit is set.)
+1. The top bit is still the _sign bit_: if it's set, the value is negative! Very easy to test.
+2. There is only one zero: `00000000`.
+3. Arithmetic works exactly normally for both signed and unsigned numbers.
 
-So let's see if you can do the interpreting. Run:
+The downside is the slight human complexity: the actual magnitude (e.g., value after the sign) of a negative number is the unsigned byte value _minus 256_.
+In the above `11111111`, it's `255 - 256 = -1`.
+A bit complex, but you'll get the idea eventually.
+Interestingly, if you treat the value as _unsigned_, you can happily use it as 255 in the arithmetic you want, and everything will still work out!
 
-```
-hacker@dojo:~$ /challenge/decode
-```
-
-It will show you several bytes, some positive and some negative, and ask you to read each one:
-
-- For a **positive** byte (top bit `0`), just give its value --- add up the bits.
-- For a **negative** byte (top bit `1`), it asks for *both* readings: first the **unsigned** value (the bits added up), then the **signed** two's-complement value (that same unsigned value, minus 256).
-
-Read every byte correctly and you get the flag. Give the unsigned value where the signed one was asked for --- the classic mistake --- and it'll catch you, because those bits mean two different things.
+Now, put this to use.
+This challenge will force you to understand twos-complement on bytes.
+Do it, and get the flag!
