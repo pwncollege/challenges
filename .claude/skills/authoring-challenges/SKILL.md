@@ -62,6 +62,26 @@ your archetype.
   per-challenge DESCRIPTION structure (recap → one new concept + *why* → success
   condition → how-to + win) and a writing checklist, see
   `references/curriculum-and-conventions.md` → "Writing the DESCRIPTION.md".
+- **Hand the I/O loop to the program; calibrate depth to new-vs-scaling.** Two corrections
+  the user made by hand across the `twos-complement{,-short,-dword}` levels:
+  - **Don't spec an interactive read/decode/encode/convert program's behavior.** I had
+    written "It shows you several bytes… for a positive byte give X, for a negative byte
+    give *both* readings… give the unsigned where the signed was asked and it'll catch you."
+    The user deleted every such paragraph. The program prints its own prompts, format, and
+    error feedback at runtime — the DESCRIPTION teaches the concept and ends on one line
+    ("Now, put this to use. Do it, and get the flag!"). This is *not* the same as the
+    code-writing levels, where a brief task spec + numbered conceptual steps + a one-line
+    win is the kept house pattern — there the learner must know what to compute; here they
+    must not be handed the answer key to an interactive drill.
+  - **A genuinely new concept gets MORE, not less.** For the first `twos-complement` level
+    the user *expanded* my terse-but-clever derivation into a full motivated build-up:
+    foundations → the naive approach (sign-magnitude) → why it fails (two zeros, the ALU
+    needing dual algorithms) → two's complement as the fix → its tradeoffs, in a plain warm
+    register. "Lean concise / cut it to three sentences" applies to *scaling and follow-up*
+    levels — for those (`-short`, `-dword`) the user cut my re-derivation of the rule down
+    to: state the delta (wider), give the new concrete numbers (bit patterns, unsigned and
+    signed max/min for that width), hand off. Don't re-teach the rule on a wider-width
+    sequel, and don't shortcut the motivation on the level that introduces the idea.
 
 ## 2. Determinism & flag delivery (the rule that got over-generalized — read carefully)
 - **The intended solution must be deterministic — it works every time, no guessing.**

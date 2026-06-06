@@ -148,6 +148,35 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
    with the `hacker@dojo:~$` prompt, ending on the payoff ("Get the alignment right, and
    the challenge gives you the flag!").
 
+**Two sub-shapes for steps 3–4 — don't confuse them:**
+- **Code-writing levels** (write asm/a program that the harness grades): a brief task spec
+  + numbered *conceptual* steps + a one-line win is the house pattern (see the
+  `nibbling-on-numbers` shift/compare/overflow levels). The learner must be told *what* to
+  compute, so this stays — but frame it as **requirements and constraints, not a
+  register-level recipe**, and never hand over the part that *is* the puzzle. From the
+  by-hand rewrite of `control-flow/caller-saved-registers` and `callee-saved-registers`:
+  - Refer to operands/registers by their **group** ("save the caller-saved registers",
+    "restore the callee-saved registers"), not an enumerated `push rax; push rcx; …`
+    sequence in the steps. Name the full register set once, where you *teach* the concept;
+    don't repeat it as a copy-paste solution in the task. (Concrete *values* are fine in
+    steps — "set them all to `0x1337`" stayed; it's the solution *mechanics* that get
+    abstracted.)
+  - State success as constraints ("you *must* call `clobber_function` before
+    `flag_function`; you *must* preserve your caller-saved registers across the clobber"),
+    and stop — don't spell out the `push`/`call`/`pop`/`call` ordering for them.
+  - **Never reveal the non-obvious gotcha that is the actual challenge.** The original
+    caller-saved DESCRIPTION wrote "push the seven, *and* `rsi`, because the `flag_function`
+    pointer is itself caller-saved and will be clobbered too" — that an *argument* register
+    is also caller-saved and must be saved is the whole puzzle; the user cut it. Teach the
+    rule; let the learner work out which registers it implicates.
+- **Interactive read/decode/encode/convert levels** (the program prompts, the learner
+  types answers): **do NOT spec the I/O.** No "it shows you several bytes… for a positive
+  one give X, for a negative one give *both* readings… miss it and it'll catch you." The
+  program prints its prompts, format, and error feedback itself — write the concept, then a
+  single hand-off line ("run `/challenge/decode` and get the flag", or just "Now, put this
+  to use. Do it, and get the flag!"). This is exactly the paragraph the user deleted from
+  `twos-complement{,-short,-dword}` by hand.
+
 **House-style checklist:**
 - Direct address ("you"); warm and explanatory in beginner modules, terse in advanced
   ones — **read the immediate siblings first and match their length and cadence.**
@@ -159,6 +188,14 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   and the phenomenon must be *real*, not produced by the challenge's own scaffolding.
 - **No spoilers:** describe the goal and the concept, not the exploit steps (those live in
   `tests_private`). Don't hardcode randomized names in prose — refer to them generically.
+- **Link canonical concepts; don't overstate them** (from the caller-saved rewrite): for a
+  standard, well-named idea (the calling convention, an ABI, an RFC), link the general term
+  to a reference (e.g. Wikipedia) and name it plainly for the platform ("the calling
+  convention of your architecture — here, 64-bit x86"), rather than dropping a spec acronym
+  ("the System V AMD64 ABI") cold. Fold concrete details into the explanation *with their
+  reason* ("`rax`, which callees clobber with the return value, …") instead of a bare
+  dash-delimited list. And don't present a convention as a hardware law — note it's a
+  convention code *can* violate, even if good code doesn't.
 - **Format like the house markdown** (distilled from an edit pass that rewrote three
   DESCRIPTIONs into this style):
   - **One sentence per line** (semantic line breaks), not packed multi-sentence
@@ -175,10 +212,16 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   complete sentences (parentheses are fine), and mind subject–verb agreement ("two hex
   digits *are* one byte").
 - **Don't re-teach, don't narrate the binary, lean concise** (distilled from "fix" passes
-  that cut a 13-line capstone DESCRIPTION to 3):
+  that cut a 13-line capstone DESCRIPTION to 3, and the by-hand rewrite of
+  `twos-complement{,-short,-dword}`):
   - In a later/capstone level, *name* the concepts the learner already practiced instead of
     re-explaining them — "the four interpretations we've studied (unsigned decimal, signed
     decimal, hex, two's-complement binary)", not a fresh bulleted re-listing with ranges.
+  - On a **scaling/"wider" sequel, state the delta and the new concrete numbers, don't
+    re-derive the rule.** `twos-complement-short`/`-dword` had re-explained "bit N is the
+    sign, a negative value is unsigned minus 2ⁿ…"; the user cut that to "you've done this a
+    byte at a time, nothing's special about 8 bits — here's the 16-/32-bit max and min
+    (with their bit patterns), go." Give the *numbers* for the new width; assume the rule.
   - Don't narrate the program's own mechanics or its failure behavior ("it shows you a
     byte and asks…", "slip on one and it'll tell you…") — the program prints that itself
     when it runs. The DESCRIPTION carries the *concept* and the win condition, not a
@@ -186,3 +229,10 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   - Default short, and shorter the later you are in a module: a capstone DESCRIPTION can be
     two or three sentences. Skip the hype framing ("This is the capstone", "every
     conversion you've learned, all at once").
+- **But the level that INTRODUCES a concept earns a full, motivated build-up** — "lean
+  concise" is for sequels, not for the first encounter. For `twos-complement` the user
+  *expanded* a terse, clever derivation into: foundations (bytes/bits, register width) →
+  the naive approach (sign-magnitude) → why it fails (two zeros, the ALU needing two
+  arithmetic algorithms) → two's complement as the fix → its human-cost tradeoff — in a
+  plain, warm, motivational register, not a literary/Socratic shortcut. Teach the *why* and
+  the history when the idea is new; earn the concision only once the learner has the idea.
