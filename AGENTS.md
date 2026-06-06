@@ -25,7 +25,13 @@ per archetype (templated web/service, interpreted checker, compiled SUID binary,
   in learner-facing text** — test it first; match the module's voice *and format* (one
   sentence per line, fenced code flush-left, lean and concise, no meta-commentary like
   "nothing new here", no re-teaching prior levels, and let the program narrate its own
-  mechanics rather than the DESCRIPTION).
+  mechanics rather than the DESCRIPTION). For **interactive read/decode/encode/convert
+  levels, never spell out the program's prompts, the input format, or the mistake the
+  checker catches** — teach the concept, then one line: "run `/challenge/X` and get the
+  flag." A *new* concept earns a full, motivated build-up (problem → naive approach → why it
+  fails → the real solution and its tradeoffs), in a plain warm register, not a clever
+  Socratic shortcut; a *scaling/follow-up* level just states the delta and the new concrete
+  numbers (bit patterns, max/min for the new width) — don't re-derive the rule.
 - **Determinism & flag:** the intended solve must work deterministically (no guessing).
   Seeded build-time / per-instance randomness is fine and good (names, passwords, a secret
   the learner *discovers* via the intended technique) — just not a coin-flip in the solve

@@ -148,6 +148,19 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
    with the `hacker@dojo:~$` prompt, ending on the payoff ("Get the alignment right, and
    the challenge gives you the flag!").
 
+**Two sub-shapes for steps 3–4 — don't confuse them:**
+- **Code-writing levels** (write asm/a program that the harness grades): a brief task spec
+  + numbered *conceptual* steps + a one-line win is the house pattern (see the
+  `nibbling-on-numbers` shift/compare/overflow levels). The learner must be told what to
+  compute, so this stays.
+- **Interactive read/decode/encode/convert levels** (the program prompts, the learner
+  types answers): **do NOT spec the I/O.** No "it shows you several bytes… for a positive
+  one give X, for a negative one give *both* readings… miss it and it'll catch you." The
+  program prints its prompts, format, and error feedback itself — write the concept, then a
+  single hand-off line ("run `/challenge/decode` and get the flag", or just "Now, put this
+  to use. Do it, and get the flag!"). This is exactly the paragraph the user deleted from
+  `twos-complement{,-short,-dword}` by hand.
+
 **House-style checklist:**
 - Direct address ("you"); warm and explanatory in beginner modules, terse in advanced
   ones — **read the immediate siblings first and match their length and cadence.**
@@ -175,10 +188,16 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   complete sentences (parentheses are fine), and mind subject–verb agreement ("two hex
   digits *are* one byte").
 - **Don't re-teach, don't narrate the binary, lean concise** (distilled from "fix" passes
-  that cut a 13-line capstone DESCRIPTION to 3):
+  that cut a 13-line capstone DESCRIPTION to 3, and the by-hand rewrite of
+  `twos-complement{,-short,-dword}`):
   - In a later/capstone level, *name* the concepts the learner already practiced instead of
     re-explaining them — "the four interpretations we've studied (unsigned decimal, signed
     decimal, hex, two's-complement binary)", not a fresh bulleted re-listing with ranges.
+  - On a **scaling/"wider" sequel, state the delta and the new concrete numbers, don't
+    re-derive the rule.** `twos-complement-short`/`-dword` had re-explained "bit N is the
+    sign, a negative value is unsigned minus 2ⁿ…"; the user cut that to "you've done this a
+    byte at a time, nothing's special about 8 bits — here's the 16-/32-bit max and min
+    (with their bit patterns), go." Give the *numbers* for the new width; assume the rule.
   - Don't narrate the program's own mechanics or its failure behavior ("it shows you a
     byte and asks…", "slip on one and it'll tell you…") — the program prints that itself
     when it runs. The DESCRIPTION carries the *concept* and the win condition, not a
@@ -186,3 +205,10 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   - Default short, and shorter the later you are in a module: a capstone DESCRIPTION can be
     two or three sentences. Skip the hype framing ("This is the capstone", "every
     conversion you've learned, all at once").
+- **But the level that INTRODUCES a concept earns a full, motivated build-up** — "lean
+  concise" is for sequels, not for the first encounter. For `twos-complement` the user
+  *expanded* a terse, clever derivation into: foundations (bytes/bits, register width) →
+  the naive approach (sign-magnitude) → why it fails (two zeros, the ALU needing two
+  arithmetic algorithms) → two's complement as the fix → its human-cost tradeoff — in a
+  plain, warm, motivational register, not a literary/Socratic shortcut. Teach the *why* and
+  the history when the idea is new; earn the concision only once the learner has the idea.
