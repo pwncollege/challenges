@@ -3,10 +3,11 @@ import random
 import subprocess
 
 # Shared-library challenge: the flag is dispensed by this (root) checker only
-# after it independently verifies the value `solve` returned. The harness that
+# after it independently verifies the value `atoi` returned. The harness that
 # runs the .so is unprivileged and never holds the flag.
 shared = True
 give_flag = True
+solve_symbol = "atoi"  # this level's entrypoint is named atoi
 
 MASK = (1 << 64) - 1
 ROUNDS = 8
@@ -15,7 +16,7 @@ ROUNDS = 8
 # can never be mistaken for a leading sign of the *next* (nonexistent) number.
 JUNK = "abcXYZ!.,;:/ +=_()@%"
 
-check_runtime_prologue = "Let's hand your solve() numbers buried in trailing junk..."
+check_runtime_prologue = "Let's hand your atoi() numbers buried in trailing junk..."
 check_runtime_success = "You stopped at the right spot every time!"
 check_runtime_failure = "One of those conversions came back wrong:\n"
 
@@ -24,7 +25,7 @@ def gen_case():
     n = random.randint(-(2**31), 2**31 - 1)
     s = str(n)
     if random.random() < 0.8:
-        # Append a non-digit, then arbitrary trailing characters that solve must ignore.
+        # Append a non-digit, then arbitrary trailing characters that atoi must ignore.
         s += random.choice(JUNK)
         s += "".join(random.choice(JUNK + "0123456789") for _ in range(random.randint(0, 5)))
     return s, n
@@ -46,7 +47,7 @@ def run_one(so_path, numstr, *, quiet):
             f"The harness exited abnormally (status {p.returncode}) on input {numstr!r}."
         )
     if len(p.stdout) < 8:
-        raise AssertionError("The harness never reported a result --- did your solve crash?")
+        raise AssertionError("The harness never reported a result --- did your atoi crash?")
     return int.from_bytes(p.stdout[-8:], "little")
 
 
@@ -59,8 +60,8 @@ def check_runtime(so_path):
         got = run_one(so_path, numstr, quiet=(i != 0))
         assert got == (expected & MASK), (
             f"atoi({numstr!r}) should be {expected} (stop at the first non-digit), "
-            f"but your solve returned {as_signed(got)}."
+            f"but your atoi returned {as_signed(got)}."
         )
         if i != 0:
-            print(f"  ok: solve({numstr!r}) = {as_signed(got)}")
+            print(f"  ok: atoi({numstr!r}) = {as_signed(got)}")
     return True

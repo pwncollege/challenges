@@ -3,15 +3,16 @@ import random
 import subprocess
 
 # Shared-library challenge: the flag is dispensed by this (root) checker only
-# after it independently verifies the value `solve` returned. The harness that
+# after it independently verifies the value `atoi` returned. The harness that
 # runs the .so is unprivileged and never holds the flag.
 shared = True
 give_flag = True
+solve_symbol = "atoi"  # this level's entrypoint is named atoi
 
 MASK = (1 << 64) - 1
 ROUNDS = 6
 
-check_runtime_prologue = "Let's hand your solve() a batch of random numbers --- some negative..."
+check_runtime_prologue = "Let's hand your atoi() a batch of random numbers --- some negative..."
 check_runtime_success = "Every number converted correctly, sign and all!"
 check_runtime_failure = "One of those conversions came back wrong:\n"
 
@@ -38,7 +39,7 @@ def run_one(so_path, numstr, *, quiet):
             f"The harness exited abnormally (status {p.returncode}) on input {numstr!r}."
         )
     if len(p.stdout) < 8:
-        raise AssertionError("The harness never reported a result --- did your solve crash?")
+        raise AssertionError("The harness never reported a result --- did your atoi crash?")
     return int.from_bytes(p.stdout[-8:], "little")
 
 
@@ -50,8 +51,8 @@ def check_runtime(so_path):
         numstr, expected = gen_case()
         got = run_one(so_path, numstr, quiet=(i != 0))
         assert got == (expected & MASK), (
-            f"atoi({numstr!r}) should be {expected}, but your solve returned {as_signed(got)}."
+            f"atoi({numstr!r}) should be {expected}, but your atoi returned {as_signed(got)}."
         )
         if i != 0:
-            print(f"  ok: solve({numstr!r}) = {as_signed(got)}")
+            print(f"  ok: atoi({numstr!r}) = {as_signed(got)}")
     return True

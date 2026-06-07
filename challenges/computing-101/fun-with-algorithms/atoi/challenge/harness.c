@@ -6,14 +6,14 @@
 
 /*
  * Harness for the atoi levels. Loads the student's shared library and calls
- *   long solve(const char *s)
- * on a number handed to us as text (argv[2]). solve must return the parsed
+ *   long atoi(const char *s)
+ * on a number handed to us as text (argv[2]). atoi must return the parsed
  * integer in rax.
  *
  * We report that raw 64-bit return value to the checker over stdout (exactly 8
  * little-endian bytes) and let the checker --- a separate, privileged process
  * --- decide whether it is correct. Because the flag never enters this
- * (unprivileged) process, a solve that tries to read or print the flag instead
+ * (unprivileged) process, an atoi that tries to read or print the flag instead
  * of doing the conversion has nothing to steal.
  */
 
@@ -34,16 +34,16 @@ int main(int argc, char **argv) {
         LOG("dlopen failed: %s", dlerror());
         return 2;
     }
-    LOG("resolving `solve` symbol ...");
-    long (*solve)(const char *) = (long (*)(const char *))dlsym(h, "solve");
-    if (!solve) {
-        LOG("missing `solve` symbol --- did you `.global solve` in your assembly?");
+    LOG("resolving `atoi` symbol ...");
+    long (*atoi_fn)(const char *) = (long (*)(const char *))dlsym(h, "atoi");
+    if (!atoi_fn) {
+        LOG("missing `atoi` symbol --- did you `.global atoi` in your assembly?");
         return 2;
     }
 
-    LOG("calling solve(\"%s\") --- your code returns the parsed integer in rax", numstr);
-    long r = solve(numstr);
-    LOG("solve returned %ld", r);
+    LOG("calling atoi(\"%s\") --- your code returns the parsed integer in rax", numstr);
+    long r = atoi_fn(numstr);
+    LOG("atoi returned %ld", r);
 
     uint64_t v = (uint64_t)r;
     if (write(1, &v, sizeof v) != (ssize_t)sizeof v) {

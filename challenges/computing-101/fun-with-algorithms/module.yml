@@ -10,6 +10,9 @@ challenges:
   id: atoi-digit
   name: "A Single Digit"
 - type: challenge
+  id: atoi-two-digits
+  name: "Two Digits"
+- type: challenge
   id: atoi
   name: "String to Integer"
 - type: challenge
