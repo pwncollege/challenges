@@ -18,6 +18,8 @@ x86's multiply instruction is `imul`.
 It has a few different ways to use it, but we'll use it like we used `add`: `imul rax, 10` multiplies `rax` by `10` in place (`rax = rax * 10`), so scaling the tens digit up by a place is a single instruction.
 Of course, `imul` can use other registers than `rax`: for example, `imul rbx, 10` multiplies `rbx` by `10`.
 
+One more thing!
+In your assembly, you will need a `.global atoi_digit` _and_ a `.global atoi` (along with the respective functions actually implemented with those labels) so that the solver can find it.
 Build and submit as before, with both `atoi_digit` and `atoi` functions:
 
 ```console
