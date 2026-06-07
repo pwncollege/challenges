@@ -14,8 +14,18 @@ Turn each into a character the way `itoa_digit` did (add `0x30`) and store the t
 
 Write `itoa(value, buf)`, which we'll call from the challenge.
 This function should take a value (`10`-`99`) in `rdi` and a pointer to the "output" buffer in `rsi`.
-You should parse the number in `rdi` into two characters and write these two characters to that buffer.
+You should parse the number in `rdi` into two characters (using `div` and then your old `itoa_digit` function) and write these two characters to that buffer.
 Then return the number of characters written (in this case, 2).
 Remember to `.global itoa`.
+
+**Writing characters.**
+Your `itoa_digit` function from the last level returned the result (in `rax`), and you didn't have to deal writh writing it to a buffer.
+Now, you do.
+Your actual character is _one byte_ (8 bits), whereas the register you're holding it in is 64 bits (8 bytes) long.
+You just want the last ("least significant") byte, and you can directly access it through _partial register alises_, depending on the register:
+
+TODO: table of all GPR least significant registers
+
+So, if your character is in `rax`, and the buffer is pointed to by `rsi`, you'll need to do `mov [rsi], al`.
 
 This is tricky, but do it carefully, and the flag is your reward!
