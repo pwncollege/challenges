@@ -25,5 +25,17 @@ challenges:
   id: nums-first
   name: "A Whole Program"
 - type: challenge
+  id: itoa-digit
+  name: "A Single Digit, Back to Text"
+- type: challenge
+  id: itoa-two-digits
+  name: "Divide and Remainder"
+- type: challenge
+  id: itoa
+  name: "Integer to String"
+- type: challenge
+  id: itoa-negative
+  name: "Negative Numbers, Back to Text"
+- type: challenge
   id: memory-sum
   name: "Sum Them All"
