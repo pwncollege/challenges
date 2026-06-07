@@ -1,32 +1,19 @@
-Up to now, your `solve` received a single string.
-Real programs usually get *several* values at once, as `argv` --- the array of argument pointers you've already walked off the stack back in the [stack](/computing-101/the-stack) module.
-This time the challenge hands that array straight to your `solve`: a contiguous block of *pointers*, one per argument, each pointing at a NUL-terminated string.
+Until now, you've been writing a *loadable library*: a function the challenge loaded and called for you.
+This time, you'll write a whole *program* --- one that starts at `_start`, runs on its own, and exits when it's done.
 
-In this challenge your `solve` receives such an array, using the standard argument convention:
-- `rdi` holds `nums` --- the address of the array of string pointers.
-- `rsi` holds `count` --- how many strings are in the array.
+Your program gets the number as a command-line argument.
+When a program starts, the stack holds its arguments: `argc` (the count) sits at `[rsp]`, and the argument pointers follow it --- `argv[0]` (the program's own name) at `[rsp + 8]`, and `argv[1]` (the first real argument) at `[rsp + 16]`.
+So the number you want is the string pointed to by `[rsp + 16]`.
 
-Each entry `nums[i]` is itself a *pointer* to a number string, so getting to a number is now a two-step dereference: first load the pointer out of the array, then read the digits it points at.
+Read it, convert it with your `atoi`, and hand the value back the way a *program* does: instead of returning it in `rax`, exit with it as your exit code, using the `exit` syscall with the value in `rdi`.
+An exit code is a single byte, so the number you're given will be between `0` and `255`.
 
-```
-nums:   rdi -> [ ptr0 ][ ptr1 ][ ptr2 ] ...
-                  |
-       ptr0 ------+--> "11"
-```
-
-To grab the first string's pointer:
-
-```
-mov rdi, [rdi]      ; rdi = nums[0], the pointer to the first string
-```
-
-For this level, just convert that first string and return its value.
-Bring the `atoi` you wrote in the previous levels with you: point it at `nums[0]`, and return the result in `rax`.
-
-Build and submit as before:
+This time, assemble and link it as a normal program (no `-shared`), then submit it:
 
 ```console
-hacker@dojo:~$ /challenge/check your-solve.so
+hacker@dojo:~$ as -o prog.o prog.s
+hacker@dojo:~$ ld -o prog prog.o
+hacker@dojo:~$ /challenge/check prog
 ```
 
-Pick out the first number, return it, and the flag is yours.
+Convert the argument, exit with its value, and score!

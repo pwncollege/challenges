@@ -23,7 +23,7 @@ challenges:
   name: "Where the Number Ends"
 - type: challenge
   id: nums-first
-  name: "Numbers Over argv"
+  name: "A Whole Program"
 - type: challenge
   id: memory-sum
   name: "Sum Them All"

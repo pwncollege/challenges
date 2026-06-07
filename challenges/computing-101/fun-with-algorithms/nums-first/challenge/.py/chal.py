@@ -1,59 +1,40 @@
 import __main__ as checker
 import random
+import signal
 import subprocess
 
-# Shared-library challenge: the flag is dispensed by this (root) checker only
-# after it independently verifies the value `solve` returned. The harness that
-# runs the .so is unprivileged and never holds the flag.
-shared = True
+# A full-program challenge: the learner assembles and links their own complete
+# executable, and common/check runs it *as-is* (executable mode --- no rebuild).
+# We run it with a number as its only argument and check that it exits with that
+# number's value. The flag is dispensed by this (root) checker after the run passes.
+executable = True
 give_flag = True
 
-MASK = (1 << 64) - 1
-ROUNDS = 6
-
-check_runtime_prologue = "Let's hand your solve() a few arrays of numbers..."
-check_runtime_success = "You picked out the first number every time!"
-check_runtime_failure = "That wasn't the right value:\n"
+check_runtime_prologue = "Let's run your program on a few numbers and check its exit code..."
+check_runtime_success = "Every number came back as the right exit code!"
+check_runtime_failure = "That didn't come back right:\n"
 
 
-def gen_case():
-    count = random.randint(1, 6)
-    nums = [random.randint(-(2**31), 2**31 - 1) for _ in range(count)]
-    return nums, nums[0]  # this level: return the first number
-
-
-def as_signed(v):
-    return v - (1 << 64) if v >= (1 << 63) else v
-
-
-def run_one(so_path, nums, *, quiet):
-    argv = ["/challenge/harness", so_path] + [str(n) for n in nums]
-    p = subprocess.run(
-        argv,
-        stdout=subprocess.PIPE,
-        stderr=(subprocess.DEVNULL if quiet else None),
-        timeout=5,
-    )
-    if p.returncode != 0:
-        raise AssertionError(
-            f"The harness exited abnormally (status {p.returncode}) on input {nums!r}."
-        )
-    if len(p.stdout) < 8:
-        raise AssertionError("The harness never reported a result --- did your solve crash?")
-    return int.from_bytes(p.stdout[-8:], "little")
-
-
-def check_runtime(so_path):
+def check_runtime(binary_path):
     checker.print_prompt()
-    checker.slow_print(f'/challenge/harness {so_path} <num0> <num1> ...')
+    checker.slow_print(f"{binary_path} <number>; echo $?")
     print("")
-    for i in range(ROUNDS):
-        nums, expected = gen_case()
-        got = run_one(so_path, nums, quiet=(i != 0))
-        assert got == (expected & MASK), (
-            f"solve({nums!r}) should return nums[0] = {expected}, "
-            f"but your solve returned {as_signed(got)}."
+    # Exit codes are one byte, so we stay in 0-255 (the range the DESCRIPTION promises).
+    nums = [0, 1, 9, 42, 200, 255] + [random.randint(0, 255) for _ in range(4)]
+    for i, n in enumerate(nums):
+        p = subprocess.run(
+            [binary_path, str(n)],
+            stdout=subprocess.DEVNULL,
+            stderr=(subprocess.DEVNULL if i != 0 else None),
+            timeout=5,
         )
-        if i != 0:
-            print(f"  ok: solve({nums!r}) = {as_signed(got)}")
+        rc = p.returncode
+        if rc < 0:
+            signum = -rc
+            signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
+            raise AssertionError(f"Your program crashed ({signame}) on the argument {n!r}.")
+        assert rc == n, (
+            f"on the argument {n!r}, your program should exit with code {n}, but it exited with {rc}."
+        )
+        print(f"  ok: argument {n!r} -> exit code {rc}")
     return True
