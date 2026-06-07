@@ -15,7 +15,7 @@ The digits are consecutive, so the *value* of a digit character is simply the ch
 In this level, you must implement a function that converts a text string containing one digit into the number.
 Your function (which must be called `atoi_digit`) receives a pointer in `rdi` to a single digit character, and must return that digit's value (`0` through `9`) in `rax`.
 
-Now, since we're making an `atoi_digit` function instead of `solve`, you'll need a `.global atoi` so the challenge can find it!
+Now, since we're making an `atoi_digit` function instead of `solve`, you'll need a `.global atoi_digit` so the challenge can find it!
 Then, build it into a shared library and hand it to the grader:
 
 ```console
