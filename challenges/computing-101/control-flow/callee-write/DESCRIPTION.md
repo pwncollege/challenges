@@ -72,11 +72,35 @@ Get it right, and your `solve` will print your flag for you!
 **Hint:** Keep in mind that `write()` takes arguments in the order of: file descriptor (1 in `rdi` for stdout), buffer (pointer to memory, in `rsi`), and size (in `rdx`).
 This is _different_ from the arguments your function will be called with, so you'll need to move some stuff around!
 
-**Debugging your solution:**
-Since your code is a function inside a shared library loaded by the grader, you can't just `gdb your-solve.so` directly --- there's no entry point to start from.
-And `/challenge/check` is a SUID binary, so when you launch it under a debugger its SUID privileges get dropped and it can't read your flag.
+**Debugging your solution.**
+Since your code is a function inside a shared library, there's no entry point to launch under `gdb` directly --- but you can *give* it one.
+Add a tiny `_start` to your code that fakes the grader's call: point `rdi` at a stand-in buffer, set `rsi` to its length, and `call solve`.
+Now you can step through your logic in plain `gdb`, with no flag and no privileges needed:
 
-The fix: launch this challenge in **practice mode** (which gives you `sudo`), and debug the whole flow as root, passing your `.so` to `check` via gdb's `run` --- exactly like you did back in the [running-with-arguments](/computing-101/introspecting) level:
+```asm
+.global _start
+_start:
+    push 0x41414141   // put four 'A' bytes (0x41) on the stack to stand in for the flag
+    mov rdi, rsp      // first argument: a pointer to those bytes
+    mov rsi, 4        // second argument: how many bytes to print
+    int3              // optional: gdb breaks here without setting a breakpoint
+    call solve        // your solve runs, prints the bytes, and exits on its own
+```
+
+Assemble and link it as a normal executable (no `-shared` --- this version has an entry point), then load it in `gdb`:
+
+```console
+hacker@dojo:~$ as -o debug.o debug.s
+hacker@dojo:~$ ld -o debug debug.o
+hacker@dojo:~$ gdb ./debug
+(gdb) run
+```
+
+Execution stops at your `int3`; step through with the techniques from [Software Introspection](/computing-101/introspecting), watching the registers and the buffer.
+If your `solve` is correct, this prints `AAAA` --- and the same logic will print your real flag when you submit the `.so` to the grader.
+
+To instead watch the *real* run with the *real* flag: `/challenge/check` is a SUID binary, so launching it under a debugger drops its privileges and it can't read your flag.
+Launch this challenge in **practice mode** (which gives you `sudo`) and debug the whole flow as root, passing your `.so` to `check` via gdb's `run` --- exactly like you did back in the [running-with-arguments](/computing-101/introspecting) level:
 
 ```console
 hacker@dojo:~$ sudo gdb /challenge/check

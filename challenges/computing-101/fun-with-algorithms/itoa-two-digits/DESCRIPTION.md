@@ -66,4 +66,13 @@ _start:
     syscall
 ```
 
-Then, using the techniques you learned in [Software Introspection](/computing-101/introspecting), you can load that up in gdb and step through it, looking at memory on the stack, registers, etc, until things work!
+Assemble and link it as a normal executable (no `-shared` --- this version has an entry point), then load it in `gdb`:
+
+```console
+hacker@dojo:~$ as -o debug.o debug.s
+hacker@dojo:~$ ld -o debug debug.o
+hacker@dojo:~$ gdb ./debug
+(gdb) run
+```
+
+Execution stops at your `int3`, and from there you can step through with the techniques you learned in [Software Introspection](/computing-101/introspecting), looking at memory on the stack, registers, etc, until things work!
