@@ -34,7 +34,7 @@ resources:
     Another way of expressing this digit desynchronization between decimal and binary is that decimal does not have clean _bit boundaries_.
 
     The lack of bit boundaries makes reasoning about the relationship between decimal and binary complex.
-    For example, it is hard to spot-translate numbers between decimal and binary in general: we can work out that `97` is `110001`, but it's hard to see that at a glance.
+    For example, it is hard to spot-translate numbers between decimal and binary in general: we can work out that `97` is `1100001`, but it's hard to see that at a glance.
 
     It's much easier to spot-translate between bases that have more alignment between digits.
     For example, a single hexadecimal (base 16) digit can represent 16 values (`0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `a`, `b`, `c`, `d`, `e`, `f`): the same number of values that binary can represent in 4 digits!
