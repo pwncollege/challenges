@@ -24,7 +24,24 @@ Now, you do.
 Your actual character is _one byte_ (8 bits), whereas the register you're holding it in is 64 bits (8 bytes) long.
 You just want the last ("least significant") byte, and you can directly access it through _partial register alises_, depending on the register:
 
-TODO: table of all GPR least significant registers
+| register | least significant byte |
+| -------- | ---------------------- |
+| `rax`    | `al`                   |
+| `rbx`    | `bl`                   |
+| `rcx`    | `cl`                   |
+| `rdx`    | `dl`                   |
+| `rsi`    | `sil`                  |
+| `rdi`    | `dil`                  |
+| `rbp`    | `bpl`                  |
+| `rsp`    | `spl`                  |
+| `r8`     | `r8b`                  |
+| `r9`     | `r9b`                  |
+| `r10`    | `r10b`                 |
+| `r11`    | `r11b`                 |
+| `r12`    | `r12b`                 |
+| `r13`    | `r13b`                 |
+| `r14`    | `r14b`                 |
+| `r15`    | `r15b`                 |
 
 So, if your character is in `rax`, and the buffer is pointed to by `rsi`, you'll need to do `mov [rsi], al`.
 
