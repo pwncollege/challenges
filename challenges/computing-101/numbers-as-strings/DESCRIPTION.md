@@ -1,8 +1,6 @@
 You've learned to read and write registers, walk through memory, and package your code as a function inside a shared library.
 Now let's put those skills together and build some real algorithms.
 
-We'll start at the bottom of the stack that every program rests on: turning text into numbers.
-Once you've built that, you'll reuse it --- we'll feed numbers to your code as command-line text, and you'll compute real results from them.
-
-Each challenge hands your functions some input and checks what they hand back.
-Get it right, and get those flag!
+Through this module, we'll gradually build on our solutions until we create code that addresses a very common program need: turning text into numbers.
+Along the way, we'll learn how to write reusable assembly code, how text and numbers relate to each other, and how to reason about algorithms (and their failings!).
+You'll grow in knowledge, and in flags!
