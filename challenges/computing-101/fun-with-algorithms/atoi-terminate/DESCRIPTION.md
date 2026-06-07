@@ -1,27 +1,22 @@
 Real input is messy.
 A number embedded in a larger string isn't always followed by a tidy NUL --- it might be followed by a space, a letter, a comma, or anything else: `"42abc"`, `"100 200"`, `"7,"`.
 
-A proper `atoi` reads digits until it sees something that *isn't* a digit, then stops --- whatever that non-digit is, the NUL included.
+A proper `atoi` reads digits until it sees something that *isn't* a digit, then stops, whatever that non-digit is (including 0x00).
+Instead of "stop at the 0 byte", the rule becomes "stop at the first byte that isn't `'0'`-`'9'`".
 
-So change your stopping condition.
-Instead of "stop at the NUL," the rule becomes "stop at the first byte that isn't `'0'`-`'9'`."
+A handy one-shot test for a character `c`: compute `c - 0x30`, then check whether the result is in the range `0`-`9` using an *unsigned* comparison.
+Anything that isn't a digit --- punctuation, letters, a space, even the 0 value (which becomes a negative twos-complement number when you subtract `'0'`, or `0x30` from it, and thus is a very large number when interpreted as an unsigned value), falls outside of this range.
 
-A handy one-shot test for a character `c`: compute `c - '0'`, then check whether the result is in the range `0`-`9` using an *unsigned* comparison.
-Anything that isn't a digit --- punctuation, letters, a space, even the NUL (which becomes a huge number when you subtract `'0'` and read it unsigned) --- falls outside `0`-`9` and ends the loop:
+To do an unsigned check, use the `ja` instruction, which stands for "**j**ump if the last comparison was **a**bove (e.g., greater when unsigned)".
+You must do the `cmp` (again, look back earlier in this dojo), and then:
 
 ```
-cmp rcx, 9        ; rcx already holds (c - '0')
-ja  done          ; unsigned "above 9" -> not a digit -> stop
+ja  done
+
+...
+
+done:
+   ret
 ```
 
-Keep your sign handling from the previous level: a leading `'-'` still means negative, and everything after the number is simply ignored.
-
-Same contract: string pointer in `rdi`, signed result in `rax`.
-
-Build and submit as before:
-
-```console
-hacker@dojo:~$ /challenge/check your-solve.so
-```
-
-Stop at the first non-digit, return the value, and the flag is yours.
+Otherwise, keep your solution from the prior level: a leading `'-'` still means negative, math still works as you expect, etc, and you get the flag when you solve it!
