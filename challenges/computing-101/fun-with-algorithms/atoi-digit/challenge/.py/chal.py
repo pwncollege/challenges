@@ -1,10 +1,10 @@
 import __main__ as checker
 import subprocess
 
-# A shared-library challenge: the learner submits `solve` inside a .so, and the
-# flag is dispensed by this (root) checker only after it independently verifies
-# the value `solve` returned. The harness that actually runs the .so is
-# unprivileged and never holds the flag.
+# A shared-library challenge: the learner submits `atoi_digit` inside a .so, and
+# the flag is dispensed by this (root) checker only after it independently
+# verifies the value `atoi_digit` returned. The harness that actually runs the
+# .so is unprivileged and never holds the flag.
 shared = True
 give_flag = True
 solve_symbol = "atoi_digit"  # this level's entrypoint is named atoi_digit, not solve
@@ -30,7 +30,7 @@ def run_one(so_path, s, *, quiet):
             f"The harness exited abnormally (status {p.returncode}) on input {s!r}."
         )
     if len(p.stdout) < 8:
-        raise AssertionError("The harness never reported a result --- did your solve crash?")
+        raise AssertionError("The harness never reported a result --- did your atoi_digit crash?")
     return int.from_bytes(p.stdout[-8:], "little")
 
 
@@ -41,8 +41,8 @@ def check_runtime(so_path):
     for i, d in enumerate("0123456789"):
         got = run_one(so_path, d, quiet=(i != 0))
         assert got == int(d), (
-            f"atoi_digit({d!r}) should be {d}, but your solve returned {as_signed(got)}."
+            f"atoi_digit({d!r}) should be {d}, but your atoi_digit returned {as_signed(got)}."
         )
         if i != 0:
-            print(f"  ok: solve({d!r}) = {got}")
+            print(f"  ok: atoi_digit({d!r}) = {got}")
     return True
