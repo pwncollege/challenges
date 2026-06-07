@@ -122,10 +122,11 @@ def load_shared_input(binary_path, input_file=None):
         )
 
     elf = pwnlib.elf.ELF(input_file)
-    if "solve" not in elf.symbols:
+    sym = getattr(chal, "solve_symbol", "solve")
+    if sym not in elf.symbols:
         raise ChallengeFailedPrint(
-            f"Your shared library does not export a `solve` symbol.\n"
-            "Make sure your assembly contains `.global solve` and a `solve:` label."
+            f"Your shared library does not export a `{sym}` symbol.\n"
+            f"Make sure your assembly contains `.global {sym}` and a `{sym}:` label."
         )
 
     with open(binary_path, "wb") as f:
@@ -135,10 +136,45 @@ def load_shared_input(binary_path, input_file=None):
     text = elf.get_section_by_name(".text")
     raw_bytes = text.data() if text else b""
 
-    solve_addr = elf.symbols["solve"]
+    solve_addr = elf.symbols[sym]
     solve_offset = solve_addr - text["sh_addr"] if text else 0
     user_raw = raw_bytes[solve_offset:] if 0 <= solve_offset < len(raw_bytes) else raw_bytes
     return raw_bytes, user_raw
+
+
+def load_executable_input(binary_path, input_file=None):
+    if input_file is None:
+        raise ChallengeFailedPrint(
+            "This challenge runs your program, so pass it to check:\n\n"
+            "    /challenge/check your-program\n"
+        )
+    try:
+        content = open(input_file, "rb").read()
+    except FileNotFoundError:
+        raise ChallengeFailedPrint(f"File {input_file} not found.")
+    except PermissionError:
+        raise ChallengeFailedPrint(f"Permission denied when opening {input_file}.")
+
+    import magic
+    fmt = magic.from_buffer(content)
+    if "ELF 64-bit LSB executable" not in fmt and "ELF 64-bit LSB pie executable" not in fmt:
+        raise ChallengeFailedPrint(
+            f"Expected an ELF 64-bit executable, but {input_file} is:\n  {fmt}\n\n"
+            "Assemble and link your program yourself, like this:\n"
+            "    as -o prog.o prog.s\n"
+            "    ld -o prog prog.o\n"
+        )
+
+    # Copy the learner's program through unchanged: we run it exactly as they
+    # built it, we do NOT rebuild it.
+    with open(binary_path, "wb") as f:
+        f.write(content)
+    os.chmod(binary_path, 0o755)
+
+    elf = pwnlib.elf.ELF(input_file)
+    text = elf.get_section_by_name(".text")
+    raw_bytes = text.data() if text else b""
+    return raw_bytes, raw_bytes
 
 console = rich.console.Console(highlight=False)
 err_console = rich.console.Console(stderr=True, highlight=False)
@@ -175,12 +211,16 @@ def main():
 
     global display_filename
     shared = getattr(chal, "shared", False)
+    executable = getattr(chal, "executable", False)
     default_filename = "/tmp/your-program.so" if shared else "/tmp/your-program"
     binary_filename = getattr(chal, 'final_filename', default_filename)
     input_file = sys.argv[1] if len(sys.argv) == 2 else None
     if input_file and input_file != binary_filename:
         display_filename = (input_file, binary_filename)
-    if shared:
+    if executable:
+        # The learner submits a complete, already-linked program; run it as-is.
+        raw_binary, user_raw_binary = load_executable_input(binary_filename, input_file)
+    elif shared:
         raw_binary, user_raw_binary = load_shared_input(binary_filename, input_file)
     else:
         raw_binary, user_raw_binary = build_input(binary_filename, input_file)

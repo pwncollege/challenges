@@ -1,0 +1,44 @@
+name: Numbers as Strings
+resources:
+- name: "(review) Assembly"
+  type: lecture
+  video: TdTOH1GfrWg
+  playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
+  slides: 1sBB34ZUVjT3MDjYvGiZU3z6CTLGvO1hHEdHliPUJ0iw
+challenges:
+- type: challenge
+  id: atoi-digit
+  name: "A Single Digit"
+- type: challenge
+  id: atoi-two-digits
+  name: "Two Digits"
+- type: challenge
+  id: atoi
+  name: "String to Integer"
+- type: challenge
+  id: atoi-negative
+  name: "Negative Numbers"
+- type: challenge
+  id: atoi-terminate
+  name: "Where the Number Ends"
+- type: challenge
+  id: atoi-argv1
+  name: "A Whole Program"
+- type: challenge
+  id: itoa-digit
+  name: "A Single Digit, Back to Text"
+- type: challenge
+  id: itoa-two-digits
+  name: "Divide and Remainder"
+- type: challenge
+  id: itoa-minimal
+  name: "Drop the Leading Zero"
+- type: challenge
+  id: itoa
+  name: "Integer to String"
+- type: challenge
+  id: itoa-negative
+  name: "Negative Numbers, Back to Text"
+- type: challenge
+  id: memory-sum
+  name: "Sum Them All"

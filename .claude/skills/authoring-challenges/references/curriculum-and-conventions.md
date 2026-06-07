@@ -210,13 +210,36 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   encoding!", "you're not limited to a single byte!". State the task directly; a short
   playful sign-off ("now go earn that flag!") is fine. Go easy on em-dash asides — prefer
   complete sentences (parentheses are fine), and mind subject–verb agreement ("two hex
-  digits *are* one byte").
+  digits *are* one byte"). A real fact the learner needs (e.g. "`imul` works on other
+  registers too") goes in its *own sentence*, not tucked into an `---` aside — this is a
+  recurring hand-correction.
+- **Introducing a new instruction: anchor it to a familiar one, show the *one* form you'll
+  use** (from the `fun-with-algorithms/atoi-two-digits` `imul` write-up). Relate it to an
+  instruction the learner already knows with the same operand shape ("it has a few forms, but
+  we'll use it like we used `add`: `imul rax, 10`"), teach just that form, and add any other
+  forms/registers as a plain follow-up sentence — don't enumerate the whole instruction.
+- **When the exported symbol isn't the default `solve`, spell out the exact `.global`
+  name(s)** (from `atoi-digit` and `atoi-two-digits`). The grader (`common/check`'s
+  `solve_symbol` + the harness's `dlsym`) looks up *specific* symbols, so tell the learner
+  precisely what to declare — `.global atoi_digit`, or both `.global atoi_digit` *and*
+  `.global atoi` for a two-function level — and restate the multi-part deliverable at the
+  submit step ("submit, with both `atoi_digit` and `atoi`"). A renamed or forgotten `.global`
+  surfaces to the learner as a confusing "missing symbol".
 - **Don't re-teach, don't narrate the binary, lean concise** (distilled from "fix" passes
   that cut a 13-line capstone DESCRIPTION to 3, and the by-hand rewrite of
   `twos-complement{,-short,-dword}`):
   - In a later/capstone level, *name* the concepts the learner already practiced instead of
     re-explaining them — "the four interpretations we've studied (unsigned decimal, signed
     decimal, hex, two's-complement binary)", not a fresh bulleted re-listing with ranges.
+  - **A concept introduced in an earlier *module* is still prior knowledge — acknowledge it,
+    don't re-introduce it cold** (from the `fun-with-algorithms/atoi-digit` rewrite). Before
+    writing a concept's intro, find where it first appears in the dojo (grep the dojo's
+    `*/*/DESCRIPTION.md` for it; check module order in `dojo.yml`). If it's already taught,
+    open with a one-line nod and teach only the *new facet*. ASCII is first introduced back in
+    `hello-hackers` (with `man ascii`/`'x'` char-literals reinforced in `control-flow` and
+    `assembly-assortment`), so atoi-digit opens "you've seen ASCII in prior levels" and teaches
+    only the new bit — digits are consecutive, so `c - '0'` — instead of re-explaining ASCII
+    from scratch.
   - On a **scaling/"wider" sequel, state the delta and the new concrete numbers, don't
     re-derive the rule.** `twos-complement-short`/`-dword` had re-explained "bit N is the
     sign, a negative value is unsigned minus 2ⁿ…"; the user cut that to "you've done this a
