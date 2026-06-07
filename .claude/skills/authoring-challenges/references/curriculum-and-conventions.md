@@ -210,7 +210,21 @@ per-challenge (`<challenge>/DESCRIPTION.md`, or the `description:` field in `mod
   encoding!", "you're not limited to a single byte!". State the task directly; a short
   playful sign-off ("now go earn that flag!") is fine. Go easy on em-dash asides — prefer
   complete sentences (parentheses are fine), and mind subject–verb agreement ("two hex
-  digits *are* one byte").
+  digits *are* one byte"). A real fact the learner needs (e.g. "`imul` works on other
+  registers too") goes in its *own sentence*, not tucked into an `---` aside — this is a
+  recurring hand-correction.
+- **Introducing a new instruction: anchor it to a familiar one, show the *one* form you'll
+  use** (from the `fun-with-algorithms/atoi-two-digits` `imul` write-up). Relate it to an
+  instruction the learner already knows with the same operand shape ("it has a few forms, but
+  we'll use it like we used `add`: `imul rax, 10`"), teach just that form, and add any other
+  forms/registers as a plain follow-up sentence — don't enumerate the whole instruction.
+- **When the exported symbol isn't the default `solve`, spell out the exact `.global`
+  name(s)** (from `atoi-digit` and `atoi-two-digits`). The grader (`common/check`'s
+  `solve_symbol` + the harness's `dlsym`) looks up *specific* symbols, so tell the learner
+  precisely what to declare — `.global atoi_digit`, or both `.global atoi_digit` *and*
+  `.global atoi` for a two-function level — and restate the multi-part deliverable at the
+  submit step ("submit, with both `atoi_digit` and `atoi`"). A renamed or forgotten `.global`
+  surfaces to the learner as a confusing "missing symbol".
 - **Don't re-teach, don't narrate the binary, lean concise** (distilled from "fix" passes
   that cut a 13-line capstone DESCRIPTION to 3, and the by-hand rewrite of
   `twos-complement{,-short,-dword}`):

@@ -35,6 +35,10 @@ per archetype (templated web/service, interpreted checker, compiled SUID binary,
   register-level recipe** — refer to operands by group ("save the caller-saved registers"),
   don't enumerate the `push`/`pop` sequence, and never reveal the non-obvious gotcha that
   *is* the puzzle (e.g. that an argument register is *also* caller-saved and must be saved).
+  Introduce a new instruction by anchoring it to a familiar one and showing the single form
+  the level needs ("we'll use `imul rax, 10` like we used `add`"), not the whole instruction;
+  and when the exported symbol isn't the default `solve` (renamed, or several), spell out the
+  exact `.global <name>`(s) the grader looks up.
   Link canonical concepts (the calling convention/ABI) to a reference and name the platform
   plainly ("64-bit x86") rather than dropping a spec acronym ("System V AMD64 ABI") cold;
   note a convention is just that, not a hardware law. A *new* concept earns a full, motivated
