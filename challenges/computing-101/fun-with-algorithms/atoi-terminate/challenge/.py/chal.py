@@ -36,12 +36,18 @@ def as_signed(v):
 
 
 def run_one(so_path, numstr, *, quiet):
-    p = subprocess.run(
-        ["/challenge/harness", so_path, numstr],
-        stdout=subprocess.PIPE,
-        stderr=(subprocess.DEVNULL if quiet else None),
-        timeout=5,
-    )
+    try:
+        p = subprocess.run(
+            ["/challenge/harness", so_path, numstr],
+            stdout=subprocess.PIPE,
+            stderr=(subprocess.DEVNULL if quiet else None),
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            f"atoi({numstr!r}) never returned --- it ran too long and was killed. "
+            "If the loop doesn't advance the pointer (inc rdi) and stop at a non-digit, it spins forever."
+        )
     if p.returncode != 0:
         raise AssertionError(
             f"The harness exited abnormally (status {p.returncode}) on input {numstr!r}."
@@ -49,6 +55,30 @@ def run_one(so_path, numstr, *, quiet):
     if len(p.stdout) < 8:
         raise AssertionError("The harness never reported a result --- did your atoi crash?")
     return int.from_bytes(p.stdout[-8:], "little")
+
+
+def diagnose(numstr, expected, got):
+    g = as_signed(got)
+    neg = numstr.startswith("-")
+    body = numstr[1:] if neg else numstr
+    # Value if the loop never stopped --- treating every byte as a digit (c - '0').
+    over = 0
+    for c in body:
+        over = over * 10 + (ord(c) - ord("0"))
+    over = -over if neg else over
+    if not body.isdigit() and g == over:
+        return " Your loop ran past the number into the trailing characters --- stop at the first byte that isn't a digit."
+    # Sum of just the leading digits (the *10 was skipped).
+    digits = ""
+    for c in body:
+        if not c.isdigit():
+            break
+        digits += c
+    if digits:
+        ds = sum(int(c) for c in digits)
+        if g == (-ds if neg else ds):
+            return " That's the sum of the digits --- multiply the running total by 10 as you go."
+    return ""
 
 
 def check_runtime(so_path):
@@ -61,6 +91,7 @@ def check_runtime(so_path):
         assert got == (expected & MASK), (
             f"atoi({numstr!r}) should be {expected} (stop at the first non-digit), "
             f"but your atoi returned {as_signed(got)}."
+            + diagnose(numstr, expected, got)
         )
         if i != 0:
             print(f"  ok: atoi({numstr!r}) = {as_signed(got)}")

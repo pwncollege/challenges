@@ -11,12 +11,18 @@ solve_symbol = "itoa"
 
 
 def run_one(so_path, value, *, quiet):
-    p = subprocess.run(
-        ["/challenge/harness", so_path, str(value)],
-        stdout=subprocess.PIPE,
-        stderr=(subprocess.DEVNULL if quiet else None),
-        timeout=5,
-    )
+    try:
+        p = subprocess.run(
+            ["/challenge/harness", so_path, str(value)],
+            stdout=subprocess.PIPE,
+            stderr=(subprocess.DEVNULL if quiet else None),
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            f"itoa({value}, buf) never returned --- it ran too long and was killed. "
+            "If the divide loop doesn't shrink the value toward 0 each pass, it spins forever."
+        )
     if p.returncode != 0:
         raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on value {value}.")
     return p.stdout
@@ -25,6 +31,14 @@ def run_one(so_path, value, *, quiet):
 check_runtime_prologue = "Let's hand your itoa numbers of every length and check the text it writes..."
 check_runtime_success = "Every number printed correctly!"
 check_runtime_failure = "That text wasn't right:\n"
+
+
+def diagnose(expected, got):
+    if expected == b"0" and got == b"":
+        return " 0 is the special case: the divide-by-10 loop runs zero times for it, so write '0' explicitly."
+    if len(expected) > 1 and got == expected[::-1]:
+        return " The digits came out reversed --- emit them most-significant first (push them as you divide, then pop)."
+    return ""
 
 
 def check_runtime(so_path):
@@ -36,7 +50,7 @@ def check_runtime(so_path):
     for i, v in enumerate(cases):
         got = run_one(so_path, v, quiet=(i != 0))
         expected = str(v).encode()
-        assert got == expected, f"itoa({v}, buf) should write {expected!r}, but it wrote {got!r}."
+        assert got == expected, f"itoa({v}, buf) should write {expected!r}, but it wrote {got!r}.{diagnose(expected, got)}"
         if i != 0:
             print(f"  ok: itoa({v}) wrote {got!r}")
     return True

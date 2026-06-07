@@ -10,12 +10,18 @@ solve_symbol = "itoa_digit"  # this level's entrypoint is named itoa_digit
 
 
 def run_one(so_path, value, *, quiet):
-    p = subprocess.run(
-        ["/challenge/harness", so_path, str(value)],
-        stdout=subprocess.PIPE,
-        stderr=(subprocess.DEVNULL if quiet else None),
-        timeout=5,
-    )
+    try:
+        p = subprocess.run(
+            ["/challenge/harness", so_path, str(value)],
+            stdout=subprocess.PIPE,
+            stderr=(subprocess.DEVNULL if quiet else None),
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            f"itoa_digit({value}) never returned --- it ran too long and was killed. "
+            "A function has to reach a `ret`; an accidental loop with no way out spins forever."
+        )
     if p.returncode != 0:
         raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on value {value}.")
     if len(p.stdout) < 8:
@@ -35,9 +41,10 @@ def check_runtime(so_path):
     for i, d in enumerate(range(10)):
         got = run_one(so_path, d, quiet=(i != 0))
         expected = ord("0") + d  # the ASCII character for that digit
+        value_hint = " That's the value itself --- a digit's character is value + '0' (0x30)." if got == d else ""
         assert got == expected, (
             f"itoa_digit({d}) should return '{d}' ({expected} = {hex(expected)}), "
-            f"but it returned {got} ({hex(got)})."
+            f"but it returned {got} ({hex(got)}).{value_hint}"
         )
         if i != 0:
             ch = chr(got) if 0x20 <= got < 0x7f else "?"

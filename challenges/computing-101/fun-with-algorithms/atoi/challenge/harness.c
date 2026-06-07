@@ -10,6 +10,10 @@
  * on a number handed to us as text (argv[2]). atoi must return the parsed
  * integer in rax.
  *
+ * We call it through call_fn (shim.S), which also lets us confirm the call
+ * honored the calling convention: atoi is a real function and must leave the
+ * callee-saved registers (rbx, r12-r15) exactly as it found them.
+ *
  * We report that raw 64-bit return value to the checker over stdout (exactly 8
  * little-endian bytes) and let the checker --- a separate, privileged process
  * --- decide whether it is correct. Because the flag never enters this
@@ -18,6 +22,10 @@
  */
 
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
+
+/* Provided by shim.S: seeds rbx,r12-r15, calls fn(s), records them in cc_seen. */
+extern long call_fn(long (*fn)(const char *), const char *s);
+extern uint64_t cc_seen[5];
 
 int main(int argc, char **argv) {
     setvbuf(stderr, NULL, _IONBF, 0);
@@ -42,8 +50,23 @@ int main(int argc, char **argv) {
     }
 
     LOG("calling atoi(\"%s\") --- your code returns the parsed integer in rax", numstr);
-    long r = atoi_fn(numstr);
+    long r = call_fn(atoi_fn, numstr);
     LOG("atoi returned %ld", r);
+
+    // atoi is a real function: it must preserve the callee-saved registers.
+    static const uint64_t cc_expected[5] = {
+        0x1111111111111111ULL, 0x1212121212121212ULL, 0x1313131313131313ULL,
+        0x1414141414141414ULL, 0x1515151515151515ULL,
+    };
+    static const char *ccname[5] = {"rbx", "r12", "r13", "r14", "r15"};
+    for (int i = 0; i < 5; i++) {
+        if (cc_seen[i] != cc_expected[i]) {
+            LOG("your atoi clobbered %s without restoring it.", ccname[i]);
+            LOG("a function must preserve the callee-saved registers (rbx, r12-r15) for its caller ---");
+            LOG("push them on entry and pop them before you ret, or just don't use them.");
+            return 1;
+        }
+    }
 
     uint64_t v = (uint64_t)r;
     if (write(1, &v, sizeof v) != (ssize_t)sizeof v) {

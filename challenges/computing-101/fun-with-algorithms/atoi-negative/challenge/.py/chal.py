@@ -28,12 +28,18 @@ def as_signed(v):
 
 
 def run_one(so_path, numstr, *, quiet):
-    p = subprocess.run(
-        ["/challenge/harness", so_path, numstr],
-        stdout=subprocess.PIPE,
-        stderr=(subprocess.DEVNULL if quiet else None),
-        timeout=5,
-    )
+    try:
+        p = subprocess.run(
+            ["/challenge/harness", so_path, numstr],
+            stdout=subprocess.PIPE,
+            stderr=(subprocess.DEVNULL if quiet else None),
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            f"atoi({numstr!r}) never returned --- it ran too long and was killed. "
+            "If the loop doesn't advance the pointer (inc rdi) and stop at the terminator, it spins forever."
+        )
     if p.returncode != 0:
         raise AssertionError(
             f"The harness exited abnormally (status {p.returncode}) on input {numstr!r}."
@@ -41,6 +47,18 @@ def run_one(so_path, numstr, *, quiet):
     if len(p.stdout) < 8:
         raise AssertionError("The harness never reported a result --- did your atoi crash?")
     return int.from_bytes(p.stdout[-8:], "little")
+
+
+def diagnose(numstr, expected, got):
+    g = as_signed(got)
+    neg = numstr.startswith("-")
+    body = numstr[1:] if neg else numstr
+    if expected < 0 and g == -expected:
+        return " Right magnitude, wrong sign --- when the string starts with '-', remember to negate the result."
+    ds = sum(int(c) for c in body)
+    if g == (-ds if neg else ds):
+        return " That's the sum of the digits --- multiply the running total by 10 as you go."
+    return ""
 
 
 def check_runtime(so_path):
@@ -52,6 +70,7 @@ def check_runtime(so_path):
         got = run_one(so_path, numstr, quiet=(i != 0))
         assert got == (expected & MASK), (
             f"atoi({numstr!r}) should be {expected}, but your atoi returned {as_signed(got)}."
+            + diagnose(numstr, expected, got)
         )
         if i != 0:
             print(f"  ok: atoi({numstr!r}) = {as_signed(got)}")

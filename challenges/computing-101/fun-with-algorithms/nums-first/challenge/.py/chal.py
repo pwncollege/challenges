@@ -22,19 +22,31 @@ def check_runtime(binary_path):
     # Exit codes are one byte, so we stay in 0-255 (the range the DESCRIPTION promises).
     nums = [0, 1, 9, 42, 200, 255] + [random.randint(0, 255) for _ in range(4)]
     for i, n in enumerate(nums):
-        p = subprocess.run(
-            [binary_path, str(n)],
-            stdout=subprocess.DEVNULL,
-            stderr=(subprocess.DEVNULL if i != 0 else None),
-            timeout=5,
-        )
+        try:
+            p = subprocess.run(
+                [binary_path, str(n)],
+                stdout=subprocess.DEVNULL,
+                stderr=(subprocess.DEVNULL if i != 0 else None),
+                timeout=5,
+            )
+        except subprocess.TimeoutExpired:
+            raise AssertionError(
+                f"Your program didn't finish on the argument {n!r} --- an unterminated loop runs forever. "
+                "Make sure it advances the pointer (inc rdi) and stops at the string's NUL."
+            )
         rc = p.returncode
         if rc < 0:
             signum = -rc
             signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
             raise AssertionError(f"Your program crashed ({signame}) on the argument {n!r}.")
+        hint = ""
+        if rc == 0 and n != 0:
+            hint = (" Exit code 0 --- read the number from argv[1] at [rsp+16] (argv[0] is the program name),"
+                    " and move your result into rdi before the exit syscall.")
+        elif n >= 10 and rc == sum(int(c) for c in str(n)):
+            hint = " That's the sum of the digits --- multiply the running total by 10 as you go."
         assert rc == n, (
-            f"on the argument {n!r}, your program should exit with code {n}, but it exited with {rc}."
+            f"on the argument {n!r}, your program should exit with code {n}, but it exited with {rc}.{hint}"
         )
         print(f"  ok: argument {n!r} -> exit code {rc}")
     return True
