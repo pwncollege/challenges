@@ -46,3 +46,24 @@ You just want the last ("least significant") byte, and you can directly access i
 So, if your character is in `rax`, and the buffer is pointed to by `rsi`, you'll need to do `mov [rsi], al`.
 
 This is tricky, but do it carefully, and the flag is your reward!
+
+----
+
+**Debugging:**
+This can get tricky to get right.
+To debug this challenge, our advice is to add a `_start` in your code, as so:
+
+```
+.global _start
+_start:
+    mov rdi, 42     // you'll pass 42 as the first argument to your function
+    push 0          // this pushes eight 0 bytes to the stack, clearing what will be your output buffer
+    mov rsi, rsp    // the output buffer as the second argument to itoa
+    int3            // this is optional, if you want gdb to break here without having to set a breakpoint!
+    call itoa       // there we go!
+
+    mov rax, 60     // exit cleanly, like a cultured individual
+    syscall
+```
+
+Then, using the techniques you learned in [Software Introspection](/computing-101/introspecting), you can load that up in gdb and step through it, looking at memory on the stack, registers, etc, until things work!
