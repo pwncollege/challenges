@@ -31,6 +31,9 @@ challenges:
   id: itoa-two-digits
   name: "Divide and Remainder"
 - type: challenge
+  id: itoa-minimal
+  name: "Drop the Leading Zero"
+- type: challenge
   id: itoa
   name: "Integer to String"
 - type: challenge

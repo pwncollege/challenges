@@ -28,16 +28,18 @@ def run_one(so_path, value, *, quiet):
     return p.stdout
 
 
-check_runtime_prologue = "Let's hand your itoa some two-digit numbers and check the text it writes..."
-check_runtime_success = "Every number came out as the right two digits!"
+check_runtime_prologue = "Let's hand your itoa each number 0-99 and check it writes no extra digit..."
+check_runtime_success = "Every number came out at exactly the right length!"
 check_runtime_failure = "That text wasn't right:\n"
 
 
-def diagnose(expected, got):
-    if got == expected[::-1]:
-        return " The two digits are swapped --- write the tens digit to buf[0] and the ones to buf[1]."
-    if len(got) == 2 and got[0] < 10 and got[1] < 10:
-        return " Those are raw digit values, not characters --- add '0' to each before storing it."
+def diagnose(v, expected, got):
+    if v == 0 and got != b"0":
+        return " 0 is the special case --- dividing it by 10 gives a quotient of 0 right away, so write a single '0' explicitly."
+    if v < 10 and got == b"0" + expected:
+        return " A single-digit number shouldn't be zero-padded --- only write the tens digit when the quotient is non-zero."
+    if len(expected) == 2 and got == expected[::-1]:
+        return " The two digits are swapped --- tens first, then ones."
     return ""
 
 
@@ -45,13 +47,12 @@ def check_runtime(so_path):
     checker.print_prompt()
     checker.slow_print(f"/challenge/harness {so_path} <value>")
     print("")
-    # Genuine two-digit numbers only (matches the 10-99 contract in the DESCRIPTION).
-    # Single digits / minimal-length output are the next level's job (itoa-minimal).
-    cases = [10, 42, 99] + [random.randint(10, 99) for _ in range(5)]
+    # Single digits (quotient 0 -> one char), two-digit numbers, and the 0 case.
+    cases = [0, 7, 9, 10, 42, 99] + [random.randint(0, 9) for _ in range(2)] + [random.randint(10, 99) for _ in range(3)]
     for i, v in enumerate(cases):
         got = run_one(so_path, v, quiet=(i != 0))
-        expected = str(v).encode()  # both digits significant, so no padding question
-        assert got == expected, f"itoa({v}, buf) should write {expected!r}, but it wrote {got!r}.{diagnose(expected, got)}"
+        expected = str(v).encode()  # minimal --- no leading zeros
+        assert got == expected, f"itoa({v}, buf) should write {expected!r}, but it wrote {got!r}.{diagnose(v, expected, got)}"
         if i != 0:
             print(f"  ok: itoa({v}) wrote {got!r}")
     return True

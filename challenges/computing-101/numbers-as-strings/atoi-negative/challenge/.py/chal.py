@@ -17,9 +17,14 @@ check_runtime_success = "Every number converted correctly, sign and all!"
 check_runtime_failure = "One of those conversions came back wrong:\n"
 
 
-def gen_case():
-    # Decimal digits, sometimes with a leading minus sign.
-    n = random.randint(-(2**31), 2**31 - 1)
+def gen_case(sign=None):
+    # Decimal digits. `sign` forces the sign path so coverage isn't left to chance.
+    if sign == "-":
+        n = random.randint(-(2**31), -1)
+    elif sign == "+":
+        n = random.randint(0, 2**31 - 1)
+    else:
+        n = random.randint(-(2**31), 2**31 - 1)
     return str(n), n
 
 
@@ -65,8 +70,12 @@ def check_runtime(so_path):
     checker.print_prompt()
     checker.slow_print(f'/challenge/harness {so_path} <number>')
     print("")
+    # Always exercise both sign paths: round 0 negative, round 1 non-negative,
+    # the rest random. (Otherwise ~1 in 64 runs would be all-nonnegative and a
+    # sign-ignoring solve could pass the level whose whole point is the sign.)
+    forced = {0: "-", 1: "+"}
     for i in range(ROUNDS):
-        numstr, expected = gen_case()
+        numstr, expected = gen_case(forced.get(i))
         got = run_one(so_path, numstr, quiet=(i != 0))
         assert got == (expected & MASK), (
             f"atoi({numstr!r}) should be {expected}, but your atoi returned {as_signed(got)}."
