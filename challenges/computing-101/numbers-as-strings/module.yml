@@ -1,4 +1,4 @@
-name: Fun With Algorithms
+name: Numbers as Strings
 resources:
 - name: "(review) Assembly"
   type: lecture
@@ -22,7 +22,7 @@ challenges:
   id: atoi-terminate
   name: "Where the Number Ends"
 - type: challenge
-  id: nums-first
+  id: atoi-argv1
   name: "A Whole Program"
 - type: challenge
   id: itoa-digit
