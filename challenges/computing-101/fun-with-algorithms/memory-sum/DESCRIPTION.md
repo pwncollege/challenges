@@ -1,17 +1,14 @@
-The capstone: put it all together.
+The boss: put it all together.
 
 Read the numbers from `argv`, convert each one with your `atoi`, add them into a total, turn that total back into text with your `itoa`, and `write` it to standard output.
-That's the whole pipeline:
 
-```
-print(itoa(sum(atoi(a) for a in argv)))
-```
+- Walk `argv[1]` through `argv[argc - 1]`.
+- `argc` is at `[rsp]`
+- the `argv` pointers start at `[rsp + 8]` and 8 bytes long, so if you have one loaded into `rdi` (e.g., `mov rdi, rsp; add rdi, 8`), you can go to the next one by doing `add rdi, 8`).
+- run `atoi` on each, summing as you go
 
-Walk `argv[1]` through `argv[argc - 1]` (`argc` is at `[rsp]`, the pointers start at `[rsp + 8]`), running `atoi` on each and summing as you go.
-The sum can be negative, which is exactly why your `itoa` handles the sign.
-Then `itoa` the total into a scratch buffer (a few bytes of `.bss`, or room on the stack) and `write` that many bytes to file descriptor `1`.
-
-No exit-code limit this time --- you're *printing* the answer, so it can be any size, positive or negative.
+The numbers, or even the overall sum, might be negative, which is exactly why your `atoi` and `itoa` handle the sign.
+Then `itoa` the total into a scratch buffer (e.g., on the stack) and `write` that many bytes to file descriptor `1`.
 
 Build and submit as before:
 
@@ -21,4 +18,9 @@ hacker@dojo:~$ ld -o prog prog.o
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Sum them, convert the total, print it, and score!
+Sum them, convert the total, print it, and you're done!
+
+----
+**Debugging:**
+Don't forget about gdb!
+Insert `int3`, use `breakpoint` in gdb, `stepi` the instructions, and try to deeply understand failures if they occur so that you can fix it!
