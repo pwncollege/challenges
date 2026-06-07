@@ -35,7 +35,7 @@ That first step is critical: the stack grows backwards from what you might expec
 `pop` actually adds 8 to `rsp`, and `push` subtracts 8.
 This is counter-intuitive and is a concept that often confuses learners.
 If you think of the stack as a page that is 8 bytes wide, you would start writing in this page at the very bottom, and move one line upwards on the page every time you `push`.
-In other words, say, `pop rdi` is equivalent to `mov rdi, [rsp]; add rsp, 8` and `push rdi` is equivalent to `mov [rsp], rdi; sub rsp, 8`.
+In other words, say, `pop rdi` is equivalent to `mov rdi, [rsp]; add rsp, 8` and `push rdi` is equivalent to `sub rsp, 8; mov [rsp], rdi`.
 
 Note that this makes talking about the stack without confusion borderline impossible.
 For example, people with a math background tend to thing of a coordinate of 0 as being on the bottom or the left of a page, whereas people with a video game or web development background tend to think of 0 as being on the top or the left.
