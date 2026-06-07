@@ -1,6 +1,7 @@
-Your two-digit `atoi` did `first * 10 + second` --- one multiply, one add.
-A number of *any* length is that same step, repeated: keep a running total, and for each new digit do `total = total * 10 + digit`.
-That repetition is a **loop** --- the new idea here.
+Your two-digit `atoi` did `first * 10 + second`.
+What if there are more than two digits?
+Of course, you'd keep a running total, and for each new digit do `total = total * 10 + digit`.
+That repetition is a _loop_, which you've read before, but will write here!
 
 Read the digits left to right:
 
@@ -12,15 +13,11 @@ Read the digits left to right:
   '3':  total = 12*10 + 3  = 123
 ```
 
-So loop: decode the current digit (the way `atoi_digit` does --- read the byte, subtract `'0'`), fold it into the running total with the same multiply-and-add as last level, advance to the next character, and stop at the NUL terminator (`0x00`) that ends the string.
-For now, assume the input is a clean run of decimal digits followed by that NUL.
+You would do this until the end of the string, which, by the convention of the C programming language (and used here), is represented by a byte with a value of 0x00 (that is, binary `00000000` or decimal _value_ 0).
+Note that this is distinct from the character '0', which, again, has a value of `0x30` (binary `00110000`).
+
+So, your loop is: look at the next byte, if it's `0`, jump beyond the loop (look back at the [Looping](https://pwn.college/computing-101/control-flow/loop) challenge for reference), otherwise multiply the total by `10`, call `atoi_digit` to convert the digit, and add it to the total, then loop back to the head of the loop.
+Easy!
 
 Your `atoi` receives a pointer to the string in `rdi` and must return the integer value in `rax`.
-
-Build and submit as before:
-
-```console
-hacker@dojo:~$ /challenge/check your-solve.so
-```
-
-Loop the digits, return the number, and the flag is yours.
+Loop the digits, return the number, and score!
