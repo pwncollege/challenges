@@ -21,3 +21,33 @@ Easy!
 
 Your `atoi` receives a pointer to the string in `rdi` and must return the integer value in `rax`.
 Loop the digits, return the number, and score!
+
+----
+
+**Debugging:**
+This can get tricky to get right.
+To debug this challenge, our advice is to add a `_start` to your code that fakes the call, as so:
+
+```
+.global _start
+_start:
+    push 0x333231   // "123" on the stack -- little-endian, so 0x31 ('1') is the first byte, and the high zero bytes terminate it
+    mov rdi, rsp    // a pointer to that string, as the first argument to atoi
+    int3            // this is optional, if you want gdb to break here without having to set a breakpoint!
+    call atoi       // there we go!
+
+    mov rdi, rax    // atoi's result comes back in rax; exit with it so you can read it back with `echo $?`
+    mov rax, 60     // exit
+    syscall
+```
+
+Assemble and link it as a normal executable (no `-shared` --- this version has an entry point), then load it in `gdb`:
+
+```console
+hacker@dojo:~$ as -o debug.o debug.s
+hacker@dojo:~$ ld -o debug debug.o
+hacker@dojo:~$ gdb ./debug
+(gdb) run
+```
+
+Execution stops at your `int3`, and from there you can step through with the techniques you learned in [Software Introspection](/computing-101/introspecting), watching `rdi` walk the string and your running total build up in `rax`, until things work!
