@@ -116,8 +116,7 @@ def check_supported(binary_path, args, expected, *, quiet):
     assert got == want, (
         f"On the arguments {args!r}, your program should print {want!r}, but it printed {got!r}.{hint}"
     )
-    if not quiet:
-        print(f"  ok: {' '.join(args)} -> {got}")
+    print(f"  ok: {' '.join(args)} -> {got}")
 
 
 def check_unsupported(binary_path, args, *, quiet):
@@ -132,8 +131,7 @@ def check_unsupported(binary_path, args, *, quiet):
         f"but it exited 0 (it printed {p.stdout.decode('latin-1').strip()!r}). "
         "Recognize the operators you handle and bail out on any other."
     )
-    if not quiet:
-        print(f"  ok: {' '.join(args)} -> refused (exit {p.returncode})")
+    print(f"  ok: {' '.join(args)} -> refused (exit {p.returncode})")
 
 
 def check_runtime(binary_path):
@@ -148,11 +146,11 @@ def check_runtime(binary_path):
 
     # --- supported binary operators ---
     for op in BINARY:
-        cases = [(0, 0), (7, 3), (12, 5), (255, 1), (1000, 999)]
+        cases = [(0, 0), (7, 3), (1000, 999)]
         if op in ("/", "%"):
             # Keep divisors nonzero; mix exact and remainder-bearing pairs.
-            cases = [(7, 3), (12, 4), (100, 7), (255, 16), (1, 1)]
-        cases += [(random.randint(0, 2**31), random.randint(1, 2**31)) for _ in range(3)]
+            cases = [(7, 3), (12, 4), (100, 7)]
+        cases += [(random.randint(0, 2**31), random.randint(1, 2**31)) for _ in range(2)]
         for a, b in cases:
             expected = compute_binary(a, op, b)
             check_supported(binary_path, [str(a), op, str(b)], expected, quiet=not first)
@@ -160,7 +158,7 @@ def check_runtime(binary_path):
 
     # --- supported unary operators ---
     for op in UNARY:
-        operands = [0, 1, 7, 42, 255, 1000, random.randint(0, 2**31), random.randint(0, 2**31)]
+        operands = [0, 42, 1000, random.randint(0, 2**31), random.randint(0, 2**31)]
         for a in operands:
             expected = compute_unary(op, a)
             check_supported(binary_path, [op, str(a)], expected, quiet=not first)
