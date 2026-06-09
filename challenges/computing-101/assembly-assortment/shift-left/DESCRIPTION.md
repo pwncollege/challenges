@@ -13,7 +13,7 @@ Shifting left is also how you slide a small value up into a higher byte to make 
 The instruction takes the value and a shift amount:
 
 ```
-shl rax, 4
+shl rax, 2
 ```
 
 Write a function called `solve` that takes a value in `rdi` and returns it shifted left by 4 bits --- the original value times 16 --- in `rax`.
