@@ -15,5 +15,17 @@ resources:
   id: xor-reverse
   name: "Dealing with Bitwise Operations"
 - type: challenge
+  id: bit-and
+  name: "Masking Bits"
+- type: challenge
+  id: bit-or
+  name: "Setting Bits"
+- type: challenge
+  id: shift-left
+  name: "Shifting Left"
+- type: challenge
+  id: shift-right
+  name: "Shifting Right"
+- type: challenge
   id: strcmp-stored
   name: "Loops on Data"
