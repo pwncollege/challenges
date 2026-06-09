@@ -1,0 +1,91 @@
+name: Endian Escapades
+resources:
+- type: markdown
+  name: "Little-Endian"
+  content: |
+    Every value wider than a single byte (a 16, 32, or 64-bit number, a memory address, etc) has to be split into individual bytes to live in memory, because memory is addressed one byte at a time.
+    Being used to working with large decimal numbers (e.g., 1337) in real life, with the "least significant" digit on the right and the "most significant" digit on the left, you might expect something similar in the CPU.
+    For example, if you were storing the 16-bit (2-byte) value `0x1234`, you might expect it to be stored as two consecutive bytes, first `12` and then `34`.
+
+    Some CPUs _do_ work like this, but most **do not**.
+    Most architectures store the _least significant_ digit on the left and the most significant on the right.
+    In these architectures, the value `0x1234` would be stored in two consecutive bytes as `34 12`.
+    Because the "little" (least significant) end goes first, these are called "Little Endian" (LE) architectures, and represent essentially all modern CPU architectures.
+
+    Of course, though this seems extremely silly to anyone that encounters it for the first time, there are number of [solid reasons](https://en.wikipedia.org/wiki/Endianness) behind it:
+
+    1. A lot of arithmetic is done from the little end. Consider long addition: you start from the small values and carry the 10 to the left. An Arithmetic Logical Unit does the same thing, and Little Endian is natural here.
+    2. A value's address is the address of its low byte, so reading a 4-byte `int` as a 1-byte `char` (or a 2-byte `short`) is the *same address* --- you just read fewer bytes. In Big Endian systems, this requires fixing up the address, which is complicated.
+
+    Hopefully, you're convinced.
+    Now, get familiar with some more examples:
+
+    | size of value | decimal value | hex value | big endian bytes (NOT x86) | little endian bytes (x86) |
+    |---------------|-----------|-----------|----------------------------|---------------------------|
+    | 8 (1 byte)   | `65`         | `0x41`               | `41`                      | `41`                      |
+    | 16 (2 bytes) | `4660`       | `0x1234`             | `12 34`                   | `34 12`                   |
+    | 32 (4 bytes) | `1145258561` | `0x44434241`         | `44 43 42 41`             | `41 42 43 44`             |
+    | 64 (8 bytes) | `1145258561` | `0x0000000044434241` | `00 00 00 00 44 43 42 41` | `41 42 43 44 00 00 00 00` |
+
+    A single byte is identical in both columns: with only one byte there's no order to pick, so endianness only matters once a value is two bytes or wider.
+    The 32- and 64-bit rows hold the same *number* --- the 64-bit version just pads with zero bytes, which, being the most-significant bytes, sit at the higher addresses.
+
+    Endianness is very much a CPU-level concept.
+    When you move beyond it (e.g., when sending data over the network), big-endian encoding of numbers rears its head.
+    And even most of the time when working in assembly, you don't _really_ have to think about endianness.
+    For example, you've already stored and loaded multi-byte values without reversing byte order, because a value (say `mov rax, 0x1234; push rax`) written to memory and read straight back (e.g., `pop rax`) comes out unchanged: it's written in little-endian order on the stack by `push` and endian-corrected when it's read back into the register by `pop`.
+    Endianness only matters _in memory_, but the moment you look at memory _as bytes_ (in a hex dump, in a debugger, in an exploit) the byte order is right there, and you have to read it the way the CPU wrote it.
+- type: markdown
+  name: "Bytes, Words, and Friends"
+  content: |
+    When you work in assembly, you're constantly choosing *how many bytes* an operation touches: one, two, four, or eight.
+    x86 has a name for each of these sizes, and they're worth knowing, because you'll meet them everywhere in disassembly, in assembler size directives, and baked into the register names you already use.
+
+    | Name                 | Bits | Bytes | Partial `rax` Access | Memory Access                             |
+    |----------------------|------|-------|----------------------|-------------------------------------------|
+    | byte                 | 8    | 1     | `mov al, [rdi]`      | `mov BYTE PTR [rdi], 0x11`                |
+    | word                 | 16   | 2     | `mov ax, [rdi]`      | `mov WORD PTR [rdi], 0x1122`              |
+    | doubleword (`dword`) | 32   | 4     | `mov eax, [rdi]`     | `mov DWORD PTR [rdi], 0x11223344`         |
+    | quadword (`qword`)   | 64   | 8     | `mov rax, [rdi]`     | `mov QWORD PTR [rdi], 0x1122334455667788` |
+
+    You've already met some of these registers: `al` is the low byte of `rax`, `ax` the low 2 bytes, `eax` the low 4, and `rax` all 8.
+    The size names are just another way of saying the same thing --- `al` holds a byte, `eax` holds a dword, `rax` holds a qword.
+
+    **Why is a "word" 16 bits?**
+    The names trace back to Intel's early chips, each working in the chunk of data that was natural to it.
+    The ancestors of the x86-64 processor (the 8008 (1972), and the 8080 after it) were 8-bit processors, moving data one 8-bit *byte* at a time, so the byte (8 bits) is where the sizes start.
+    Intel's next upgrade was the 8086 (1978), a 16-bit chip.
+    Its registers were 16 bits wide, and 16 bits was the natural chunk of data it handled.
+    But because the 8086 needed to be _backwards compatible_ with the 8080 for commercial reasons (e.g., execute programs written and assembled for the 8080), the term "byte" had to remain 8-bits, and they needed a new term for the 16-bit width.
+    They used "word".
+    When 32-bit (the 386) and then 64-bit (x86-64) chips arrived, they again couldn't *redefine* "word" without breaking every program and assembler that already relied on it.
+    Instead, they named the new sizes relative to that original word: a **doubleword** (dword) is two words (32 bits), and a **quadword** (qword) is four words (64 bits).
+
+    **The "word" collision.**
+    Outside of x86's size directives, computer architects use "word" more loosely: the *machine word* (or "word size", or "word width") means the natural width a processor works in --- essentially its register width.
+    By that definition, x86-64 is a "64-bit word" machine.
+    So the same term points at two different sizes: in x86 *assembly* a `WORD` is 16 bits (no matter how wide the machine is), but "the machine's word" is the full register width --- 64 bits on x86-64.
+    When you read "word", work out which is meant: the fixed 16-bit x86 size, or the loose "how wide is a register" sense.
+    To avoid this confusion, there is another term often used for a 16-bit value: a _short_.
+    So, `byte`, `short`, `dword`, and `qword` don't have this problem --- they always mean 8, 16, 32, and 64 bits.
+- type: challenge
+  id: endian-qword
+  name: "Little-Endian Bytes"
+- type: challenge
+  id: endian-qwords
+  name: "Qword by Qword"
+- type: challenge
+  id: endian-dword
+  name: "Dword by Dword"
+- type: challenge
+  id: endian-word
+  name: "Word by Word"
+- type: challenge
+  id: endian-byte
+  name: "Byte by Byte"
+- type: challenge
+  id: endian-struct
+  name: "Cracking a Struct"
+- type: challenge
+  id: endian-struct-scrambled
+  name: "Scrambled Struct"
