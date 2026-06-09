@@ -33,8 +33,17 @@ FIELDS=()
 OFF=0
 for W in $WIDTHS; do FIELDS+=("$W:$OFF"); OFF=$((OFF + W)); done
 # When scrambling, check the fields in a random order so the disassembly's
-# instruction order no longer matches the password's byte order.
-[ "$SHUFFLE" = 1 ] && FIELDS=($(printf '%s\n' "${FIELDS[@]}" | shuf))
+# instruction order no longer matches the password's byte order. Re-roll if
+# shuf happens to reproduce the memory order, so the level always exercises
+# offset-tracking (the challenge promises you can't read straight down).
+NFIELDS=$(printf '%s\n' "${FIELDS[@]}" | wc -l)
+if [ "$SHUFFLE" = 1 ] && [ "$NFIELDS" -gt 1 ]; then
+    MEMORDER="${FIELDS[*]}"
+    FIELDS=($(printf '%s\n' "${FIELDS[@]}" | shuf))
+    while [ "${FIELDS[*]}" = "$MEMORDER" ]; do
+        FIELDS=($(printf '%s\n' "${FIELDS[@]}" | shuf))
+    done
+fi
 
 SRC=$(mktemp --suffix=.s)
 {
