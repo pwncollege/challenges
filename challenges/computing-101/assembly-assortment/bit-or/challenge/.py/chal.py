@@ -2,17 +2,17 @@ import __main__ as checker
 import random
 import subprocess
 
-# Shared-library challenge: the learner submits `solve` inside a .so. The flag is
+# Shared-library challenge: the learner submits `chr_lower` inside a .so. The flag is
 # dispensed by this (root) checker only after it independently verifies the
-# values solve() returns. The harness that runs the .so is unprivileged and
+# values chr_lower() returns. The harness that runs the .so is unprivileged and
 # never holds the flag.
 shared = True
 give_flag = True
-solve_symbol = "solve"
+solve_symbol = "chr_lower"
 
 SET = 0x20  # ASCII case bit
 
-check_runtime_prologue = "Let's hand your solve() uppercase letters and see if it lowercases them..."
+check_runtime_prologue = "Let's hand your chr_lower() uppercase letters and see if it lowercases them..."
 check_runtime_success = "Every letter lowercased correctly!"
 check_runtime_failure = "That didn't come out right:\n"
 

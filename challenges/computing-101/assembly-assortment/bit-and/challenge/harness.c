@@ -36,15 +36,15 @@ int main(int argc, char **argv) {
         LOG("dlopen failed: %s", dlerror());
         return 2;
     }
-    LOG("resolving `solve` symbol ...");
-    uint64_t (*solve)(uint64_t) = (uint64_t (*)(uint64_t))dlsym(h, "solve");
-    if (!solve) {
-        LOG("missing `solve` symbol --- did you `.global solve` in your assembly?");
+    LOG("resolving `LOBYTE` symbol ...");
+    uint64_t (*LOBYTE)(uint64_t) = (uint64_t (*)(uint64_t))dlsym(h, "LOBYTE");
+    if (!LOBYTE) {
+        LOG("missing `LOBYTE` symbol --- did you `.global LOBYTE` in your assembly?");
         return 2;
     }
-    LOG("calling solve(0x%lx) --- your code returns its result in rax", x);
-    uint64_t r = solve(x);
-    LOG("solve returned 0x%lx", r);
+    LOG("calling LOBYTE(0x%lx) --- your code returns its result in rax", x);
+    uint64_t r = LOBYTE(x);
+    LOG("LOBYTE returned 0x%lx", r);
 
     if (write(1, &r, sizeof r) != (ssize_t)sizeof r) {
         LOG("failed to report result to checker");

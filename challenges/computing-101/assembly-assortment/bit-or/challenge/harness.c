@@ -36,15 +36,15 @@ int main(int argc, char **argv) {
         LOG("dlopen failed: %s", dlerror());
         return 2;
     }
-    LOG("resolving `solve` symbol ...");
-    uint64_t (*solve)(uint64_t) = (uint64_t (*)(uint64_t))dlsym(h, "solve");
-    if (!solve) {
-        LOG("missing `solve` symbol --- did you `.global solve` in your assembly?");
+    LOG("resolving `chr_lower` symbol ...");
+    uint64_t (*chr_lower)(uint64_t) = (uint64_t (*)(uint64_t))dlsym(h, "chr_lower");
+    if (!chr_lower) {
+        LOG("missing `chr_lower` symbol --- did you `.global chr_lower` in your assembly?");
         return 2;
     }
-    LOG("calling solve(0x%lx) --- your code returns its result in rax", x);
-    uint64_t r = solve(x);
-    LOG("solve returned 0x%lx", r);
+    LOG("calling chr_lower(0x%lx) --- your code returns its result in rax", x);
+    uint64_t r = chr_lower(x);
+    LOG("chr_lower returned 0x%lx", r);
 
     if (write(1, &r, sizeof r) != (ssize_t)sizeof r) {
         LOG("failed to report result to checker");

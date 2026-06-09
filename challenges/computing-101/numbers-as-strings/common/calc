@@ -1,0 +1,181 @@
+import __main__ as checker
+import random
+import signal
+import subprocess
+
+# A full-program challenge: the learner assembles and links their own complete
+# executable, and common/check runs it *as-is* (executable mode --- no rebuild).
+# The program is a tiny calculator. We invoke it as:
+#     prog A OP B     (a binary operation, argc == 4)
+#     prog OP A       (a unary operation,  argc == 3)
+# and check the signed-decimal result it prints to stdout. The flag is dispensed
+# by this (root) checker after the run passes.
+#
+# Each level fills in the operators it supports by setting two Jinja variables
+# before including this file: binary_ops (a space-separated list such as
+# "+ - *") and unary_ops (such as "- ~", or "" when the level has no unary ops).
+executable = True
+give_flag = True
+
+BINARY = "{{ binary_ops }}".split()
+UNARY = "{{ unary_ops }}".split()
+
+# The complete universe of operators a calculator could be asked to handle. Any
+# op the level didn't opt into is "unsupported": the program must quit on it
+# rather than print a wrong answer. That branch --- recognizing the op and
+# bailing out when it's one you don't handle --- is the whole point of the level.
+ALL_BINARY = ["+", "-", "*", "^", "|", "&", "/", "%"]
+ALL_UNARY = ["-", "~"]
+
+MASK = (1 << 64) - 1
+
+
+def to_signed(v):
+    # Wrap to 64-bit two's complement, then read it back as a signed value.
+    v &= MASK
+    return v - (1 << 64) if v >= (1 << 63) else v
+
+
+def compute_binary(a, op, b):
+    if op == "+":
+        r = a + b
+    elif op == "-":
+        r = a - b
+    elif op == "*":
+        r = a * b
+    elif op == "/":
+        # Integer division truncated toward zero. For non-negative a, b that is a // b.
+        r = a // b
+    elif op == "%":
+        # The remainder that matches truncate-toward-zero division.
+        r = a - (a // b) * b
+    elif op == "^":
+        r = a ^ b
+    elif op == "|":
+        r = a | b
+    elif op == "&":
+        r = a & b
+    else:
+        raise ValueError(f"unknown binary op {op!r}")
+    return to_signed(r)
+
+
+def compute_unary(op, a):
+    if op == "-":
+        r = -a
+    elif op == "~":
+        r = ~a
+    else:
+        raise ValueError(f"unknown unary op {op!r}")
+    return to_signed(r)
+
+
+def run(binary_path, args, *, quiet):
+    try:
+        return subprocess.run(
+            [binary_path, *args],
+            stdout=subprocess.PIPE,
+            stderr=(subprocess.DEVNULL if quiet else None),
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            f"Your program didn't finish on the arguments {args!r} --- it ran too long and was killed. "
+            "Make sure every path reaches the exit syscall, and that any digit loop stops at the string's NUL."
+        )
+
+
+def crashed(p, args):
+    if p.returncode < 0:
+        signum = -p.returncode
+        signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
+        return f"Your program crashed ({signame}) on the arguments {args!r}."
+    return None
+
+
+check_runtime_prologue = "Let's hand your calculator some expressions and check what it prints..."
+check_runtime_success = "Every expression came back with the right answer!"
+check_runtime_failure = "That didn't come out right:\n"
+
+
+def check_supported(binary_path, args, expected, *, quiet):
+    p = run(binary_path, args, quiet=quiet)
+    crash = crashed(p, args)
+    if crash:
+        raise AssertionError(crash)
+    if p.returncode != 0:
+        raise AssertionError(
+            f"On the arguments {args!r}, your program should print {expected} and exit cleanly, "
+            f"but it exited with status {p.returncode} instead."
+        )
+    got = p.stdout.decode("latin-1").strip()
+    want = str(expected)
+    hint = ""
+    if expected < 0 and got == str(expected & MASK):
+        hint = " That's the unsigned reading of a negative result --- print it as a signed decimal (handle the '-')."
+    assert got == want, (
+        f"On the arguments {args!r}, your program should print {want!r}, but it printed {got!r}.{hint}"
+    )
+    if not quiet:
+        print(f"  ok: {' '.join(args)} -> {got}")
+
+
+def check_unsupported(binary_path, args, *, quiet):
+    p = run(binary_path, args, quiet=quiet)
+    crash = crashed(p, args)
+    if crash:
+        # A crash technically "quits", but it's not the clean refusal we want.
+        raise AssertionError(crash + " An unsupported operator should make it exit nonzero, not crash.")
+    assert p.returncode != 0, (
+        f"The operator {args[1]!r} is not one this level supports, "
+        f"so on the arguments {args!r} your program should quit with a nonzero exit code --- "
+        f"but it exited 0 (it printed {p.stdout.decode('latin-1').strip()!r}). "
+        "Recognize the operators you handle and bail out on any other."
+    )
+    if not quiet:
+        print(f"  ok: {' '.join(args)} -> refused (exit {p.returncode})")
+
+
+def check_runtime(binary_path):
+    checker.print_prompt()
+    if BINARY:
+        checker.slow_print(f"{binary_path} <a> <op> <b>     # e.g. {binary_path} 6 {BINARY[0]} 7")
+    if UNARY:
+        checker.slow_print(f"{binary_path} <op> <a>         # e.g. {binary_path} {UNARY[0]} 5")
+    print("")
+
+    first = True
+
+    # --- supported binary operators ---
+    for op in BINARY:
+        cases = [(0, 0), (7, 3), (12, 5), (255, 1), (1000, 999)]
+        if op in ("/", "%"):
+            # Keep divisors nonzero; mix exact and remainder-bearing pairs.
+            cases = [(7, 3), (12, 4), (100, 7), (255, 16), (1, 1)]
+        cases += [(random.randint(0, 2**31), random.randint(1, 2**31)) for _ in range(3)]
+        for a, b in cases:
+            expected = compute_binary(a, op, b)
+            check_supported(binary_path, [str(a), op, str(b)], expected, quiet=not first)
+            first = False
+
+    # --- supported unary operators ---
+    for op in UNARY:
+        operands = [0, 1, 7, 42, 255, 1000, random.randint(0, 2**31), random.randint(0, 2**31)]
+        for a in operands:
+            expected = compute_unary(op, a)
+            check_supported(binary_path, [op, str(a)], expected, quiet=not first)
+            first = False
+
+    # --- a couple of unsupported operators must make the program quit ---
+    unsupported_binary = [op for op in ALL_BINARY if op not in BINARY]
+    for op in unsupported_binary[:2]:
+        check_unsupported(binary_path, ["8", op, "3"], quiet=not first)
+        first = False
+
+    if UNARY:
+        unsupported_unary = [op for op in ALL_UNARY if op not in UNARY]
+        for op in unsupported_unary[:1]:
+            check_unsupported(binary_path, [op, "8"], quiet=not first)
+            first = False
+
+    return True

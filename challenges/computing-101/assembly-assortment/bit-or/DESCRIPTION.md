@@ -11,19 +11,27 @@ Wherever the mask has a `1`, the result bit is forced to `1`; wherever it has a 
 ```
 
 That example is a real trick.
-In ASCII, an uppercase letter and its lowercase partner differ only in bit 5 --- the `0x20` bit.
-So turning that one bit on with `or` converts any uppercase letter to lowercase:
+In ASCII, an uppercase letter and its lowercase partner differ only in bit 5.
+The lowercase value is the uppercase value with bit 5 set:
 
-```
-or rax, 0x20
-```
+| Uppercase    | Lowercase    |
+|--------------|--------------|
+| `A` = `0x41` | `a` = `0x61` |
+| `H` = `0x48` | `h` = `0x68` |
+| `P` = `0x50` | `p` = `0x70` |
+| `Z` = `0x5A` | `z` = `0x7A` |
 
-Write a function called `solve` that takes an uppercase ASCII letter in `rdi` and returns its lowercase form in `rax`.
+`or` takes its operands the same way `and` does --- the value to modify, then the mask.
+Set bit 5 with `or`, and any uppercase letter becomes its lowercase form.
+
+Write a function that takes an uppercase ASCII letter in `rdi` and returns its lowercase form in `rax`.
+Call it `chr_lower` --- name your functions for what they do, and your code stays readable as it grows.
+Export it with `.global chr_lower`.
 
 Build it into a shared library and hand it to the grader:
 
 ```console
-hacker@dojo:~$ as -o solve.o solve.s
-hacker@dojo:~$ ld -shared -o solve.so solve.o
-hacker@dojo:~$ /challenge/check solve.so
+hacker@dojo:~$ as -o chr_lower.o chr_lower.s
+hacker@dojo:~$ ld -shared -o chr_lower.so chr_lower.o
+hacker@dojo:~$ /challenge/check chr_lower.so
 ```

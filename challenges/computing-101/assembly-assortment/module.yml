@@ -15,11 +15,20 @@ resources:
   id: xor-reverse
   name: "Dealing with Bitwise Operations"
 - type: challenge
+  id: is-even
+  name: "Even or Odd"
+- type: challenge
   id: bit-and
   name: "Masking Bits"
 - type: challenge
   id: bit-or
-  name: "Setting Bits"
+  name: "Lowercase a String"
+- type: challenge
+  id: case-upper
+  name: "Uppercase a String"
+- type: challenge
+  id: case-swap
+  name: "Swap Case"
 - type: challenge
   id: shift-left
   name: "Shifting Left"

@@ -2,17 +2,17 @@ import __main__ as checker
 import random
 import subprocess
 
-# Shared-library challenge: the learner submits `solve` inside a .so. The flag is
+# Shared-library challenge: the learner submits `LOBYTE` inside a .so. The flag is
 # dispensed by this (root) checker only after it independently verifies the
-# values solve() returns. The harness that runs the .so is unprivileged and
+# values LOBYTE() returns. The harness that runs the .so is unprivileged and
 # never holds the flag.
 shared = True
 give_flag = True
-solve_symbol = "solve"
+solve_symbol = "LOBYTE"
 
 MASK = 0xFF
 
-check_runtime_prologue = "Let's call your solve() on a series of values and keep only the low byte..."
+check_runtime_prologue = "Let's call your LOBYTE() on a series of values and keep only the low byte..."
 check_runtime_success = "Every value masked correctly!"
 check_runtime_failure = "That didn't come out right:\n"
 

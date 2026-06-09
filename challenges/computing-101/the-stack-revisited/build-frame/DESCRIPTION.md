@@ -12,20 +12,17 @@ Recall that the stack grows *downward*: subtracting from `rsp` moves it to a low
 So `sub rsp, 256` reserves 256 bytes of scratch space; your slots live at `[rsp]` through `[rsp+255]`, indexed by byte value.
 This reserved region is your function's *stack frame*.
 
-Functions conventionally anchor their frame with `rbp`, so the frame's contents stay at fixed offsets even as `rsp` moves around underneath:
+In full, the pattern is reserve, use, then put it back:
 
 ```
-push rbp           # save the caller's rbp
-mov  rbp, rsp      # rbp now marks the top of our frame
-sub  rsp, 256      # reserve 256 bytes of locals below it
-    ...            # use [rsp] .. [rsp+255] as your scratch space
-mov  rsp, rbp      # discard the locals
-pop  rbp           # restore the caller's rbp
+sub rsp, 256       # reserve 256 bytes of scratch below the stack pointer
+    ...            # use [rsp] .. [rsp+255] as your slots
+add rsp, 256       # give the space back
 ret
 ```
 
-That last part matters as much as the first: before you `ret`, you must put the stack back exactly as you found it.
-The `ret` pops its return address off the stack, so if `rsp` isn't where it started, `ret` jumps somewhere random and your program crashes.
+That last step matters as much as the first: `ret` pops its return address off the stack, so if `rsp` isn't back where it started, `ret` jumps somewhere random and your program crashes.
+As long as you don't `push` or `pop` anything inside the function, `rsp` stays put, and your slots sit at the same `[rsp + ...]` offsets the whole time.
 (One more detail: the stack starts as whatever bytes were left there before --- it is not zeroed. Clear your slots before you tally into them.)
 
 Write a function called `solve` that takes a pointer to a buffer in `rdi` and a length in `rsi`, and returns, in `rax`, the number of distinct byte values among those `rsi` bytes.
