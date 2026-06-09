@@ -9,13 +9,14 @@ First shift it down to the bottom with `shr`, then keep just those 8 bits with t
 shr by 8
   .... 0000 0000  1010 1011   (byte 1 is now at the bottom)
 and 0xFF
-  0000 0000  1010 1011        (just byte 1: 0xAB)
+  .... 0000 0000  1010 1011   (just byte 1: 0xAB)
 ```
 
 Two instructions, one idea: shift the byte you want into place, then mask it.
+To get the third byte of a register:
 
 ```
-shr rax, 8
+shr rax, 16
 and rax, 0xFF
 ```
 
