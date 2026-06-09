@@ -26,6 +26,7 @@ As long as you don't `push` or `pop` anything inside the function, `rsp` stays p
 (One more detail: the stack starts as whatever bytes were left there before --- it is not zeroed. Clear your slots before you tally into them.)
 
 Write a function called `solve` that takes a pointer to a buffer in `rdi` and a length in `rsi`, and returns, in `rax`, the number of distinct byte values among those `rsi` bytes.
+You might find the instruction `mov [rsp+rcx], 1` useful for marking a given value (stored in `rcx`) as "present" in your buffer (pointed to by `rsp`).
 
 Build it into a shared library and hand it to the grader:
 
@@ -34,3 +35,7 @@ hacker@dojo:~$ as -o solve.o solve.s
 hacker@dojo:~$ ld -shared -o solve.so solve.o
 hacker@dojo:~$ /challenge/check solve.so
 ```
+
+----
+**HINT:**
+You'll need _two_ loops in this level, one after the other: one to mark each value you see, and another one to count them afterwards.
