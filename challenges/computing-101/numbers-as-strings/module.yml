@@ -5,7 +5,6 @@ resources:
   video: TdTOH1GfrWg
   playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
   slides: 1sBB34ZUVjT3MDjYvGiZU3z6CTLGvO1hHEdHliPUJ0iw
-challenges:
 - type: challenge
   id: atoi-digit
   name: "A Single Digit"
@@ -42,3 +41,28 @@ challenges:
 - type: challenge
   id: memory-sum
   name: "Sum Them All"
+- type: markdown
+  name: "Calculator"
+  content: |
+    You can turn text into a number with your `atoi`, and a number back into text with your `itoa`.
+    Now you'll use both at once to build a small command-line calculator.
+    It reads an expression from `argv` --- a left operand, an operator, and a right operand --- as in `prog 6 + 7`.
+    The operands are strings you already know how to handle: `atoi` each one.
+    The operator is the new piece: a single character you branch on to decide what to compute, quitting on any operator you don't support.
+    Then `itoa` the result and `write` it to standard output, exactly as your summing program did.
+    We'll add one operator at a time --- addition, then subtraction, then multiplication, then the bitwise operators, then division and modulo, and finally the unary operators --- each reusing the `atoi` and `itoa` you've already written.
+- type: challenge
+  id: calc-1-add
+  name: "Addition"
+- type: challenge
+  id: calc-2-sub
+  name: "Subtraction"
+- type: challenge
+  id: calc-3-mul
+  name: "Multiplication"
+- type: challenge
+  id: calc-4-bitwise-binops
+  name: "Bitwise Operators"
+- type: challenge
+  id: calc-5-unop
+  name: "Unary Operators"

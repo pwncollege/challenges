@@ -1,7 +1,7 @@
 # Interpreted "checker" challenges (asm/ELF graded by a Python checker)
 
 One of the four archetypes (see `SKILL.md` §7). This is the dominant pattern in
-`computing-101` (assembly-crash-course, control-flow, memory, the-stack). The learner
+`computing-101` (control-flow, memory, the-stack, bitwise-operations, numbers-as-strings). The learner
 submits assembly / an ELF / a `.so`; a SUID Python **checker** statically and/or
 dynamically validates it and grants the flag. Reuse the shared harness — don't hand-roll.
 

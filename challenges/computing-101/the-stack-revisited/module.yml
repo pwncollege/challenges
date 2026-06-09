@@ -8,6 +8,9 @@ resources:
   id: caller-frame
   name: "Reaching Into the Caller's Frame"
 - type: challenge
+  id: build-frame
+  name: "Building Your Own Frame"
+- type: challenge
   id: mem-envp
   name: "Environment Variables on the Stack"
 - type: challenge
