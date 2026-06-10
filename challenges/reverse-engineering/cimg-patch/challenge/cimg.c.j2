@@ -1,0 +1,16 @@
+{%- import "../../common/cimg_lib.j2" as lib -%}
+{%- set c = namespace() -%}
+{{- lib.defaults(c, "patch") -}}
+{{- lib.draw_magic(c, random, false) -}}
+{%- set c.version = 3 -%}
+{%- set c.has_dims = true -%}
+{%- set c.color = true -%}
+{%- set c.assert_ascii = true -%}
+{%- set c.display = true -%}
+{%- set c.framebuffer = true -%}
+{%- set c.check_framebuffer = true -%}
+{%- set _ = lib.make_target(c, random) -%}
+{%- set _ = lib.assign_directives(c, random, ["RENDER_FRAME", "RENDER_PATCH"]) -%}
+{%- set c.check_total_data = 1340 -%}
+{%- set _ = lib.compute_fb_bytes(c) -%}
+{%- include "../../common/cimg_body.c.j2" -%}

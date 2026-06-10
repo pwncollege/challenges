@@ -1,0 +1,9 @@
+#!/bin/sh -e
+# Functionality smoke test: a bogus file must be rejected and must not leak the flag.
+out=$(printf 'XXXX________________________________________' | /challenge/cimg 2>&1 || true)
+printf '%s\n' "$out"
+printf '%s' "$out" | grep -qi "magic"
+if printf '%s' "$out" | grep -q "pwn.college{"; then
+    echo "FAIL: flag leaked on invalid input"
+    exit 1
+fi

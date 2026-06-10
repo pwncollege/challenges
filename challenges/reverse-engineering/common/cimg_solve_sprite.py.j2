@@ -1,0 +1,116 @@
+{%- import "cimg_lib.j2" as lib -%}
+{%- set hexparts = [] -%}
+{%- for p in c.target_pixels -%}{%- set _ = hexparts.append("%02x%02x%02x%02x" | format(p[0], p[1], p[2], p[3])) -%}{%- endfor -%}
+#!/usr/bin/env python3
+"""Author solve for the cIMG "{{ c.level }}" level: reproduce the target image
+with reusable sprites (border pieces + the four letter glyphs) to stay within the
+strict byte budget. Derived from the seed-shared target, like the OLD verify()."""
+import re
+import subprocess
+from collections import defaultdict
+
+
+def pack(value, bits):
+    return int(value).to_bytes(bits // 8, "little")
+
+
+TARGET = bytes.fromhex("{{ hexparts | join('') }}")
+WIDTH, HEIGHT = {{ c.target_w }}, {{ c.target_h }}
+WHITE = (255, 255, 255)
+TILED = {{ "True" if c.sprite_tiling else "False" }}
+
+CREATE = {{ c.directives["CREATE_SPRITE"] }}
+RENDER = {{ c.directives["RENDER_SPRITE"] }}
+
+
+def pixel(x, y):
+    return TARGET[(y * WIDTH + x) * 4 : (y * WIDTH + x) * 4 + 4]
+
+
+sprites = []  # (sprite_id, width, height, data)
+draws = []  # (sprite_id, r, g, b, x, y, transparent_char)
+next_id = [0]
+
+
+def add_sprite(w, h, data):
+    sid = next_id[0]
+    next_id[0] += 1
+    sprites.append((sid, w, h, bytes(data)))
+    return sid
+
+
+# Every draw is (sprite_id, r, g, b, x, y, tiles_x, tiles_y, transparent);
+# tiles/transparent are ignored when the build is not tiled.
+if TILED:
+    # Paint the border by layering five 1x1 sprites tiled across regions.
+    dot = add_sprite(1, 1, b".")
+    dash = add_sprite(1, 1, b"-")
+    pipe = add_sprite(1, 1, b"|")
+    quote = add_sprite(1, 1, b"'")
+    space = add_sprite(1, 1, b" ")
+    draws.append((dot, *WHITE, 0, 0, WIDTH, 1, 0))
+    draws.append((quote, *WHITE, 0, HEIGHT - 1, WIDTH, 1, 0))
+    draws.append((dash, *WHITE, 1, 0, WIDTH - 2, HEIGHT, 0))
+    draws.append((pipe, *WHITE, 0, 1, WIDTH, HEIGHT - 2, 0))
+    draws.append((space, *WHITE, 1, 1, WIDTH - 2, HEIGHT - 2, 0))
+else:
+    dot = add_sprite(1, 1, b".")
+    quote = add_sprite(1, 1, b"'")
+    dash = add_sprite(WIDTH - 2, 1, b"-" * (WIDTH - 2))
+    pipe = add_sprite(1, HEIGHT - 2, b"|" * (HEIGHT - 2))
+    draws.append((dot, *WHITE, 0, 0, 1, 1, 0))
+    draws.append((dot, *WHITE, WIDTH - 1, 0, 1, 1, 0))
+    draws.append((quote, *WHITE, 0, HEIGHT - 1, 1, 1, 0))
+    draws.append((quote, *WHITE, WIDTH - 1, HEIGHT - 1, 1, 1, 0))
+    draws.append((dash, *WHITE, 1, 0, 1, 1, 0))
+    draws.append((dash, *WHITE, 1, HEIGHT - 1, 1, 1, 0))
+    draws.append((pipe, *WHITE, 0, 1, 1, 1, 0))
+    draws.append((pipe, *WHITE, WIDTH - 1, 1, 1, 1, 0))
+
+# Each coloured (non-border) region is one letter glyph -> one sprite, drawn once.
+groups = defaultdict(list)
+for y in range(HEIGHT):
+    for x in range(WIDTH):
+        r, g, b, a = pixel(x, y)
+        if a != 0x20 and (r, g, b) != WHITE:
+            groups[(r, g, b)].append((x, y, a))
+
+for color, cells in sorted(groups.items()):
+    xs = [cx for cx, cy, ca in cells]
+    ys = [cy for cx, cy, ca in cells]
+    minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
+    gw, gh = maxx - minx + 1, maxy - miny + 1
+    cellmap = {(cx, cy): ca for cx, cy, ca in cells}
+    data = bytes(cellmap.get((minx + dx, miny + dy), 0x20) for dy in range(gh) for dx in range(gw))
+    sid = add_sprite(gw, gh, data)
+    draws.append((sid, *color, minx, miny, 1, 1, ord(" ")))
+
+stream = bytearray()
+for sid, w, h, data in sprites:
+    stream += pack(CREATE, 16) + bytes([sid, w, h]) + data
+for sid, r, g, b, x, y, tiles_x, tiles_y, transparent in draws:
+    stream += pack(RENDER, 16) + bytes([sid, r, g, b, x, y])
+    if TILED:
+        stream += bytes([tiles_x, tiles_y, transparent])
+
+num_directives = len(sprites) + len(draws)
+body = bytearray({{ c.magic | tojson }}.encode("latin1"))
+body += pack({{ c.version }}, {{ c.version_bitwidth }})
+body += bytes([WIDTH, HEIGHT])
+body += pack(num_directives, {{ c.directives_bitwidth }})
+body += stream
+
+with open("/tmp/solve.cimg", "wb") as handle:
+    handle.write(body)
+
+result = subprocess.run(
+    ["/challenge/cimg", "/tmp/solve.cimg"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    timeout=30,
+)
+output = result.stdout.decode("latin1")
+print(output[-2000:])
+match = re.search(r"pwn\.college\{[^}\n]+\}", output)
+assert match, f"Flag not found (rc={result.returncode})"
+print(f"Flag: {match.group(0)}")

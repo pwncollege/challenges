@@ -1,0 +1,52 @@
+{%- import "cimg_lib.j2" as lib -%}
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+import random
+import struct
+import subprocess
+
+
+def pack(value, bits):
+    return int(value).to_bytes(bits // 8, "little")
+
+
+FIGLET = ["/usr/bin/figlet", "-fascii9"]
+flag = open("/flag", "rb").read().strip()
+directives = []
+{% if c.level == "sprite-parse" %}
+# One sprite per distinct character (its figlet glyph), drawn in order.
+sprites = {}
+for ch in flag:
+    if ch not in sprites:
+        sprites[ch] = len(directives)
+        glyph = subprocess.check_output(FIGLET, input=bytes([ch])).split(b"\n")[:-1]
+        directives.append(pack({{ c.directives["CREATE_SPRITE"] }}, 16) + bytes([sprites[ch], len(glyph[0]), len(glyph)]) + b"".join(glyph))
+    directives.append(pack({{ c.directives["RENDER_SPRITE"] }}, 16) + bytes([sprites[ch], 0xFF, 0xFF, 0xFF, 0, 0]))
+image = b"cIMG" + pack(3, 16) + bytes([16, 16]) + pack(len(directives), 32) + b"".join(directives)
+{% elif c.level == "animate" %}
+# Reveal the flag's figlet art one pixel at a time (patch, flush, sleep).
+lines = subprocess.check_output(FIGLET, input=flag).split(b"\n")
+width = max(len(line) for line in lines)
+lines = [line.ljust(width) for line in lines]
+pixels = [(x, y, ch) for y, line in enumerate(lines) for x, ch in enumerate(line)]
+random.shuffle(pixels)
+for x, y, ch in pixels:
+    directives.append(pack({{ c.directives["RENDER_PATCH"] }}, 16) + bytes([x, y, 1, 1]) + bytes([0x8C, 0x1D, 0x40, ch]))
+    directives.append(pack({{ c.directives["FLUSH"] }}, 16) + bytes([1]))
+    directives.append(pack({{ c.directives["SLEEP"] }}, 16) + pack(733_331, 32))
+image = b"cIMG" + pack(4, 16) + bytes([width, len(lines)]) + pack(len(directives), 32) + b"".join(directives)
+{% else %}{# patch-oneline #}
+# The flag's figlet art as patches, but stamped with a bogus opcode (0x0002)
+# and a header height of 1 -- the reader must repair both to render it.
+lines = subprocess.check_output(FIGLET, input=flag).split(b"\n")
+width = max(len(line) for line in lines)
+lines = [line.ljust(width) for line in lines]
+pixels = [(x, y, ch) for y, line in enumerate(lines) for x, ch in enumerate(line)]
+random.shuffle(pixels)
+for x, y, ch in pixels:
+    directives.append(pack(0x0002, 16) + bytes([x, y, 1, 1]) + bytes([0x8C, 0x1D, 0x40, ch]))
+image = b"cIMG" + pack(3, 16) + bytes([width, 1]) + pack(len(directives), 32) + b"".join(directives)
+{% endif %}
+
+with open("/challenge/flag.cimg", "wb") as handle:
+    handle.write(image)

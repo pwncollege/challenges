@@ -1,0 +1,48 @@
+{%- import "cimg_lib.j2" as lib -%}
+#!/usr/bin/env python3
+"""Author solve for cIMG "sprite-parse": the flag image creates one sprite per
+flag character (its figlet glyph) and draws them in order. Parse the directives
+and map each glyph back to its character."""
+import re
+import struct
+import subprocess
+
+CREATE_SPRITE = {{ c.directives["CREATE_SPRITE"] }}
+RENDER_SPRITE = {{ c.directives["RENDER_SPRITE"] }}
+
+subprocess.run(["/challenge/generate_flag_image"], check=True, timeout=30)
+data = open("/challenge/flag.cimg", "rb").read()
+assert data[:4] == b"cIMG"
+version, width, height, count = struct.unpack_from("<HBBI", data, 4)
+
+sprites = {}
+draws = []
+off = 12
+for _ in range(count):
+    (opcode,) = struct.unpack_from("<H", data, off)
+    off += 2
+    if opcode == CREATE_SPRITE:
+        sid, w, h = struct.unpack_from("<BBB", data, off)
+        off += 3
+        sprites[sid] = (w, h, data[off : off + w * h])
+        off += w * h
+    elif opcode == RENDER_SPRITE:
+        sid = data[off]
+        off += 6
+        draws.append(sid)
+    else:
+        raise SystemExit(f"unexpected opcode {opcode}")
+
+# Build the inverse figlet table: each glyph (w, h, bytes) -> its character.
+lookup = {}
+for code in range(0x20, 0x7F):
+    glyph = subprocess.check_output(["/usr/bin/figlet", "-fascii9"], input=bytes([code])).split(b"\n")[:-1]
+    if not glyph:
+        continue
+    lookup[(len(glyph[0]), len(glyph), b"".join(glyph))] = chr(code)
+
+flag = "".join(lookup[sprites[sid]] for sid in draws)
+print(flag)
+match = re.search(r"pwn\.college\{[^}\n]+\}", flag)
+assert match, "flag not decoded"
+print(f"Flag: {match.group(0)}")

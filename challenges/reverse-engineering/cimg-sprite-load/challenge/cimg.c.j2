@@ -1,0 +1,17 @@
+{%- import "../../common/cimg_lib.j2" as lib -%}
+{%- set c = namespace() -%}
+{{- lib.defaults(c, "sprite-load") -}}
+{{- lib.draw_magic(c, random, false) -}}
+{%- set c.version = 4 -%}
+{%- set c.has_dims = true -%}
+{%- set c.color = true -%}
+{%- set c.assert_ascii = true -%}
+{%- set c.display = true -%}
+{%- set c.framebuffer = true -%}
+{%- set c.sprites = true -%}
+{%- set c.sprite_tiling = true -%}
+{%- set c.sprite_transparency = true -%}
+{%- set c.win = false -%}
+{%- set c.unsafe_sprite_loading = true -%}
+{%- set c.directives = {"RENDER_FRAME": 1, "RENDER_PATCH": 2, "CREATE_SPRITE": 3, "RENDER_SPRITE": 4, "LOAD_SPRITE": 5} -%}
+{%- include "../../common/cimg_body.c.j2" -%}

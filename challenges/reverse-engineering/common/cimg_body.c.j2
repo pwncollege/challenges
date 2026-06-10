@@ -1,0 +1,535 @@
+{#- Faithful transcription of the OLD reverse_engineering cimg.c (+ base.c main/win),
+    driven by the namespace `c` configured by cimg_lib.j2's setup(). -#}
+{%- import "cimg_lib.j2" as lib -%}
+{%- set pixel_fmt = "\\x1b[38;2;%03d;%03d;%03dm%c\\x1b[0m" -%}
+{%- set pixel_fmt_size = 24 -%}
+{%- set pixel_newline = "\\x1b[38;2;000;000;000m\\n\\x1b[0m" -%}
+
+{%- macro read_exact(dst, size, msg, fd=0) -%}
+    read_exact({{ fd }}, {{ dst }}, {{ size }}, "{{ msg }}");
+{%- endmacro -%}
+
+{%- macro read_data(width, height, check_ascii=True, pixel_struct="pixel_t", fd=0) -%}
+    unsigned long data_size = {{ width }} * {{ height }} * sizeof({{ pixel_struct }});
+    {{ pixel_struct }} *data = malloc(data_size);
+    if (data == NULL) {
+        puts("ERROR: Failed to allocate memory for the image data!");
+        exit(-1);
+    }
+    {{ read_exact("data", "data_size", "ERROR: Failed to read data!", fd=fd) }}
+    {% if c.assert_ascii and check_ascii %}
+    for (int i = 0; i < {{ width }} * {{ height }}; i++) {
+        if (data[i].ascii < 0x20 || data[i].ascii > 0x7e) {
+            fprintf(stderr, "ERROR: Invalid character 0x%x in the image data!\n", data[i].ascii);
+            exit(-1);
+        }
+    }
+    {% endif %}
+{%- endmacro -%}
+
+{%- macro emit_pixel(ch, r=0, g=0, b=0, color=True, dst=None) -%}
+    {% if not color and dst %}
+    *({{ dst }}) = {{ ch }};
+    {% elif not color and not dst %}
+    putchar({{ ch }});
+    {% elif color and dst %}
+    char emit_tmp[{{ pixel_fmt_size }} + 1];
+    snprintf(emit_tmp, sizeof(emit_tmp), "{{ pixel_fmt }}", {{ r }}, {{ g }}, {{ b }}, {{ ch }});
+    memcpy({{ dst }}, emit_tmp, {{ pixel_fmt_size }});
+    {% elif color and not dst %}
+    printf("{{ pixel_fmt }}", {{ r }}, {{ g }}, {{ b }}, {{ ch }});
+    {% endif %}
+{%- endmacro -%}
+
+{%- macro render_data_pixel(data_width, color=True, dst=None, src="data") -%}
+    {{ emit_pixel(
+        src + "[y * " + data_width + " + x].ascii",
+        r=src + "[y * " + data_width + " + x].r",
+        g=src + "[y * " + data_width + " + x].g",
+        b=src + "[y * " + data_width + " + x].b",
+        dst=dst, color=color
+    ) }}
+{%- endmacro -%}
+
+{%- macro render_data(cimg, data, data_width, data_height, color, base_x="0", base_y="0", src="data", skip=None) -%}
+    {% set term_pixel_data = ("(" + cimg + ")->framebuffer[idx % (" + cimg + ")->num_pixels].data") if c.framebuffer else None %}
+    int idx = 0;
+    for (int y = 0; y < {{ data_height }}; y++) {
+        for (int x = 0; x < {{ data_width }}; x++) {
+            idx = ({{ base_y }} + y) * (({{ cimg }})->header.width) + (({{ base_x }} + x) % (({{ cimg }})->header.width));
+            {% if skip %}
+            if ({{ src }}[y * {{ data_width }} + x].ascii == {{ skip }}) continue;
+            {% endif %}
+            {{ render_data_pixel(data_width, color=color, dst=term_pixel_data, src=src) }}
+        }
+        {% if not c.framebuffer %}
+        puts("");
+        {% endif %}
+    }
+{%- endmacro -%}
+#define _GNU_SOURCE 1
+
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <time.h>
+#include <errno.h>
+
+{% if c.check_total_data %}
+unsigned long total_data = 0;
+{% endif %}
+
+void read_exact(int fd, void *dst, int size, char *msg)
+{
+    int n = read(fd, dst, size);
+    if (n != size) {
+        fprintf(stderr, "%s\n", msg);
+        exit(-1);
+    }
+    {% if c.check_total_data %}
+    total_data += n;
+    {% endif %}
+}
+
+{% if c.win %}
+void win()
+{
+    char flag[256];
+    int flag_fd;
+    int flag_length;
+
+    flag_fd = open("/flag", 0);
+    if (flag_fd < 0) {
+        printf("\n  ERROR: Failed to open the flag -- %s!\n", strerror(errno));
+        if (geteuid() != 0) {
+            printf("  Your effective user id is not 0!\n");
+            printf("  You must directly run the suid binary in order to have the correct permissions!\n");
+        }
+        exit(-1);
+    }
+    flag_length = read(flag_fd, flag, sizeof(flag));
+    if (flag_length <= 0) {
+        printf("\n  ERROR: Failed to read the flag -- %s!\n", strerror(errno));
+        exit(-1);
+    }
+    write(1, flag, flag_length);
+    printf("\n\n");
+}
+{% endif %}
+
+{% if c.check_framebuffer %}
+char desired_output[] = { {{ c.fb_bytes | join(", ") }} };
+{% endif %}
+
+struct cimg_header {
+    {% if c.magic_kind in ["chars", "str"] %}char magic_number[4];{% endif %}
+    {% if c.magic_kind == "int" %}unsigned int magic_number;{% endif %}
+    {% if c.version %}{{ lib.itype(c.version_bitwidth) }} version;{% endif %}
+    {% if c.has_dims %}{{ lib.itype(c.width_bitwidth) }} width;{% endif %}
+    {% if c.has_dims %}{{ lib.itype(c.height_bitwidth) }} height;{% endif %}
+    {% if c.directives %}{{ lib.itype(c.directives_bitwidth) }} remaining_directives;{% endif %}
+} __attribute__((packed));
+
+typedef struct {
+    uint8_t ascii;
+} pixel_bw_t;
+
+{% if c.color %}
+#define COLOR_PIXEL_FMT "{{ pixel_fmt }}"
+typedef struct {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint8_t ascii;
+} pixel_color_t;
+typedef pixel_color_t pixel_t;
+{% else %}
+typedef pixel_bw_t pixel_t;
+{% endif %}
+
+{% if c.framebuffer %}
+typedef struct {
+    {% if c.color %}
+    union {
+        char data[{{ pixel_fmt_size }}];
+        struct term_str_st {
+            char color_set[7];   // \x1b[38;2;
+            char r[3];           // 255
+            char s1;             // ;
+            char g[3];           // 255
+            char s2;             // ;
+            char b[3];           // 255
+            char m;              // m
+            char c;              // X
+            char color_reset[4]; // \x1b[0m
+        } str;
+    };
+    {% else %}
+    char data[1];
+    {% endif %}
+} term_pixel_t;
+{% endif %}
+
+{% if c.sprites %}
+struct cimg_sprite {
+    uint8_t height;
+    uint8_t width;
+    pixel_bw_t *data;
+};
+{% endif %}
+
+struct cimg {
+    struct cimg_header header;
+    {% if c.framebuffer %}
+    unsigned num_pixels;
+    term_pixel_t *framebuffer;
+    {% endif %}
+    {% if c.sprites %}
+    struct cimg_sprite sprites[256];
+    {% endif %}
+};
+
+{% if c.has_dims %}
+#define CIMG_NUM_PIXELS(cimg) ((cimg)->header.width * (cimg)->header.height)
+#define CIMG_DATA_SIZE(cimg) (CIMG_NUM_PIXELS(cimg) * sizeof(pixel_t))
+{% if c.framebuffer %}
+#define CIMG_FRAMEBUFFER_PIXELS(cimg) ((cimg)->header.width * (cimg)->header.height)
+#define CIMG_FRAMEBUFFER_SIZE(cimg) (CIMG_FRAMEBUFFER_PIXELS(cimg) * sizeof(term_pixel_t))
+{% endif %}
+{% endif %}
+
+{% if "RENDER_FRAME" in c.directives %}
+void handle_{{ c.directives["RENDER_FRAME"] }}(struct cimg *cimg)
+{
+    {{ read_data("cimg->header.width", "cimg->header.height") }}
+    {{ render_data("cimg", "data", "cimg->header.width", "cimg->header.height", c.color) }}
+}
+{% endif %}
+
+{% if "RENDER_PATCH" in c.directives %}
+void handle_{{ c.directives["RENDER_PATCH"] }}(struct cimg *cimg)
+{
+    unsigned char width, height, base_x, base_y;
+    {{ read_exact("&base_x", "sizeof(base_x)", "ERROR: Failed to read &base_x!") }}
+    {{ read_exact("&base_y", "sizeof(base_y)", "ERROR: Failed to read &base_y!") }}
+    {{ read_exact("&width", "sizeof(width)", "ERROR: Failed to read &width!") }}
+    {{ read_exact("&height", "sizeof(height)", "ERROR: Failed to read &height!") }}
+    {{ read_data("width", "height") }}
+    {{ render_data("cimg", "data", "width", "height", c.color, base_x="base_x", base_y="base_y") }}
+}
+{% endif %}
+
+{% if "CREATE_SPRITE" in c.directives %}
+void handle_{{ c.directives["CREATE_SPRITE"] }}(struct cimg *cimg)
+{
+    unsigned char sprite_id, width, height;
+    {{ read_exact("&sprite_id", "sizeof(sprite_id)", "ERROR: Failed to read &sprite_id!") }}
+    {{ read_exact("&width", "sizeof(width)", "ERROR: Failed to read &width!") }}
+    {{ read_exact("&height", "sizeof(height)", "ERROR: Failed to read &height!") }}
+    cimg->sprites[sprite_id].width = width;
+    cimg->sprites[sprite_id].height = height;
+    if (cimg->sprites[sprite_id].data) free(cimg->sprites[sprite_id].data);
+    {{ read_data("width", "height", pixel_struct="pixel_bw_t") }}
+    cimg->sprites[sprite_id].data = data;
+}
+{% endif %}
+
+{% if "LOAD_SPRITE" in c.directives %}
+void handle_{{ c.directives["LOAD_SPRITE"] }}(struct cimg *cimg)
+{
+    struct sprite_load_record_t {
+        uint8_t sprite_id;
+        uint8_t width;
+        uint8_t height;
+        char path[256];
+    } sprite_load_record = { 0 };
+    {{ read_exact("&sprite_load_record", "sizeof(sprite_load_record)-1", "ERROR: Failed to read &sprite_load_record!") }}
+
+    cimg->sprites[sprite_load_record.sprite_id].width = sprite_load_record.width;
+    cimg->sprites[sprite_load_record.sprite_id].height = sprite_load_record.height;
+    int fd = open(sprite_load_record.path, O_RDONLY);
+    if (fd < 0) {
+        fprintf(stderr, "ERROR: failed to open sprite file\n");
+        exit(-1);
+    }
+
+    if (cimg->sprites[sprite_load_record.sprite_id].data) free(cimg->sprites[sprite_load_record.sprite_id].data);
+    {{ read_data("sprite_load_record.width", "sprite_load_record.height", check_ascii=not c.unsafe_sprite_loading, pixel_struct="pixel_bw_t", fd="fd") }}
+    {% if not c.unsafe_sprite_loading %}
+    if (!strncmp((char *)data, "pwn.college{", 12)) {
+        fprintf(stderr, "ERROR: shenanigans detected!!!!!");
+        exit(-1);
+    }
+    {% endif %}
+
+    cimg->sprites[sprite_load_record.sprite_id].data = data;
+
+    close(fd);
+}
+{% endif %}
+
+{% if "RENDER_SPRITE" in c.directives %}
+void handle_{{ c.directives["RENDER_SPRITE"] }}(struct cimg *cimg)
+{
+    struct sprite_render_record_st {
+        uint8_t sprite_id;
+        uint8_t color_r;
+        uint8_t color_g;
+        uint8_t color_b;
+        uint8_t render_base_x;
+        uint8_t render_base_y;
+        {% if c.sprite_tiling %}
+        uint8_t repeat_horizontal;
+        uint8_t repeat_vertical;
+        {% endif %}
+        {% if c.sprite_transparency %}
+        uint8_t transparent_char;
+        {% endif %}
+    } sprite_render_record;
+    {{ read_exact("&sprite_render_record", "sizeof(sprite_render_record)", "ERROR: Failed to read &sprite_render_record!") }}
+
+    pixel_t colored_sprite[256 * 256] = { 0 };
+    for (int sprite_y = 0; sprite_y < cimg->sprites[sprite_render_record.sprite_id].height; sprite_y++) {
+        for (int sprite_x = 0; sprite_x < cimg->sprites[sprite_render_record.sprite_id].width; sprite_x++) {
+            int idx = sprite_y * cimg->sprites[sprite_render_record.sprite_id].width + sprite_x;
+            {% if c.color %}
+            colored_sprite[idx].r = sprite_render_record.color_r;
+            colored_sprite[idx].g = sprite_render_record.color_g;
+            colored_sprite[idx].b = sprite_render_record.color_b;
+            {% endif %}
+            if (!cimg->sprites[sprite_render_record.sprite_id].data) {
+                fprintf(stderr, "ERROR: attempted to render uninitialized sprite!\n");
+                exit(-1);
+            }
+            colored_sprite[idx].ascii = cimg->sprites[sprite_render_record.sprite_id].data[idx].ascii;
+        }
+    }
+
+    {% if c.sprite_tiling %}
+    for (int j = 0; j < sprite_render_record.repeat_vertical; j++) {
+        for (int i = 0; i < sprite_render_record.repeat_horizontal; i++) {
+    {% endif %}
+            uint8_t image_base_x = sprite_render_record.render_base_x{% if c.sprite_tiling %} + cimg->sprites[sprite_render_record.sprite_id].width * i{% endif %};
+            uint8_t image_base_y = sprite_render_record.render_base_y{% if c.sprite_tiling %} + cimg->sprites[sprite_render_record.sprite_id].height * j{% endif %};
+            {{ render_data(
+                "cimg", "colored_sprite",
+                "cimg->sprites[sprite_render_record.sprite_id].width",
+                "cimg->sprites[sprite_render_record.sprite_id].height",
+                c.color,
+                base_x="image_base_x", base_y="image_base_y",
+                src="colored_sprite", skip="sprite_render_record.transparent_char" if c.sprite_transparency else None
+            ) }}
+    {% if c.sprite_tiling %}
+        }
+    }
+    {% endif %}
+}
+{% endif %}
+
+{% if "FLUSH" in c.directives %}
+void handle_{{ c.directives["FLUSH"] }}(struct cimg *cimg)
+{
+    unsigned char clear;
+    {{ read_exact("&clear", "sizeof(clear)", "ERROR: Failed to read &clear!") }}
+    {% if c.unsafe_clear %}
+    setuid(geteuid());
+    system("clear");
+    {% else %}
+    if (clear) printf("\x1b[H\x1b[2J"); // clear the screen
+    {% endif %}
+    display(cimg, NULL);
+}
+{% endif %}
+
+{% if "SLEEP" in c.directives %}
+void handle_{{ c.directives["SLEEP"] }}(struct cimg *cimg)
+{
+    unsigned int milliseconds;
+    {{ read_exact("&milliseconds", "sizeof(milliseconds)", "ERROR: Failed to read &milliseconds!") }}
+    struct timespec delay = { 0 };
+    delay.tv_sec = milliseconds / 1000;
+    delay.tv_nsec = (milliseconds % 1000) * 1000 * 1000;
+    nanosleep(&delay, NULL);
+}
+{% endif %}
+
+{% if c.display %}
+void display(struct cimg *cimg, pixel_t *data)
+{
+    {% if not c.directives %}
+    {{ render_data("cimg", "data", "cimg->header.width", "cimg->header.height", c.color) }}
+    {% endif %}
+    {% if c.framebuffer %}
+    for (int i = 0; i < cimg->header.height; i++) {
+        write(1, cimg->framebuffer + i * cimg->header.width, sizeof(term_pixel_t) * cimg->header.width);
+        write(1, "{{ pixel_newline }}", {{ pixel_fmt_size }});
+    }
+    {% endif %}
+}
+{% endif %}
+
+{% if c.framebuffer %}
+struct cimg *initialize_framebuffer(struct cimg *cimg)
+{
+    cimg->num_pixels = CIMG_FRAMEBUFFER_PIXELS(cimg);
+    cimg->framebuffer = malloc(CIMG_FRAMEBUFFER_SIZE(cimg) + 1);
+    if (cimg->framebuffer == NULL) {
+        puts("ERROR: Failed to allocate memory for the framebuffer!");
+        exit(-1);
+    }
+    for (int idx = 0; idx < cimg->num_pixels; idx += 1) {
+        {{ emit_pixel("' '", r=255, g=255, b=255, color=c.color, dst="cimg->framebuffer[idx].data") }}
+    }
+
+    return cimg;
+}
+{% endif %}
+
+void __attribute__((constructor)) disable_buffering()
+{
+    setvbuf(stdin, NULL, _IONBF, 0);
+    setvbuf(stdout, NULL, _IONBF, 1);
+}
+
+int main(int argc, char **argv, char **envp)
+{
+    struct cimg cimg = { 0 };
+    {% if c.framebuffer %}cimg.framebuffer = NULL;{% endif %}
+    int won = {{ 1 if c.win else 0 }};
+
+    if (argc > 1) {
+        if (strcmp(argv[1] + strlen(argv[1]) - 5, ".cimg")) {
+            printf("ERROR: Invalid file extension!");
+            exit(-1);
+        }
+        dup2(open(argv[1], O_RDONLY), 0);
+    }
+
+    {{ read_exact("&cimg.header", "sizeof(cimg.header)", "ERROR: Failed to read header!") }}
+
+    {% if c.magic_kind == "chars" %}
+    if (cimg.header.magic_number[0] != '{{ c.magic[0] }}' || cimg.header.magic_number[1] != '{{ c.magic[1] }}' || cimg.header.magic_number[2] != '{{ c.magic[2] }}' || cimg.header.magic_number[3] != '{{ c.magic[3] }}') {
+        puts("ERROR: Invalid magic number!");
+        exit(-1);
+    }
+    {% elif c.magic_kind == "int" %}
+    if (cimg.header.magic_number != {{ c.magic_int }}) {
+        puts("ERROR: Invalid magic number!");
+        exit(-1);
+    }
+    {% elif c.magic_kind == "str" %}
+    if (strncmp(cimg.header.magic_number, "{{ c.magic }}", sizeof(cimg.header.magic_number))) {
+        puts("ERROR: Invalid magic number!");
+        exit(-1);
+    }
+    {% endif %}
+
+    {% if c.version %}
+    if (cimg.header.version != {{ c.version }}) {
+        puts("ERROR: Unsupported version!");
+        exit(-1);
+    }
+    {% endif %}
+
+    {% if c.dims_checked %}
+    if (cimg.header.width != {{ c.width }}) {
+        puts("ERROR: Incorrect width!");
+        exit(-1);
+    }
+    if (cimg.header.height != {{ c.height }}) {
+        puts("ERROR: Incorrect height!");
+        exit(-1);
+    }
+    {% endif %}
+
+    {% if c.framebuffer %}
+    initialize_framebuffer(&cimg);
+    {% endif %}
+
+    {% if c.has_dims %}
+    {% if not c.directives %}
+    {{ read_data("cimg.header.width", "cimg.header.height") }}
+    {% if c.display %}
+    display(&cimg, data);
+    {% endif %}
+    {% else %}
+    while (cimg.header.remaining_directives--) {
+        uint16_t directive_code;
+        {{ read_exact("&directive_code", "sizeof(directive_code)", "ERROR: Failed to read directive code!") }}
+
+        {% if c.directive_code_if %}
+        {% for directive_name in c.directives %}
+        if (directive_code == {{ c.directives[directive_name] }}) {
+            handle_{{ c.directives[directive_name] }}(&cimg);
+            continue;
+        }
+        {% endfor %}
+        fprintf(stderr, "ERROR: invalid directive_code %ux\n", directive_code);
+        exit(-1);
+        {% else %}
+        switch (directive_code) {
+        {% for directive_name in c.directives %}
+        case {{ c.directives[directive_name] }}:
+            handle_{{ c.directives[directive_name] }}(&cimg);
+            break;
+        {% endfor %}
+        default:
+            fprintf(stderr, "ERROR: invalid directive_code %ux\n", directive_code);
+            exit(-1);
+        }
+        {% endif %}
+    }
+    {% if c.display %}
+    display(&cimg, NULL);
+    {% endif %}
+    {% endif %}
+    {% endif %}
+
+    {% if c.win %}
+    {% if c.check_asu_maroon %}
+    for (int i = 0; i < cimg.header.width * cimg.header.height; i++) {
+        if (data[i].r != 0x8c || data[i].g != 0x1d || data[i].b != 0x40) won = 0;
+    }
+    {% endif %}
+
+    {% if c.check_num_nonspace %}
+    int num_nonspace = 0;
+    for (int i = 0; i < cimg.header.width * cimg.header.height; i++) {
+        if (data[i].ascii != ' ') num_nonspace++;
+    }
+    if (num_nonspace != {{ c.check_num_nonspace }}) won = 0;
+    {% endif %}
+
+    {% if c.check_framebuffer %}
+    {% if c.color %}
+    if (cimg.num_pixels != sizeof(desired_output) / sizeof(term_pixel_t)) {
+        won = 0;
+    }
+    for (int i = 0; i < cimg.num_pixels && i < sizeof(desired_output) / sizeof(term_pixel_t); i++) {
+        if (cimg.framebuffer[i].str.c != ((term_pixel_t *)&desired_output)[i].str.c) {
+            won = 0;
+        }
+        if (cimg.framebuffer[i].str.c != ' ' &&
+            cimg.framebuffer[i].str.c != '\n' &&
+            memcmp(cimg.framebuffer[i].data, ((term_pixel_t *)&desired_output)[i].data, sizeof(term_pixel_t))) {
+            won = 0;
+        }
+    }
+    {% else %}
+    if (memcmp(cimg.framebuffer, desired_output, sizeof(desired_output))) won = 0;
+    {% endif %}
+    {% endif %}
+
+    {% if c.check_total_data %}
+    if (total_data > {{ c.check_total_data }}) won = 0;
+    {% endif %}
+
+    if (won) win();
+    {% endif %}
+
+    return 0;
+}

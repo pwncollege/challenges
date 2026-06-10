@@ -1,0 +1,6 @@
+{%- import "../../common/cimg_lib.j2" as lib -%}
+{%- set c = namespace() -%}
+{{- lib.defaults(c, "magic-int") -}}
+{{- lib.draw_magic(c, random, true) -}}
+{%- set c.magic_kind = "int" -%}
+{%- include "../../common/cimg_body.py.j2" -%}

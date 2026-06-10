@@ -1,0 +1,7 @@
+{%- import "../../common/cimg_lib.j2" as lib -%}
+{%- set c = namespace() -%}
+{{- lib.defaults(c, "version") -}}
+{{- lib.draw_magic(c, random, true) -}}
+{%- set c.version = random.randrange(10, 256) -%}
+{%- set c.version_bitwidth = random.choice([8, 16, 32, 64]) -%}
+{%- include "../../common/cimg_body.c.j2" -%}

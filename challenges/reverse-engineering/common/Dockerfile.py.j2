@@ -1,0 +1,8 @@
+{%- extends "../../common/Dockerfile.j2" -%}
+{%- block setup -%}
+RUN <<'EOF'
+set -eu
+chmod 4755 /challenge/cimg
+rm -f /challenge/Dockerfile /challenge/.setup
+EOF
+{%- endblock -%}

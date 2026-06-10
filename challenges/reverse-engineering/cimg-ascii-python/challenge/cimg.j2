@@ -1,0 +1,15 @@
+{%- import "../../common/cimg_lib.j2" as lib -%}
+{%- set c = namespace() -%}
+{{- lib.defaults(c, "ascii") -}}
+{{- lib.draw_magic(c, random, true) -}}
+{%- set c.version = 1 -%}
+{%- set c.version_bitwidth = random.choice([8, 16, 32, 64]) -%}
+{%- set c.has_dims = true -%}
+{%- set c.dims_checked = true -%}
+{%- set c.read_data = true -%}
+{%- set c.assert_ascii = true -%}
+{%- set c.width = random.randint(40, 80) -%}
+{%- set c.height = random.randint(10, 24) -%}
+{%- set c.width_bitwidth = random.choice([8, 16, 32, 64]) -%}
+{%- set c.height_bitwidth = random.choice([8, 16, 32, 64]) -%}
+{%- include "../../common/cimg_body.py.j2" -%}

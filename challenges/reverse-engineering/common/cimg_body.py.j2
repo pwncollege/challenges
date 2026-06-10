@@ -1,0 +1,90 @@
+{%- import "cimg_lib.j2" as lib -%}
+{%- set pixel_size = 4 if c.color else 1 -%}
+{%- set hdr = 4 + (c.version_bitwidth // 8 if c.version else 0) + (c.width_bitwidth // 8 if c.has_dims else 0) + (c.height_bitwidth // 8 if c.has_dims else 0) -%}
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+import sys
+
+
+def main():
+    if len(sys.argv) >= 2:
+        path = sys.argv[1]
+        assert path.endswith(".cimg"), "ERROR: Invalid file extension!"
+        stream = open(path, "rb")
+    else:
+        stream = sys.stdin.buffer
+
+    header = stream.read({{ hdr }})
+    assert len(header) == {{ hdr }}, "ERROR: Failed to read header!"
+
+    {% if c.magic_kind == "chars" %}
+    assert header[:4] == {{ c.magic | tojson }}.encode("latin1"), "ERROR: Invalid magic number!"
+    {% else %}
+    assert int.from_bytes(header[:4], "little") == {{ c.magic_int }}, "ERROR: Invalid magic number!"
+    {% endif %}
+    {% set cur = 4 %}
+
+    {% if c.version %}
+    version = int.from_bytes(header[{{ cur }}:{{ cur + c.version_bitwidth // 8 }}], "little")
+    assert version == {{ c.version }}, "ERROR: Unsupported version!"
+    {% set cur = cur + c.version_bitwidth // 8 %}
+    {% endif %}
+
+    {% if c.has_dims %}
+    width = int.from_bytes(header[{{ cur }}:{{ cur + c.width_bitwidth // 8 }}], "little")
+    {% set cur = cur + c.width_bitwidth // 8 %}
+    height = int.from_bytes(header[{{ cur }}:{{ cur + c.height_bitwidth // 8 }}], "little")
+    {% set cur = cur + c.height_bitwidth // 8 %}
+    {% if c.dims_checked %}
+    assert width == {{ c.width }}, "ERROR: Incorrect width!"
+    assert height == {{ c.height }}, "ERROR: Incorrect height!"
+    {% endif %}
+    {% endif %}
+
+    {% if c.read_data %}
+    data = stream.read(width * height * {{ pixel_size }})
+    assert len(data) == width * height * {{ pixel_size }}, "ERROR: Failed to read the image data!"
+    {% if c.color %}
+    pixels = [tuple(data[i : i + 4]) for i in range(0, len(data), 4)]  # (r, g, b, ascii)
+    {% else %}
+    pixels = [(byte,) for byte in data]  # (ascii,)
+    {% endif %}
+
+    {% if c.assert_ascii %}
+    for pixel in pixels:
+        assert 0x20 <= pixel[-1] <= 0x7E, f"ERROR: Invalid character {pixel[-1]:#04x} in the image data!"
+    {% endif %}
+
+    {% if c.display %}
+    for row in range(0, len(pixels), width):
+        line = pixels[row : row + width]
+        {% if c.color %}
+        sys.stdout.write("".join(f"\x1b[38;2;{p[0]:03};{p[1]:03};{p[2]:03}m{chr(p[3])}\x1b[0m" for p in line))
+        {% else %}
+        sys.stdout.write("".join(chr(p[0]) for p in line))
+        {% endif %}
+        sys.stdout.write("\n")
+    {% endif %}
+
+    {% if c.check_num_nonspace %}
+    if sum(1 for pixel in pixels if pixel[-1] != ord(" ")) != {{ c.check_num_nonspace }}:
+        return
+    {% endif %}
+
+    {% if c.check_asu_maroon %}
+    if any((pixel[0], pixel[1], pixel[2]) != (0x8C, 0x1D, 0x40) for pixel in pixels):
+        return
+    {% endif %}
+    {% endif %}
+
+    {% if c.win %}
+    print(open("/flag").read())
+    {% endif %}
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except AssertionError as error:
+        print(error, file=sys.stderr)
+        sys.exit(1)

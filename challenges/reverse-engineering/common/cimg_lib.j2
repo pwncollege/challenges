@@ -1,0 +1,177 @@
+{#-
+  Shared cIMG challenge library (faithful to the OLD reverse_engineering engine).
+
+  setup(c, random, level) configures the namespace `c` with per-level options and
+  per-build seeded parameters, drawing from `random` in a fixed, level-determined
+  order so a challenge body and its test derive IDENTICAL values (see memory:
+  challenge-seed-determinism). The macro emits nothing -- it only mutates `c`.
+
+  Call it first, before any other use of `random`, in BOTH the challenge body and
+  the test:
+      {% import "../../common/cimg_lib.j2" as lib %}
+      {% set c = namespace() %}
+      {{ lib.setup(c, random, "color") }}
+-#}
+{%- import "cimg_colored.j2" as colored -%}
+
+{#- The c/I/M/G letter glyphs (width, height, ascii bytes), from the OLD SPRITES. -#}
+{%- set SPRITES = {
+  "c": [6, 4, [32,32,95,95,95,32,32,47,32,95,95,124,124,32,40,95,95,32,32,92,95,95,95,124]],
+  "I": [5, 5, [32,95,95,95,32,124,95,32,95,124,32,124,32,124,32,32,124,32,124,32,124,95,95,95,124]],
+  "M": [8, 5, [32,95,95,32,32,95,95,32,124,32,32,92,47,32,32,124,124,32,124,92,47,124,32,124,124,32,124,32,32,124,32,124,124,95,124,32,32,124,95,124]],
+  "G": [7, 5, [32,32,95,95,95,95,32,32,47,32,95,95,95,124,124,32,124,32,32,95,32,124,32,124,95,124,32,124,32,92,95,95,95,95,124]]
+} -%}
+
+{#- Reset every option on `c` to its default; the level file then overrides. -#}
+{%- macro defaults(c, level) -%}
+  {%- set c.level = level -%}
+  {%- set c.magic_kind = "chars" -%}
+  {%- set c.version = 0 -%}
+  {%- set c.version_bitwidth = 16 -%}
+  {%- set c.has_dims = false -%}
+  {%- set c.dims_checked = false -%}
+  {%- set c.width = 0 -%}
+  {%- set c.height = 0 -%}
+  {%- set c.width_bitwidth = 8 -%}
+  {%- set c.height_bitwidth = 8 -%}
+  {%- set c.read_data = false -%}
+  {%- set c.assert_ascii = false -%}
+  {%- set c.display = false -%}
+  {%- set c.color = false -%}
+  {%- set c.win = true -%}
+  {%- set c.check_num_nonspace = 0 -%}
+  {%- set c.check_asu_maroon = false -%}
+  {%- set c.framebuffer = false -%}
+  {%- set c.directives = {} -%}
+  {%- set c.directive_code_if = false -%}
+  {%- set c.directives_bitwidth = 32 -%}
+  {%- set c.sprites = false -%}
+  {%- set c.sprite_tiling = false -%}
+  {%- set c.sprite_transparency = false -%}
+  {%- set c.unsafe_sprite_loading = false -%}
+  {%- set c.unsafe_clear = false -%}
+  {%- set c.check_framebuffer = false -%}
+  {%- set c.check_total_data = 0 -%}
+  {%- set c.target_w = 0 -%}
+  {%- set c.target_h = 0 -%}
+  {%- set c.target_pixels = [] -%}
+  {%- set c.fb_bytes = [] -%}
+{%- endmacro -%}
+
+{#- Draw the 4-byte magic: a randomised leet header when `randomize`, else "cIMG". -#}
+{%- macro draw_magic(c, random, randomize) -%}
+  {%- set ORD = {
+    "c":99,"C":67,"[":91,"(":40,"<":60,"{":123,
+    "i":105,"I":73,"1":49,"|":124,"/":47,"!":33,";":59,":":58,"l":108,
+    "m":109,"M":77,"g":103,"G":71,"6":54,
+    "n":110,"N":78,"%":37,"~":126,
+    "o":111,"O":79,"0":48,"@":64,
+    "a":97,"A":65,"4":52,
+    "e":101,"E":69,"3":51,
+    "r":114,"R":82,
+  } -%}
+  {%- if randomize -%}
+    {%- set headers = ["CIMG", "CNNR", "CONR", "CNMG", "CMAG", "CMGE"] -%}
+    {%- set repl = {"C": "cC[(<{", "I": "iI1|/!;:l", "M": "mM", "G": "gG6", "N": "nN%~", "O": "oO0@", "A": "aA4@", "E": "eE3", "R": "rR"} -%}
+    {%- set hv = random.choice(headers) -%}
+    {%- set c.magic = random.choice(repl[hv[0]]) ~ random.choice(repl[hv[1]]) ~ random.choice(repl[hv[2]]) ~ random.choice(repl[hv[3]]) -%}
+  {%- else -%}
+    {%- set c.magic = "cIMG" -%}
+  {%- endif -%}
+  {%- set c.magic_ord = [ORD[c.magic[0]], ORD[c.magic[1]], ORD[c.magic[2]], ORD[c.magic[3]]] -%}
+  {%- set c.magic_int = c.magic_ord[0] + c.magic_ord[1] * 256 + c.magic_ord[2] * 65536 + c.magic_ord[3] * 16777216 -%}
+{%- endmacro -%}
+
+{#- Load the fixed cIMG-colored target image onto `c`. -#}
+{%- macro load_colored(c) -%}{{ colored.load(c) }}{%- endmacro -%}
+
+{#- Assign each directive a distinct random 16-bit opcode (insertion order kept). -#}
+{%- macro assign_directives(c, random, names) -%}
+  {%- set codes = [] -%}
+  {%- set d = {} -%}
+  {%- for name in names -%}
+    {%- set v = namespace(x=random.randrange(1, 65536)) -%}
+    {%- for _retry in range(500) if v.x in codes -%}
+      {%- set v.x = random.randrange(1, 65536) -%}
+    {%- endfor -%}
+    {%- set _ = codes.append(v.x) -%}
+    {%- set _ = d.__setitem__(name, v.x) -%}
+  {%- endfor -%}
+  {%- set c.directives = d -%}
+{%- endmacro -%}
+
+{#- The 1x4 "cIMG" mini target (single coloured letters), from CIMGFramebufferMini. -#}
+{%- macro make_target_mini(c, random) -%}
+  {%- set px = [] -%}
+  {%- for ch in [99, 73, 77, 71] -%}
+    {%- set _ = px.append([random.randrange(1, 256), random.randrange(1, 256), random.randrange(1, 256), ch]) -%}
+  {%- endfor -%}
+  {%- set c.target_w = 4 -%}
+  {%- set c.target_h = 1 -%}
+  {%- set c.target_pixels = px -%}
+{%- endmacro -%}
+
+{#- A bordered box with the c/I/M/G glyphs at random positions/colours (make_target_image). -#}
+{%- macro make_target(c, random) -%}
+  {%- set text = ["c", "I", "M", "G"] -%}
+  {%- set sumw = SPRITES["c"][0] + SPRITES["I"][0] + SPRITES["M"][0] + SPRITES["G"][0] -%}
+  {%- set min_width = sumw + (text | length - 1) + 4 -%}
+  {%- set min_height = 5 + 4 -%}
+  {%- set w = random.randrange(min_width + 3, 80) -%}
+  {%- set h = random.randrange(min_height + 3, 24) -%}
+  {%- set px = [] -%}
+  {%- for i in range(w * h) -%}{%- set _ = px.append([0, 0, 0, 32]) -%}{%- endfor -%}
+  {%- for x in range(w) -%}
+    {%- set _ = px.__setitem__(x, [255, 255, 255, 46 if (x == 0 or x == w - 1) else 45]) -%}
+    {%- set _ = px.__setitem__((h - 1) * w + x, [255, 255, 255, 39 if (x == 0 or x == w - 1) else 45]) -%}
+  {%- endfor -%}
+  {%- for y in range(1, h - 1) -%}
+    {%- set _ = px.__setitem__(y * w, [255, 255, 255, 124]) -%}
+    {%- set _ = px.__setitem__(y * w + w - 1, [255, 255, 255, 124]) -%}
+  {%- endfor -%}
+  {%- set cursor = namespace(x=2) -%}
+  {%- for n in range(4) -%}
+    {%- set sw = SPRITES[text[n]][0] -%}
+    {%- set sh = SPRITES[text[n]][1] -%}
+    {%- set sdata = SPRITES[text[n]][2] -%}
+    {%- set cr = random.randrange(1, 256) -%}
+    {%- set cg = random.randrange(1, 256) -%}
+    {%- set cb = random.randrange(1, 256) -%}
+    {%- set rem = namespace(sumw=0) -%}
+    {%- for k in range(n, 4) -%}{%- set rem.sumw = rem.sumw + SPRITES[text[k]][0] -%}{%- endfor -%}
+    {%- set max_x = w - 2 - rem.sumw - (4 - n) -%}
+    {%- set min_y = h - 2 - sh -%}
+    {%- set lx = random.randrange(cursor.x, max_x + 1) -%}
+    {%- set ly = random.randrange(2, min_y) -%}
+    {%- for j in range(sh) -%}
+      {%- for i in range(sw) -%}
+        {%- set _ = px.__setitem__((ly + j) * w + (lx + i), [cr, cg, cb, sdata[j * sw + i]]) -%}
+      {%- endfor -%}
+    {%- endfor -%}
+    {%- set cursor.x = lx + sw + 1 -%}
+  {%- endfor -%}
+  {%- set c.target_w = w -%}
+  {%- set c.target_h = h -%}
+  {%- set c.target_pixels = px -%}
+{%- endmacro -%}
+
+{#- Bake the framebuffer's desired_output: the 24-byte ANSI string of each target
+    pixel, then a trailing NUL (matching target.render() + b"\0"). -#}
+{%- macro compute_fb_bytes(c) -%}
+  {%- set fb = [] -%}
+  {%- for p in c.target_pixels -%}
+    {%- set r = p[0] -%}{%- set g = p[1] -%}{%- set b = p[2] -%}{%- set a = p[3] -%}
+    {%- set _ = fb.extend([
+      27, 91, 51, 56, 59, 50, 59,
+      48 + r // 100, 48 + (r // 10) % 10, 48 + r % 10, 59,
+      48 + g // 100, 48 + (g // 10) % 10, 48 + g % 10, 59,
+      48 + b // 100, 48 + (b // 10) % 10, 48 + b % 10,
+      109, a, 27, 91, 48, 109
+    ]) -%}
+  {%- endfor -%}
+  {%- set _ = fb.append(0) -%}
+  {%- set c.fb_bytes = fb -%}
+{%- endmacro -%}
+
+{#- C integer type for a given bit width -#}
+{%- macro itype(bits) -%}uint{{ bits }}_t{%- endmacro -%}

@@ -1,0 +1,11 @@
+{%- extends "../../common/Dockerfile.j2" -%}
+{%- block additional_packages %}{{ super() }} build-essential{% endblock -%}
+{%- block setup -%}
+RUN <<'EOF'
+set -eu
+gcc -O0 -w -o /challenge/cimg /challenge/cimg.c
+chmod 4755 /challenge/cimg
+{% if keep_source | default(false) %}chmod 644 /challenge/cimg.c{% else %}rm -f /challenge/cimg.c{% endif %}
+rm -f /challenge/Dockerfile /challenge/.setup
+EOF
+{%- endblock -%}

