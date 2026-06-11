@@ -46,7 +46,41 @@ Primary entry points:
 - `./pwnshop test` — render, build, and run all `test*/test_*` files inside the challenge.
 - `./pwnshop run` — render, build, and drop into an interactive shell inside the challenge container (use `--user=<uid>` to control the interactive user, default `1000`, `--volume <path>` to mount host paths read-only, or append a command after the challenge to run it instead of `/bin/bash`).
 
-Any future automation (GitHub Actions, local scripts, etc.) should shell out to `./pwnshop ...` rather than reimplementing pieces of the workflow.
+Any future automation that renders, builds, runs, or tests challenges should shell out to `./pwnshop ...` rather than reimplementing those pieces of the workflow.
+
+## Discord feedback automation
+
+`discord-feedback` turns recent public pwn.college Discord messages into a reviewable challenge-improvement workflow.
+Inside `nix develop`, it is available on `PATH`; outside the dev shell, run `tools/feedback/discord-feedback` directly.
+It uses the Discord REST API with a bot token only; do not use a user token.
+The bot must be in the guild and able to read the public channels you want analyzed.
+If Discord requires Message Content access for your bot, enable that in the Discord developer portal before running the tool.
+
+Raw working artifacts are written under `.discord-feedback/<run-id>/`, which is ignored by git.
+The transcript is sanitized by default: authors are per-run pseudonyms, user mentions are redacted, and raw snowflake IDs in message text are replaced.
+Use `--include-authors` only for local debugging, and do not commit transcript artifacts.
+
+Typical usage:
+
+```bash
+export DISCORD_BOT_TOKEN=...
+
+# Scrape and write sanitized transcript artifacts only.
+discord-feedback --fetch-only
+
+# Scrape and produce an agent-written analysis report, without editing the repo.
+discord-feedback
+
+# Let Claude or Codex apply high-confidence fixes, then run pwnshop validation and cast UX review.
+nix develop --command discord-feedback --apply
+
+# Full automation: create/switch to a branch, validate, commit, push, and open a draft PR.
+nix develop --command discord-feedback --apply --create-pr --draft-pr
+```
+
+The apply path asks the selected agent (`--agent auto|claude|codex`) to read `AGENTS.md` and the local `authoring-challenges` skill before editing challenge content.
+Validation runs `pwnshop test --modified-since <base-ref>` inside `nix develop` unless the command is already running in the dev shell.
+Asciinema playtests are generated through `pwnshop run --cast-to` and then reviewed by the agent for UX mismatches.
 
 # Building and testing
 

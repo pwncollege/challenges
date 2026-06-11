@@ -1,0 +1,1105 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "click>=8.0",
+# ]
+# ///
+
+import datetime
+import hashlib
+import json
+import logging
+import os
+import pathlib
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import OrderedDict
+from typing import Any, Iterable, Optional
+
+import click
+
+logger = logging.getLogger(__name__)
+
+DISCORD_API_BASE = "https://discord.com/api/v10"
+PWN_COLLEGE_GUILD_ID = "750635557666816031"
+TEXT_CHANNEL_TYPES = {0, 5}
+PUBLIC_THREAD_TYPES = {10, 11}
+THREAD_PARENT_TYPES = {0, 5, 15, 16}
+MAX_DISCORD_PAGE_SIZE = 100
+
+
+class DiscordPermissionError(RuntimeError):
+    pass
+
+
+class DiscordAPI:
+    def __init__(self, token: str):
+        self.token = token
+
+    def request(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
+        query = f"?{urllib.parse.urlencode(params)}" if params else ""
+        url = f"{DISCORD_API_BASE}{path}{query}"
+        headers = {
+            "Authorization": f"Bot {self.token}",
+            "User-Agent": "DiscordBot (https://github.com/pwncollege/challenges, pwnshop-feedback)",
+            "Content-Type": "application/json",
+        }
+        request = urllib.request.Request(url, headers=headers)
+
+        while True:
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    body = response.read().decode()
+                    self._honor_rate_limit_headers(response.headers)
+                    return json.loads(body) if body else None
+            except urllib.error.HTTPError as error:
+                body = error.read().decode(errors="replace")
+                if error.code == 429:
+                    retry_after = self._retry_after(error.headers, body)
+                    logger.info(
+                        "Discord rate limit reached; sleeping %.2fs", retry_after
+                    )
+                    time.sleep(retry_after)
+                    continue
+                if error.code in {403, 404}:
+                    raise DiscordPermissionError(f"{error.code} for {path}") from error
+                raise RuntimeError(
+                    f"Discord API request failed: {error.code} {path}: {body}"
+                ) from error
+
+    @staticmethod
+    def _retry_after(headers: Any, body: str) -> float:
+        if headers.get("Retry-After"):
+            return float(headers["Retry-After"])
+        try:
+            parsed = json.loads(body)
+        except json.JSONDecodeError:
+            return 1.0
+        return float(parsed.get("retry_after", 1.0))
+
+    @staticmethod
+    def _honor_rate_limit_headers(headers: Any) -> None:
+        remaining = headers.get("X-RateLimit-Remaining")
+        reset_after = headers.get("X-RateLimit-Reset-After")
+        if remaining == "0" and reset_after:
+            time.sleep(float(reset_after))
+
+
+def utc_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def parse_discord_time(value: str) -> datetime.datetime:
+    return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def parse_channel_ids(values: Iterable[str], env_value: Optional[str]) -> list[str]:
+    ids: list[str] = []
+    for value in values:
+        ids.extend(part for part in re.split(r"[\s,]+", value.strip()) if part)
+    if env_value:
+        ids.extend(part for part in re.split(r"[\s,]+", env_value.strip()) if part)
+    return list(OrderedDict((item, None) for item in ids))
+
+
+def channel_display_name(
+    channel: dict[str, Any], channels_by_id: dict[str, dict[str, Any]]
+) -> str:
+    name = channel.get("name") or channel["id"]
+    parent_id = channel.get("parent_id")
+    if parent_id and parent_id in channels_by_id:
+        return f"{channels_by_id[parent_id].get('name', parent_id)}/{name}"
+    return name
+
+
+def fetch_channel(api: DiscordAPI, channel_id: str) -> Optional[dict[str, Any]]:
+    try:
+        return api.request(f"/channels/{channel_id}")
+    except DiscordPermissionError as error:
+        logger.warning("skipping channel %s: %s", channel_id, error)
+        return None
+
+
+def discover_channels(
+    api: DiscordAPI,
+    guild_id: str,
+    channel_ids: list[str],
+    cutoff: datetime.datetime,
+    include_threads: bool,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    if channel_ids:
+        channels = [
+            channel
+            for channel_id in channel_ids
+            if (channel := fetch_channel(api, channel_id))
+        ]
+        channels_by_id = {channel["id"]: channel for channel in channels}
+        return channels, channels_by_id
+
+    guild_channels = api.request(f"/guilds/{guild_id}/channels")
+    channels_by_id = {channel["id"]: channel for channel in guild_channels}
+    message_channels = [
+        channel
+        for channel in guild_channels
+        if channel.get("type") in TEXT_CHANNEL_TYPES
+    ]
+
+    if include_threads:
+        active_threads = api.request(f"/guilds/{guild_id}/threads/active").get(
+            "threads", []
+        )
+        public_active_threads = [
+            thread
+            for thread in active_threads
+            if thread.get("type") in PUBLIC_THREAD_TYPES
+        ]
+        message_channels.extend(public_active_threads)
+        channels_by_id.update(
+            {thread["id"]: thread for thread in public_active_threads}
+        )
+
+        for parent in guild_channels:
+            if parent.get("type") not in THREAD_PARENT_TYPES:
+                continue
+            for thread in fetch_public_archived_threads(api, parent, cutoff):
+                if thread["id"] not in channels_by_id:
+                    message_channels.append(thread)
+                    channels_by_id[thread["id"]] = thread
+
+    unique_channels = list(
+        OrderedDict((channel["id"], channel) for channel in message_channels).values()
+    )
+    return unique_channels, channels_by_id
+
+
+def fetch_public_archived_threads(
+    api: DiscordAPI, parent: dict[str, Any], cutoff: datetime.datetime
+) -> list[dict[str, Any]]:
+    threads: list[dict[str, Any]] = []
+    params: dict[str, Any] = {"limit": MAX_DISCORD_PAGE_SIZE}
+    while True:
+        try:
+            page = api.request(
+                f"/channels/{parent['id']}/threads/archived/public", params
+            )
+        except DiscordPermissionError:
+            return threads
+        except RuntimeError as error:
+            logger.debug(
+                "skipping archived threads for %s: %s",
+                parent.get("name", parent["id"]),
+                error,
+            )
+            return threads
+
+        page_threads = page.get("threads", [])
+        if not page_threads:
+            return threads
+
+        oldest_archive: Optional[datetime.datetime] = None
+        for thread in page_threads:
+            archive_timestamp = thread.get("thread_metadata", {}).get(
+                "archive_timestamp"
+            )
+            if not archive_timestamp:
+                continue
+            archived_at = parse_discord_time(archive_timestamp)
+            oldest_archive = (
+                archived_at
+                if oldest_archive is None
+                else min(oldest_archive, archived_at)
+            )
+            if archived_at >= cutoff and thread.get("type") in PUBLIC_THREAD_TYPES:
+                thread.setdefault("parent_id", parent["id"])
+                threads.append(thread)
+
+        if (
+            not page.get("has_more")
+            or oldest_archive is None
+            or oldest_archive < cutoff
+        ):
+            return threads
+        params["before"] = oldest_archive.isoformat()
+
+
+def fetch_messages_since(
+    api: DiscordAPI,
+    channel: dict[str, Any],
+    cutoff: datetime.datetime,
+    max_messages: int,
+) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    params: dict[str, Any] = {"limit": MAX_DISCORD_PAGE_SIZE}
+    while len(messages) < max_messages:
+        try:
+            page = api.request(f"/channels/{channel['id']}/messages", params)
+        except DiscordPermissionError as error:
+            logger.warning(
+                "skipping messages for %s: %s",
+                channel.get("name", channel["id"]),
+                error,
+            )
+            return messages
+
+        if not page:
+            return messages
+
+        oldest_id: Optional[int] = None
+        oldest_time: Optional[datetime.datetime] = None
+        for message in page:
+            message_time = parse_discord_time(message["timestamp"])
+            message_id = int(message["id"])
+            oldest_id = message_id if oldest_id is None else min(oldest_id, message_id)
+            oldest_time = (
+                message_time if oldest_time is None else min(oldest_time, message_time)
+            )
+            if message_time >= cutoff:
+                messages.append(message)
+
+        if oldest_id is None or oldest_time is None or oldest_time < cutoff:
+            return messages[:max_messages]
+        params["before"] = str(oldest_id)
+    return messages[:max_messages]
+
+
+def sanitize_content(content: str, channels_by_id: dict[str, dict[str, Any]]) -> str:
+    def channel_replacement(match: re.Match[str]) -> str:
+        channel_id = match.group(1)
+        channel = channels_by_id.get(channel_id)
+        if not channel:
+            return "#channel"
+        return f"#{channel.get('name', 'channel')}"
+
+    content = re.sub(r"<#(\d+)>", channel_replacement, content)
+    content = re.sub(r"<@!?\d+>", "@user", content)
+    content = re.sub(r"<@&\d+>", "@role", content)
+    content = re.sub(r"\b\d{17,20}\b", "<snowflake>", content)
+    return content.strip()
+
+
+def sanitize_messages(
+    messages_by_channel: list[tuple[dict[str, Any], list[dict[str, Any]]]],
+    channels_by_id: dict[str, dict[str, Any]],
+    guild_id: str,
+    include_authors: bool,
+) -> list[dict[str, Any]]:
+    author_labels: dict[str, str] = {}
+    sanitized: list[dict[str, Any]] = []
+    for channel, messages in messages_by_channel:
+        for message in messages:
+            author = message.get("author", {})
+            author_id = author.get("id", "unknown")
+            if author_id not in author_labels:
+                author_labels[author_id] = f"user-{len(author_labels) + 1:04d}"
+            attachments = [
+                {
+                    "filename": attachment.get("filename"),
+                    "content_type": attachment.get("content_type"),
+                    "size": attachment.get("size"),
+                }
+                for attachment in message.get("attachments", [])
+            ]
+            content = sanitize_content(message.get("content", ""), channels_by_id)
+            if not content and attachments:
+                content = " ".join(
+                    f"[attachment: {attachment['filename']}]"
+                    for attachment in attachments
+                )
+            if not content and message.get("embeds"):
+                content = "[embed]"
+
+            item = {
+                "id": message["id"],
+                "link": f"https://discord.com/channels/{guild_id}/{channel['id']}/{message['id']}",
+                "timestamp": message["timestamp"],
+                "channel_id": channel["id"],
+                "channel": channel_display_name(channel, channels_by_id),
+                "author": author_labels[author_id],
+                "content": content,
+                "attachments": attachments,
+                "reply_to": (message.get("referenced_message") or {}).get("id"),
+            }
+            if include_authors:
+                item["author_name"] = author.get("global_name") or author.get(
+                    "username"
+                )
+            sanitized.append(item)
+
+    return sorted(sanitized, key=lambda item: item["timestamp"])
+
+
+def write_transcript(
+    artifact_dir: pathlib.Path,
+    messages: list[dict[str, Any]],
+    since: datetime.datetime,
+    until: datetime.datetime,
+) -> tuple[pathlib.Path, pathlib.Path]:
+    jsonl_path = artifact_dir / "messages.jsonl"
+    md_path = artifact_dir / "transcript.md"
+    with jsonl_path.open("w") as output:
+        for message in messages:
+            output.write(json.dumps(message, sort_keys=True) + "\n")
+
+    lines = [
+        "# Discord Feedback Transcript",
+        "",
+        f"Window: {since.isoformat()} through {until.isoformat()}",
+        f"Messages: {len(messages)}",
+        "",
+        "Author labels are per-run pseudonyms. User mentions and raw snowflake IDs are redacted.",
+        "",
+    ]
+    last_channel = None
+    for message in messages:
+        if message["channel"] != last_channel:
+            lines.extend(["", f"## #{message['channel']}", ""])
+            last_channel = message["channel"]
+        timestamp = parse_discord_time(message["timestamp"]).strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
+        content = message["content"].replace("\n", "\n  ")
+        lines.append(
+            f"- {timestamp} [{message['author']}]({message['link']}): {content}"
+        )
+    md_path.write_text("\n".join(lines).rstrip() + "\n")
+    return jsonl_path, md_path
+
+
+def git_root() -> pathlib.Path:
+    return pathlib.Path(
+        subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"], text=True
+        ).strip()
+    )
+
+
+def git_output(args: list[str], cwd: pathlib.Path) -> str:
+    return subprocess.check_output(["git", *args], cwd=cwd, text=True).rstrip("\n")
+
+
+def ensure_clean_worktree(repo: pathlib.Path) -> None:
+    status = git_output(["status", "--porcelain"], repo)
+    if status:
+        raise click.ClickException(
+            "Working tree is dirty. Commit/stash existing changes or rerun with --allow-dirty."
+        )
+
+
+def prepare_branch(
+    repo: pathlib.Path, branch: Optional[str], create_pr: bool, run_id: str
+) -> str:
+    current = git_output(["branch", "--show-current"], repo)
+    target = branch
+    if create_pr and not target and current in {"main", "master"}:
+        target = f"feedback/{run_id}"
+    if target and current != target:
+        existing = subprocess.run(
+            ["git", "rev-parse", "--verify", target],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        if existing.returncode == 0:
+            subprocess.run(["git", "switch", target], cwd=repo, check=True)
+        else:
+            subprocess.run(["git", "switch", "-c", target], cwd=repo, check=True)
+        return target
+    return current
+
+
+def resolve_agent(agent: str, apply: bool) -> tuple[str, list[str]]:
+    if agent == "auto":
+        if shutil.which("claude"):
+            agent = "claude"
+        elif shutil.which("codex"):
+            agent = "codex"
+        else:
+            raise click.ClickException(
+                "No supported agent found on PATH (`claude` or `codex`)."
+            )
+
+    if agent == "claude":
+        if not shutil.which("claude"):
+            raise click.ClickException("`claude` was requested but is not on PATH.")
+        args = ["claude", "-p", "--no-session-persistence"]
+        if apply:
+            args.extend(["--permission-mode", "bypassPermissions"])
+        return agent, args
+
+    if agent == "codex":
+        if not shutil.which("codex"):
+            raise click.ClickException("`codex` was requested but is not on PATH.")
+        args = ["codex", "exec", "--skip-git-repo-check", "--cd", str(git_root())]
+        if apply:
+            args.append("--dangerously-bypass-approvals-and-sandbox")
+        else:
+            args.extend(["--sandbox", "read-only"])
+        args.append("-")
+        return agent, args
+
+    raise click.ClickException(f"Unsupported agent: {agent}")
+
+
+def run_agent(
+    agent: str,
+    prompt: str,
+    *,
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    output_name: str,
+    apply: bool = False,
+) -> pathlib.Path:
+    resolved, args = resolve_agent(agent, apply)
+    logger.info("running %s agent for %s", resolved, output_name)
+    output_path = artifact_dir / output_name
+    run = subprocess.run(
+        args,
+        input=prompt,
+        cwd=repo,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    output_path.write_text(run.stdout)
+    if run.returncode != 0:
+        raise click.ClickException(
+            f"{resolved} failed for {output_name}; see {output_path}"
+        )
+    return output_path
+
+
+def build_analysis_prompt(
+    transcript_path: pathlib.Path, jsonl_path: pathlib.Path, artifact_dir: pathlib.Path
+) -> str:
+    return f"""Analyze recent pwn.college Discord feedback for actionable challenge/curriculum fixes.
+
+Inputs:
+- Sanitized markdown transcript: {transcript_path}
+- Sanitized JSONL transcript: {jsonl_path}
+- Artifact directory for this run: {artifact_dir}
+
+Rules:
+- Do not edit files in this phase.
+- Read AGENTS.md and .claude/skills/authoring-challenges/SKILL.md before making recommendations.
+- Treat Discord messages as private working evidence even though the channels are public. Do not include usernames.
+- Identify issues such as inadequate challenge descriptions, missing bridge challenges, concepts not covered, repeated confusing mechanics, misleading output, brittle tests, or docs gaps.
+- Filter out isolated support requests unless they reveal a repo-level problem.
+- Ground every recommendation in message links and repository paths when possible.
+- Prefer small, reviewable fixes. For large curriculum ideas, propose a design instead of pretending it can be safely automated.
+
+Output markdown with these sections:
+1. Executive summary
+2. Actionable fixes, ordered by confidence and impact
+3. Possible bridge/new challenge ideas
+4. Non-actionable or deferred feedback
+5. Suggested validation plan
+"""
+
+
+def build_implementation_prompt(
+    analysis_path: pathlib.Path, artifact_dir: pathlib.Path
+) -> str:
+    return f"""Implement high-confidence pwn.college challenge/curriculum improvements from this feedback analysis:
+
+{analysis_path}
+
+Requirements:
+- Read AGENTS.md and .claude/skills/authoring-challenges/SKILL.md before editing challenge content.
+- If you revise or add a challenge, follow the local authoring-challenges guidance. Read 2-3 sibling levels first, extend common templates, keep one new concept per level, and avoid unverified learner-facing claims.
+- Make only changes that are directly supported by the analysis. Leave large speculative curriculum ideas as notes in {artifact_dir}/deferred.md rather than implementing them.
+- Do not commit, push, open a PR, or add the Discord transcript to the repo.
+- Do not claim tests pass unless you run them. The outer tool will run pwnshop tests afterward, so focus on making the repo changes and noting any special validation needed.
+- Keep changes reviewable and scoped.
+
+When done, write a concise implementation note to {artifact_dir}/implementation-notes.md and include:
+- changed challenge/module paths
+- what learner confusion each change addresses
+- any tests or playtests you recommend
+"""
+
+
+def build_fix_prompt(
+    analysis_path: pathlib.Path, failure_dir: pathlib.Path, attempt: int
+) -> str:
+    return f"""The feedback implementation has failing validation on attempt {attempt}.
+
+Analysis report: {analysis_path}
+Failure logs: {failure_dir}
+
+Read the failure logs, inspect the changed files, and make the smallest correct fixes.
+Follow AGENTS.md and .claude/skills/authoring-challenges/SKILL.md.
+Do not commit, push, open a PR, or edit generated Discord artifacts.
+"""
+
+
+def build_playtest_plan_prompt(
+    analysis_path: pathlib.Path,
+    changed_challenges: list[str],
+    artifact_dir: pathlib.Path,
+) -> str:
+    changed = (
+        "\n".join(f"- {challenge}" for challenge in changed_challenges) or "- none"
+    )
+    return f"""Create a noninteractive asciinema playtest plan for the changed pwn.college challenges.
+
+Feedback analysis: {analysis_path}
+Changed challenges:
+{changed}
+
+Return ONLY a JSON array. Each object must have:
+- "challenge": repository path to the challenge directory
+- "command": array of command arguments to run inside `pwnshop run`; it must exit without human input
+- "title": short filesystem-safe title
+- "purpose": what UX path this cast validates
+
+Prefer learner-realistic commands that exercise the revised description and solve path. If a challenge cannot be usefully cast noninteractively, omit it and explain why in {artifact_dir}/playtest-omissions.md.
+Do not include secrets or Discord transcript content.
+"""
+
+
+def build_cast_review_prompt(
+    analysis_path: pathlib.Path,
+    cast_dir: pathlib.Path,
+    changed_challenges: list[str],
+    artifact_dir: pathlib.Path,
+) -> str:
+    changed = (
+        "\n".join(f"- {challenge}" for challenge in changed_challenges) or "- none"
+    )
+    return f"""Review the recorded asciinema casts for UX issues introduced or exposed by the feedback changes.
+
+Feedback analysis: {analysis_path}
+Cast directory: {cast_dir}
+Changed challenges:
+{changed}
+
+Tasks:
+- Read the casts and relevant challenge descriptions/code.
+- Check whether the challenge text, prompts, runtime behavior, and solve path line up without hidden assumptions or accidental spoilers.
+- If you find a small concrete issue, fix it. If you find a large or speculative issue, write it to {artifact_dir}/ux-deferred.md.
+- Do not commit, push, open a PR, or edit Discord transcripts.
+- Write {artifact_dir}/ux-review.md with findings and any changes made.
+"""
+
+
+def build_pr_body_prompt(
+    analysis_path: pathlib.Path,
+    implementation_notes: pathlib.Path,
+    ux_review: pathlib.Path,
+    test_log: pathlib.Path,
+    artifact_dir: pathlib.Path,
+) -> str:
+    return f"""Draft a GitHub PR body for this pwn.college feedback run.
+
+Inputs:
+- Feedback analysis: {analysis_path}
+- Implementation notes: {implementation_notes}
+- UX review: {ux_review}
+- Test log: {test_log}
+
+Do not quote Discord messages or include usernames. Mention that the feedback came from sanitized public Discord messages.
+Include:
+- Summary
+- Validation
+- Notes / deferred follow-ups
+
+Write only the PR body markdown. The output will be saved under {artifact_dir}.
+"""
+
+
+def pwnshop_invocation(repo: pathlib.Path, args: list[str]) -> list[str]:
+    if os.environ.get("IN_NIX_SHELL"):
+        return ["./pwnshop", *args]
+    return ["nix", "develop", "--command", "./pwnshop", *args]
+
+
+def run_logged(
+    command: list[str],
+    *,
+    cwd: pathlib.Path,
+    log_path: pathlib.Path,
+    timeout: Optional[int] = None,
+) -> int:
+    logger.info("running: %s", shlex.join(command))
+    with log_path.open("w") as log:
+        process = subprocess.run(
+            command,
+            cwd=cwd,
+            text=True,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+        )
+    return process.returncode
+
+
+def changed_paths_since(
+    repo: pathlib.Path, base_ref: str
+) -> set[pathlib.PurePosixPath]:
+    diff = git_output(["diff", "--name-only", base_ref, "--", "challenges"], repo)
+    paths = {pathlib.PurePosixPath(line) for line in diff.splitlines() if line}
+    status = git_output(["status", "--porcelain", "--", "challenges"], repo)
+    for line in status.splitlines():
+        status_path = line[3:]
+        if " -> " in status_path:
+            status_path = status_path.split(" -> ", 1)[1]
+        if status_path:
+            paths.add(pathlib.PurePosixPath(status_path))
+    return paths
+
+
+def changed_challenges_since(repo: pathlib.Path, base_ref: str) -> list[str]:
+    challenges: set[str] = set()
+    challenges_root = repo / "challenges"
+    for path in changed_paths_since(repo, base_ref):
+        full_path = repo / path
+        candidate = full_path if full_path.is_dir() else full_path.parent
+        while candidate != repo and challenges_root in candidate.parents:
+            if (candidate / "challenge").is_dir():
+                challenges.add(candidate.relative_to(repo).as_posix())
+                break
+            candidate = candidate.parent
+    return sorted(challenges)
+
+
+def run_tests(
+    repo: pathlib.Path, artifact_dir: pathlib.Path, base_ref: str, attempt: int
+) -> pathlib.Path:
+    log_dir = artifact_dir / f"test-logs-attempt-{attempt}"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    test_log = artifact_dir / f"pwnshop-test-attempt-{attempt}.log"
+    command = pwnshop_invocation(
+        repo,
+        [
+            "test",
+            "--modified-since",
+            base_ref,
+            "--require-solved",
+            "--attempts",
+            "2",
+            "--log-failures",
+            str(log_dir),
+            "challenges",
+        ],
+    )
+    rc = run_logged(command, cwd=repo, log_path=test_log)
+    if rc != 0:
+        raise click.ClickException(
+            f"pwnshop tests failed; see {test_log} and {log_dir}"
+        )
+    return test_log
+
+
+def extract_json_array(text: str) -> list[dict[str, Any]]:
+    start = text.find("[")
+    end = text.rfind("]")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("no JSON array found")
+    parsed = json.loads(text[start : end + 1])
+    if not isinstance(parsed, list):
+        raise ValueError("playtest plan is not a list")
+    return parsed
+
+
+def safe_title(value: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9_.-]+", "-", value.strip()).strip("-")
+    digest = hashlib.sha256(value.encode()).hexdigest()[:8]
+    return f"{value[:50] or 'cast'}-{digest}"
+
+
+def run_casts(
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    analysis_path: pathlib.Path,
+    changed_challenges: list[str],
+    agent: str,
+) -> pathlib.Path:
+    cast_dir = artifact_dir / "casts"
+    cast_dir.mkdir(parents=True, exist_ok=True)
+    plan_output = run_agent(
+        agent,
+        build_playtest_plan_prompt(analysis_path, changed_challenges, artifact_dir),
+        repo=repo,
+        artifact_dir=artifact_dir,
+        output_name="playtest-plan.raw",
+    )
+    try:
+        plan = extract_json_array(plan_output.read_text())
+    except (ValueError, json.JSONDecodeError) as error:
+        raise click.ClickException(
+            f"Could not parse playtest plan from {plan_output}: {error}"
+        ) from error
+    (artifact_dir / "playtest-plan.json").write_text(
+        json.dumps(plan, indent=2, sort_keys=True) + "\n"
+    )
+
+    for index, item in enumerate(plan, start=1):
+        challenge = item.get("challenge")
+        command = item.get("command")
+        if not challenge or not isinstance(command, list):
+            raise click.ClickException(f"Invalid playtest item #{index}: {item!r}")
+        title = safe_title(item.get("title") or pathlib.Path(challenge).name)
+        cast_path = cast_dir / f"{index:02d}-{title}.cast"
+        log_path = cast_dir / f"{index:02d}-{title}.log"
+        pwnshop_args = [
+            "run",
+            "--cast-to",
+            str(cast_path),
+            challenge,
+            *[str(part) for part in command],
+        ]
+        rc = run_logged(
+            pwnshop_invocation(repo, pwnshop_args),
+            cwd=repo,
+            log_path=log_path,
+            timeout=600,
+        )
+        if rc != 0:
+            raise click.ClickException(
+                f"playtest cast failed for {challenge}; see {log_path}"
+            )
+    return cast_dir
+
+
+def create_pull_request(
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    base_ref: str,
+    title: str,
+    body_path: pathlib.Path,
+    draft: bool,
+) -> str:
+    if not shutil.which("gh"):
+        raise click.ClickException(
+            "`gh` is required for --create-pr but is not on PATH."
+        )
+
+    status = git_output(["status", "--porcelain"], repo)
+    if not status:
+        raise click.ClickException(
+            "No repository changes to commit; refusing to open an empty PR."
+        )
+
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", title], cwd=repo, check=True)
+    subprocess.run(["git", "push", "-u", "origin", "HEAD"], cwd=repo, check=True)
+
+    base_branch = base_ref.split("/", 1)[1] if "/" in base_ref else base_ref
+    command = [
+        "gh",
+        "pr",
+        "create",
+        "--base",
+        base_branch,
+        "--title",
+        title,
+        "--body-file",
+        str(body_path),
+    ]
+    if draft:
+        command.append("--draft")
+    run = subprocess.run(
+        command,
+        cwd=repo,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=True,
+    )
+    pr_url = run.stdout.strip()
+    (artifact_dir / "pr-url.txt").write_text(pr_url + "\n")
+    return pr_url
+
+
+@click.command("discord-feedback")
+@click.option(
+    "--guild-id",
+    default=PWN_COLLEGE_GUILD_ID,
+    show_default=True,
+    help="Discord guild/server ID to scrape.",
+)
+@click.option(
+    "--channel-id",
+    "channel_ids",
+    multiple=True,
+    help="Restrict scraping to a channel ID. Repeatable. Defaults to every readable public text channel/thread.",
+)
+@click.option(
+    "--hours",
+    type=click.IntRange(1, None),
+    default=24,
+    show_default=True,
+    help="How far back to scrape messages.",
+)
+@click.option(
+    "--token-env",
+    default="DISCORD_BOT_TOKEN",
+    show_default=True,
+    help="Environment variable containing a Discord bot token.",
+)
+@click.option(
+    "--artifact-root",
+    type=click.Path(path_type=pathlib.Path, file_okay=False),
+    default=pathlib.Path(".discord-feedback"),
+    show_default=True,
+    help="Directory for transcripts, reports, logs, and casts.",
+)
+@click.option(
+    "--agent",
+    type=click.Choice(["auto", "claude", "codex"]),
+    default="auto",
+    show_default=True,
+)
+@click.option(
+    "--apply", is_flag=True, help="Allow the selected agent to edit the repository."
+)
+@click.option(
+    "--create-pr",
+    is_flag=True,
+    help="Commit, push, and open a GitHub PR after validation.",
+)
+@click.option("--draft-pr", is_flag=True, help="Open the PR as a draft.")
+@click.option("--branch", help="Branch to create/switch to before applying changes.")
+@click.option(
+    "--base-ref",
+    default="origin/main",
+    show_default=True,
+    help="Base ref for modified challenge testing.",
+)
+@click.option(
+    "--max-messages", type=click.IntRange(1, None), default=20000, show_default=True
+)
+@click.option(
+    "--max-fix-attempts", type=click.IntRange(0, 5), default=2, show_default=True
+)
+@click.option(
+    "--include-authors",
+    is_flag=True,
+    help="Include Discord display names in local artifacts.",
+)
+@click.option("--include-threads/--no-include-threads", default=True, show_default=True)
+@click.option(
+    "--skip-tests",
+    is_flag=True,
+    help="Skip pwnshop validation. Not allowed with --create-pr.",
+)
+@click.option(
+    "--skip-casts",
+    is_flag=True,
+    help="Skip asciinema playtest planning/recording/review.",
+)
+@click.option(
+    "--fetch-only",
+    is_flag=True,
+    help="Only scrape and write sanitized transcript artifacts.",
+)
+@click.option(
+    "--allow-dirty",
+    is_flag=True,
+    help="Allow running with pre-existing uncommitted changes.",
+)
+def feedback_command(
+    guild_id,
+    channel_ids,
+    hours,
+    token_env,
+    artifact_root,
+    agent,
+    apply,
+    create_pr,
+    draft_pr,
+    branch,
+    base_ref,
+    max_messages,
+    max_fix_attempts,
+    include_authors,
+    include_threads,
+    skip_tests,
+    skip_casts,
+    fetch_only,
+    allow_dirty,
+):
+    """Turn recent public Discord feedback into challenge improvement PRs."""
+    repo = git_root()
+    if create_pr and not apply:
+        raise click.ClickException("--create-pr requires --apply.")
+    if create_pr and skip_tests:
+        raise click.ClickException("--create-pr cannot be combined with --skip-tests.")
+    token = os.environ.get(token_env)
+    if not token:
+        raise click.ClickException(
+            f"{token_env} is not set. Create a Discord bot token and export it first."
+        )
+    if (apply or create_pr or branch) and not allow_dirty:
+        ensure_clean_worktree(repo)
+
+    run_id = utc_now().strftime("%Y%m%d-%H%M%S")
+    artifact_dir = (repo / artifact_root / run_id).resolve()
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    if apply or create_pr or branch:
+        prepare_branch(repo, branch, create_pr, run_id)
+
+    env_channel_ids = os.environ.get("PWN_FEEDBACK_DISCORD_CHANNEL_IDS")
+    selected_channel_ids = parse_channel_ids(channel_ids, env_channel_ids)
+    until = utc_now()
+    since = until - datetime.timedelta(hours=hours)
+
+    api = DiscordAPI(token)
+    click.echo(f"Scraping Discord messages since {since.isoformat()} into {artifact_dir}")
+    channels, channels_by_id = discover_channels(
+        api, guild_id, selected_channel_ids, since, include_threads
+    )
+    messages_by_channel: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+    remaining = max_messages
+    for channel in channels:
+        if remaining <= 0:
+            break
+        messages = fetch_messages_since(api, channel, since, remaining)
+        remaining -= len(messages)
+        if messages:
+            messages_by_channel.append((channel, messages))
+            logger.info(
+                "fetched %d message(s) from %s",
+                len(messages),
+                channel_display_name(channel, channels_by_id),
+            )
+
+    messages = sanitize_messages(
+        messages_by_channel, channels_by_id, guild_id, include_authors
+    )
+    jsonl_path, transcript_path = write_transcript(artifact_dir, messages, since, until)
+    (artifact_dir / "run.json").write_text(
+        json.dumps(
+            {
+                "guild_id": guild_id,
+                "hours": hours,
+                "since": since.isoformat(),
+                "until": until.isoformat(),
+                "messages": len(messages),
+                "channels": len(channels),
+                "include_threads": include_threads,
+                "include_authors": include_authors,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    click.echo(f"Wrote {len(messages)} sanitized message(s) to {transcript_path}")
+    if fetch_only:
+        return
+
+    analysis_path = run_agent(
+        agent,
+        build_analysis_prompt(transcript_path, jsonl_path, artifact_dir),
+        repo=repo,
+        artifact_dir=artifact_dir,
+        output_name="analysis.md",
+    )
+    click.echo(f"Wrote feedback analysis to {analysis_path}")
+    if not apply:
+        return
+
+    run_agent(
+        agent,
+        build_implementation_prompt(analysis_path, artifact_dir),
+        repo=repo,
+        artifact_dir=artifact_dir,
+        output_name="implementation-agent.log",
+        apply=True,
+    )
+    implementation_notes = artifact_dir / "implementation-notes.md"
+    if not implementation_notes.exists():
+        implementation_notes.write_text(
+            "Implementation agent did not write a separate report; see implementation-agent.log.\n"
+        )
+
+    test_log = artifact_dir / "pwnshop-test-skipped.log"
+    if skip_tests:
+        test_log.write_text("Tests skipped by --skip-tests.\n")
+    else:
+        for attempt in range(1, max_fix_attempts + 2):
+            try:
+                test_log = run_tests(repo, artifact_dir, base_ref, attempt)
+                break
+            except click.ClickException:
+                if attempt > max_fix_attempts:
+                    raise
+                failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
+                run_agent(
+                    agent,
+                    build_fix_prompt(analysis_path, failure_dir, attempt),
+                    repo=repo,
+                    artifact_dir=artifact_dir,
+                    output_name=f"fix-agent-attempt-{attempt}.log",
+                    apply=True,
+                )
+
+    changed_challenges = changed_challenges_since(repo, base_ref)
+    ux_review = artifact_dir / "ux-review.md"
+    if skip_casts or not changed_challenges:
+        ux_review.write_text("Asciinema UX review skipped.\n")
+    else:
+        cast_dir = run_casts(
+            repo, artifact_dir, analysis_path, changed_challenges, agent
+        )
+        run_agent(
+            agent,
+            build_cast_review_prompt(
+                analysis_path, cast_dir, changed_challenges, artifact_dir
+            ),
+            repo=repo,
+            artifact_dir=artifact_dir,
+            output_name="ux-review-agent.log",
+            apply=True,
+        )
+        if not ux_review.exists():
+            ux_review.write_text(
+                "UX review agent did not write a separate report; see ux-review-agent.log.\n"
+            )
+        if not skip_tests:
+            test_log = run_tests(repo, artifact_dir, base_ref, max_fix_attempts + 2)
+
+    pr_body = artifact_dir / "pr-body.md"
+    pr_body_agent_output = run_agent(
+        agent,
+        build_pr_body_prompt(
+            analysis_path, implementation_notes, ux_review, test_log, artifact_dir
+        ),
+        repo=repo,
+        artifact_dir=artifact_dir,
+        output_name="pr-body.raw",
+    )
+    pr_body.write_text(pr_body_agent_output.read_text())
+
+    if create_pr:
+        pr_url = create_pull_request(
+            repo,
+            artifact_dir,
+            base_ref,
+            "Address challenge feedback from Discord",
+            pr_body,
+            draft_pr,
+        )
+        click.echo(f"Opened PR: {pr_url}")
+    else:
+        status = git_output(["status", "--short"], repo)
+        click.echo(f"Feedback run complete. Artifacts: {artifact_dir}")
+        if status:
+            click.echo("Repository changes are uncommitted:")
+            click.echo(status)
+
+
+if __name__ == "__main__":
+    try:
+        feedback_command()
+    except KeyboardInterrupt:
+        sys.exit(130)

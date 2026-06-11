@@ -58,6 +58,19 @@
               exec "$root/pwnshop" "$@"
             '';
           };
+
+          discord-feedback = pkgs.writeShellApplication {
+            name = "discord-feedback";
+            runtimeInputs = with pkgs; [
+              git
+              uv
+            ];
+            text = ''
+              set -euo pipefail
+              root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+              exec "$root/tools/feedback/discord-feedback" "$@"
+            '';
+          };
         in
         {
           default = pkgs.mkShell {
@@ -68,6 +81,7 @@
               git
               git-crypt
               jq
+              discord-feedback
               pwn-challenge-runtime
               pwnshop
               tomlq
