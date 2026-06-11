@@ -1,0 +1,203 @@
+import __main__ as checker
+import random
+import signal
+import subprocess
+
+executable = True
+give_flag = True
+
+MODE = "{{ mode }}"
+
+
+def word():
+    alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+    return "".join(random.choice(alphabet) for _ in range(random.randint(1, 10)))
+
+
+def feature_set():
+    features = {"literal"}
+    if MODE in ("printf-number", "printf-numbers", "printf-string", "printf-newline", "printf-hex"):
+        features.add("d")
+    if MODE in ("printf-string", "printf-newline", "printf-hex"):
+        features.add("s")
+    if MODE in ("printf-newline", "printf-hex"):
+        features.add("newline")
+    if MODE == "printf-hex":
+        features.add("hex")
+    return features
+
+
+def cases():
+    base = [
+        ("", []),
+        ("hello", []),
+        ("score: ", []),
+        (f"token-{word()}-done", []),
+    ]
+    if MODE == "printf-literal":
+        return base
+
+    single_numbers = [
+        ("value=%d", ["42"]),
+        ("%d", ["0"]),
+        ("neg=%d", ["-12345"]),
+        ("random=%d", [str(random.randint(-(10**6), 10**6))]),
+    ]
+    if MODE == "printf-number":
+        return base + single_numbers
+
+    many_numbers = [
+        ("opened %d files and skipped %d", ["7", "3"]),
+        ("%d files, %d bytes, %d errors", ["4", "1024", "0"]),
+        ("range %d..%d", ["-5", "5"]),
+        ("release %d.%d.%d", ["1", "2", "3"]),
+    ]
+    if MODE == "printf-numbers":
+        return base + single_numbers + many_numbers
+
+    strings = [
+        ("hello, %s", ["hacker"]),
+        ("%s:%d", ["count", "5"]),
+        ("%d:%s:%d", ["7", "left", "-2"]),
+        ("[%s]", [""]),
+        (f"{word()}=%s", [word()]),
+    ]
+    if MODE == "printf-string":
+        return base + single_numbers + many_numbers + strings
+
+    newlines = [
+        ("hello\\nworld", []),
+        ("%s\\n%d", ["row", "7"]),
+        ("\\n", []),
+        ("a\\nb\\nc", []),
+    ]
+    if MODE == "printf-newline":
+        return base + single_numbers + many_numbers + strings + newlines
+
+    hexes = [
+        ("\\x41\\x42\\x43", []),
+        ("A\\x00B", []),
+        ("%s\\x20%d", ["answer", "42"]),
+        ("\\x7e\\n", []),
+        ("byte=\\x2a", []),
+    ]
+    return base + single_numbers + many_numbers + strings + newlines + hexes
+
+
+def parse_hex_digit(ch):
+    if "0" <= ch <= "9":
+        return ord(ch) - ord("0")
+    if "a" <= ch <= "f":
+        return ord(ch) - ord("a") + 10
+    if "A" <= ch <= "F":
+        return ord(ch) - ord("A") + 10
+    raise AssertionError(f"test bug: invalid hex digit {ch!r}")
+
+
+def render(fmt, args, features):
+    out = bytearray()
+    argi = 0
+    i = 0
+    while i < len(fmt):
+        ch = fmt[i]
+
+        if ch == "%" and ("d" in features or "s" in features):
+            assert i + 1 < len(fmt), "test bug: dangling %"
+            spec = fmt[i + 1]
+            assert spec in features, f"test bug: unsupported %{spec}"
+            assert argi < len(args), "test bug: missing format argument"
+            if spec == "d":
+                out.extend(str(int(args[argi])).encode())
+            else:
+                out.extend(args[argi].encode("latin-1"))
+            argi += 1
+            i += 2
+            continue
+
+        if ch == "\\" and ("newline" in features or "hex" in features):
+            assert i + 1 < len(fmt), "test bug: dangling backslash"
+            esc = fmt[i + 1]
+            if esc == "n" and "newline" in features:
+                out.append(0x0A)
+                i += 2
+                continue
+            if esc == "x" and "hex" in features:
+                assert i + 3 < len(fmt), "test bug: short hex escape"
+                out.append((parse_hex_digit(fmt[i + 2]) << 4) | parse_hex_digit(fmt[i + 3]))
+                i += 4
+                continue
+
+        out.extend(ch.encode("latin-1"))
+        i += 1
+
+    assert argi == len(args), "test bug: unused format argument"
+    return bytes(out)
+
+
+def diagnose(fmt, expected, got):
+    if b"%d" in got or b"%s" in got:
+        return " A percent marker was copied literally instead of being handled."
+    if "\\n" in fmt and b"\\n" in got:
+        return " The two bytes backslash+n should become one newline byte."
+    if "\\x" in fmt and b"\\x" in got:
+        return " A hex escape should become one byte, not four printed characters."
+    return ""
+
+
+check_runtime_failure = "That output was wrong:\n"
+
+if MODE == "printf-literal":
+    check_runtime_prologue = "Let's run your printf on literal format strings..."
+    check_runtime_success = "Every literal format printed correctly!"
+elif MODE == "printf-number":
+    check_runtime_prologue = "Let's run your printf on decimal format markers..."
+    check_runtime_success = "Every decimal marker printed correctly!"
+elif MODE == "printf-numbers":
+    check_runtime_prologue = "Let's run your printf on multiple decimal markers..."
+    check_runtime_success = "Every decimal marker printed in the right order!"
+elif MODE == "printf-string":
+    check_runtime_prologue = "Let's run your printf on string and decimal markers..."
+    check_runtime_success = "Every string and decimal marker printed correctly!"
+elif MODE == "printf-newline":
+    check_runtime_prologue = "Let's run your printf on newline escapes..."
+    check_runtime_success = "Every newline escape printed correctly!"
+else:
+    check_runtime_prologue = "Let's run your printf on hex byte escapes..."
+    check_runtime_success = "Every hex byte escape printed correctly!"
+
+
+def check_runtime(binary_path):
+    checker.print_prompt()
+    checker.slow_print(f"{binary_path} <format> [values...]")
+    print("")
+
+    features = feature_set()
+    for i, (fmt, args) in enumerate(cases()):
+        expected = render(fmt, args, features)
+        try:
+            p = subprocess.run(
+                [binary_path, fmt, *args],
+                stdout=subprocess.PIPE,
+                stderr=(subprocess.DEVNULL if i != 0 else None),
+                timeout=5,
+            )
+        except subprocess.TimeoutExpired:
+            raise AssertionError(
+                f"Your program did not finish on format {fmt!r}. "
+                "Make sure the format scan advances on every path."
+            )
+        if p.returncode < 0:
+            signum = -p.returncode
+            signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
+            raise AssertionError(f"Your program crashed ({signame}) on format {fmt!r}.")
+        if p.returncode != 0:
+            raise AssertionError(
+                f"On format {fmt!r} with values {args!r}, your program should print {expected!r} "
+                f"and exit cleanly, but it exited with status {p.returncode}."
+            )
+        assert p.stdout == expected, (
+            f"On format {fmt!r} with values {args!r}, your program should print {expected!r}, "
+            f"but it printed {p.stdout!r}.{diagnose(fmt, expected, p.stdout)}"
+        )
+        print(f"  ok: {fmt!r} {args!r} -> {p.stdout!r}")
+    return True

@@ -1,0 +1,25 @@
+You can already write bytes to standard output.
+Now you will put that in a loop and start building a small `printf`-style program.
+
+The input is a **format string** in `argv[1]`.
+For this first level, there are no special markers yet.
+Every byte in the format string is ordinary text, so your job is to write those bytes to standard output.
+
+```
+argv[1]:  "score: "
+output:   "score: "
+```
+
+You can write one byte at a time as you scan, or find a run of ordinary bytes and write the whole run at once.
+Either way, stop when you reach the format string's NUL byte, then exit cleanly.
+
+Build and submit it as an executable:
+
+```console
+hacker@dojo:~$ as -o prog.o prog.s
+hacker@dojo:~$ ld -o prog prog.o
+hacker@dojo:~$ ./prog 'score: '
+score: hacker@dojo:~$ /challenge/check prog
+```
+
+Print the literal format string, and score!

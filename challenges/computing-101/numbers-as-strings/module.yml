@@ -66,3 +66,35 @@ resources:
 - type: challenge
   id: calc-5-unop
   name: "Unary Operators"
+- type: markdown
+  name: "Printf"
+  content: |
+    Programs rarely print just one fixed string.
+    They print messages assembled from fixed words and changing values: `answer: 13`, `hello, hacker`, `opened 3 files`, and so on.
+    You could write each message by hand, but then every new message shape needs its own copy loops, number conversions, and `write` calls.
+    A **format string** is a compact recipe for building those messages.
+    Ordinary characters in the recipe are printed as-is, while special markers say where the next value should go.
+    The code that follows such a recipe is called a **formatter**.
+    `printf` is the traditional name for a formatter that prints its result.
+    Your version will scan the format string from left to right and call `write` whenever it has a piece ready to print; it does not need to build the whole message first.
+    First it will print ordinary text.
+    Then it will add one `%d` for signed decimal numbers, several `%d` markers in one format, `%s` for strings, `\n` for newline bytes, and `\xNN` for arbitrary bytes written as two hex digits.
+    You do not need to know C or any existing `printf` to do this; you are building the mechanism directly from byte scans, `atoi`, `itoa`, and `write`.
+- type: challenge
+  id: printf-literal
+  name: "Literal Output"
+- type: challenge
+  id: printf-number
+  name: "Decimal Markers"
+- type: challenge
+  id: printf-numbers
+  name: "Multiple Decimal Markers"
+- type: challenge
+  id: printf-string
+  name: "String Markers"
+- type: challenge
+  id: printf-newline
+  name: "Newline Escapes"
+- type: challenge
+  id: printf-hex
+  name: "Hex Byte Escapes"
