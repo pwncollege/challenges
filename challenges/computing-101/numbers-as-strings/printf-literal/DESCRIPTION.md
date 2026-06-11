@@ -22,4 +22,11 @@ hacker@dojo:~$ ./prog 'score: '
 score: hacker@dojo:~$ /challenge/check prog
 ```
 
-Print the literal format string, and score!
+Note that in the above, `prog` doesn't print a terminal null byte, and the command prompt starts on the same line.
+That's okay --- we'll learn to write out newlines later!
+
+When testing, be aware that the commandline also has a built-in `printf` utility.
+If you name your program `printf`, make sure to run it via a path (e.g., `./printf`) to avoid the built-in one.
+
+----
+**NOTE:**

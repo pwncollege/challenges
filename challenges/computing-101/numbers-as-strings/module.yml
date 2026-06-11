@@ -82,10 +82,17 @@ resources:
     Ordinary characters in the recipe are printed as-is, while special markers say where the next value should go.
     The code that follows such a recipe is called a **formatter**.
     `printf` is the traditional name for a formatter that prints its result.
-    Your version will scan the format string from left to right and call `write` whenever it has a piece ready to print; it does not need to build the whole message first.
-    First it will print ordinary text.
-    Then it will add one `%d` for signed decimal numbers, several `%d` markers in one format, `%s` for strings, `\n` for newline bytes, and `\xNN` for arbitrary bytes written as two hex digits.
-    You do not need to know C or any existing `printf` to do this; you are building the mechanism directly from byte scans, `atoi`, `itoa`, and `write`.
+
+    This mini-module will have you build `printf`.
+    Your version will be special: it's yours!
+    Many other versions of `printf` exist as well.
+    For example, the "standard C library", which includes useful functions to use when writing applications in the C programming language, includes an implementation, and your commandline has it too:
+
+    ```console
+    hacker@dojo:~$ printf Hello
+    Hello
+    hacker@dojo:~$
+    ```
 - type: challenge
   id: printf-literal
   name: "Literal Output"
