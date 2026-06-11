@@ -1,0 +1,7 @@
+{%- set num_expr = "$((RANDOM % 246 + 5))" -%}
+{%- set asm = "main: pop rdi; mov rdi, 0; mov rax, 60; syscall" -%}
+{%- include "../../common/init-target" %}
+
+# Inject the right number of arguments so that argc == NUM when the user runs starti
+ARGS=$(python3 -c "print(' '.join(['a']*($NUM-1)))")
+echo "set args $ARGS" >> /challenge/.gdb

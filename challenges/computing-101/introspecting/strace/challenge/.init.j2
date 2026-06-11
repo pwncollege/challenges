@@ -1,0 +1,3 @@
+{%- set target = "/challenge/trace-me" -%}
+{%- set asm = "mov rdi, $NUM; mov rax, 37; syscall; mov rdi, 0; mov rax, 60; syscall" -%}
+{%- include "../../common/init-target" -%}
