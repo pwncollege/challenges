@@ -93,9 +93,14 @@ resources:
     Hello
     hacker@dojo:~$
     ```
+
+    We'll build up that idea in small steps: literal text, the ASCII newline byte, decimal numbers, repeated values, strings, and finally arbitrary bytes.
 - type: challenge
   id: printf-literal
   name: "Literal Output"
+- type: challenge
+  id: printf-newline
+  name: "Newline Escapes"
 - type: challenge
   id: printf-number
   name: "Decimal Markers"
@@ -105,9 +110,6 @@ resources:
 - type: challenge
   id: printf-string
   name: "String Markers"
-- type: challenge
-  id: printf-newline
-  name: "Newline Escapes"
 - type: challenge
   id: printf-hex
   name: "Hex Byte Escapes"

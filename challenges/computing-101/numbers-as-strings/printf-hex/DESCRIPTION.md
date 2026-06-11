@@ -1,4 +1,4 @@
-`\n` gives one named byte (in this case, the name is **n** for **n**ewline).
+`\n` gives one named ASCII byte: newline, `0x0a`.
 For arbitrary bytes, use a hex escape: `\xNN`.
 
 You've seen hex before: two hex digits describe one byte.

@@ -1,4 +1,4 @@
-Literal output gives you the scan-and-write loop.
+Literal output and newline escapes give you the scan-and-write loop.
 Now add the first marker: `%d`.
 
 The `%` byte says "this is a marker".
@@ -14,6 +14,7 @@ output:   "value=-42"
 When your scan reaches `%d`, skip both marker bytes, convert the next `argv` string with `atoi`, convert the resulting number back to text with signed `itoa`, and `write` those digits immediately.
 Then continue scanning the format string.
 For this level, the format string has at most one `%d` marker.
+Keep handling ordinary text and `\n` escapes as before.
 
 Build and submit as before:
 

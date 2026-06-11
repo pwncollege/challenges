@@ -16,12 +16,12 @@ def word():
 
 def feature_set():
     features = {"literal"}
-    if MODE in ("printf-number", "printf-numbers", "printf-string", "printf-newline", "printf-hex"):
-        features.add("d")
-    if MODE in ("printf-string", "printf-newline", "printf-hex"):
-        features.add("s")
-    if MODE in ("printf-newline", "printf-hex"):
+    if MODE in ("printf-newline", "printf-number", "printf-numbers", "printf-string", "printf-hex"):
         features.add("newline")
+    if MODE in ("printf-number", "printf-numbers", "printf-string", "printf-hex"):
+        features.add("d")
+    if MODE in ("printf-string", "printf-hex"):
+        features.add("s")
     if MODE == "printf-hex":
         features.add("hex")
     return features
@@ -37,14 +37,23 @@ def cases():
     if MODE == "printf-literal":
         return base
 
+    newlines = [
+        ("hello\\nworld", []),
+        ("\\n", []),
+        ("a\\nb\\nc", []),
+    ]
+    if MODE == "printf-newline":
+        return base + newlines
+
     single_numbers = [
         ("value=%d", ["42"]),
         ("%d", ["0"]),
         ("neg=%d", ["-12345"]),
+        ("line\\nvalue=%d", ["42"]),
         ("random=%d", [str(random.randint(-(10**6), 10**6))]),
     ]
     if MODE == "printf-number":
-        return base + single_numbers
+        return base + newlines + single_numbers
 
     many_numbers = [
         ("opened %d files and skipped %d", ["7", "3"]),
@@ -53,26 +62,18 @@ def cases():
         ("release %d.%d.%d", ["1", "2", "3"]),
     ]
     if MODE == "printf-numbers":
-        return base + single_numbers + many_numbers
+        return base + newlines + single_numbers + many_numbers
 
     strings = [
         ("hello, %s", ["hacker"]),
         ("%s:%d", ["count", "5"]),
+        ("%s\\n%d", ["row", "7"]),
         ("%d:%s:%d", ["7", "left", "-2"]),
         ("[%s]", [""]),
         (f"{word()}=%s", [word()]),
     ]
     if MODE == "printf-string":
-        return base + single_numbers + many_numbers + strings
-
-    newlines = [
-        ("hello\\nworld", []),
-        ("%s\\n%d", ["row", "7"]),
-        ("\\n", []),
-        ("a\\nb\\nc", []),
-    ]
-    if MODE == "printf-newline":
-        return base + single_numbers + many_numbers + strings + newlines
+        return base + newlines + single_numbers + many_numbers + strings
 
     hexes = [
         ("\\x41\\x42\\x43", []),
@@ -81,7 +82,7 @@ def cases():
         ("\\x7e\\n", []),
         ("byte=\\x2a", []),
     ]
-    return base + single_numbers + many_numbers + strings + newlines + hexes
+    return base + newlines + single_numbers + many_numbers + strings + hexes
 
 
 def parse_hex_digit(ch):

@@ -23,10 +23,7 @@ score: hacker@dojo:~$ /challenge/check prog
 ```
 
 Note that in the above, `prog` doesn't print a terminal null byte, and the command prompt starts on the same line.
-That's okay --- we'll learn to write out newlines later!
+That's okay --- the next level will teach your formatter how to write a newline.
 
 When testing, be aware that the commandline also has a built-in `printf` utility.
 If you name your program `printf`, make sure to run it via a path (e.g., `./printf`) to avoid the built-in one.
-
-----
-**NOTE:**
