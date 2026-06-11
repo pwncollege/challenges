@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+# Build the level's harness from its C source plus any assembly support files
+# (e.g. shim.S), then drop the sources from the container.
+shopt -s nullglob
+gcc -O0 -o /challenge/harness /challenge/harness.c /challenge/*.S -ldl
+rm -f /challenge/harness.c /challenge/*.S

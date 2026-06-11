@@ -1,0 +1,6 @@
+{%- set asm = "mov rdi, $NUM; mov rdi, 0; mov rax, 60; syscall" -%}
+{%- include "../../common/init-target" %}
+
+# bin/gdb hands this to submit-number for you once you quit GDB.
+echo $NUM > /challenge/.quit-key
+chmod 644 /challenge/.quit-key
