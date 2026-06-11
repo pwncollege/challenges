@@ -41,8 +41,11 @@ resources:
 - type: challenge
   id: memory-sum
   name: "Sum Them All"
+- type: header
+  name: "The Calculator"
 - type: markdown
-  name: "Calculator"
+  expandable: False
+  name: "The Calculator"
   content: |
     You can turn text into a number with your `atoi`, and a number back into text with your `itoa`.
     Now you'll use both at once to build a small command-line calculator.
@@ -66,8 +69,11 @@ resources:
 - type: challenge
   id: calc-5-unop
   name: "Unary Operators"
+- type: header
+  name: "printf"
 - type: markdown
-  name: "Printf"
+  expandable: False
+  name: "printf"
   content: |
     Programs rarely print just one fixed string.
     They print messages assembled from fixed words and changing values: `answer: 13`, `hello, hacker`, `opened 3 files`, and so on.
