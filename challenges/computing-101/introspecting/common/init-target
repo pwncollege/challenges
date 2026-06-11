@@ -1,0 +1,10 @@
+#!/bin/bash
+
+NUM={{ num_expr | default("$RANDOM") }}
+echo $NUM > /challenge/.correct
+chmod 600 /challenge/.correct
+
+ASM=$(mktemp).o
+as -o $ASM <<< ".intel_syntax noprefix; {{ asm }}"
+ld -o {{ target | default("/challenge/debug-me") }} $ASM 2>/tmp/.init.log
+rm $ASM
