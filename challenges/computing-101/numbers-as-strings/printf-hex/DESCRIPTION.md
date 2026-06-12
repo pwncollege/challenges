@@ -26,7 +26,7 @@ output byte:          "J"
 ```
 
 When your scan sees `\xNN`, convert the two hex digits into one byte and `write` that byte.
-Keep supporting ordinary text, `%d`, `%s`, and `\n`.
+Keep supporting ordinary text, `%d`, `%s`, `\n`, `\\`, and `%%`.
 
 Build and submit as before:
 

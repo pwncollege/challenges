@@ -94,13 +94,16 @@ resources:
     hacker@dojo:~$
     ```
 
-    We'll build up that idea in small steps: literal text, the ASCII newline byte, decimal numbers, repeated values, strings, and finally arbitrary bytes.
+    We'll build up that idea in small steps: literal text, the ASCII newline byte, escaped syntax characters, decimal numbers, repeated values, strings, and finally arbitrary bytes.
 - type: challenge
   id: printf-literal
   name: "Literal Output"
 - type: challenge
   id: printf-newline
   name: "Newline Escapes"
+- type: challenge
+  id: printf-escapes
+  name: "Escaped Syntax"
 - type: challenge
   id: printf-number
   name: "Decimal Markers"

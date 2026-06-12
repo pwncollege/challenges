@@ -16,8 +16,10 @@ def word():
 
 def feature_set():
     features = {"literal"}
-    if MODE in ("printf-newline", "printf-number", "printf-numbers", "printf-string", "printf-hex"):
+    if MODE in ("printf-newline", "printf-escapes", "printf-number", "printf-numbers", "printf-string", "printf-hex"):
         features.add("newline")
+    if MODE in ("printf-escapes", "printf-number", "printf-numbers", "printf-string", "printf-hex"):
+        features.add("syntax_escapes")
     if MODE in ("printf-number", "printf-numbers", "printf-string", "printf-hex"):
         features.add("d")
     if MODE in ("printf-string", "printf-hex"):
@@ -45,6 +47,15 @@ def cases():
     if MODE == "printf-newline":
         return base + newlines
 
+    syntax_escapes = [
+        ("path\\\\file", []),
+        ("progress: 100%%", []),
+        ("\\\\%%\\n", []),
+        (f"{word()}\\\\{word()}%%", []),
+    ]
+    if MODE == "printf-escapes":
+        return base + newlines + syntax_escapes
+
     single_numbers = [
         ("value=%d", ["42"]),
         ("%d", ["0"]),
@@ -53,7 +64,7 @@ def cases():
         ("random=%d", [str(random.randint(-(10**6), 10**6))]),
     ]
     if MODE == "printf-number":
-        return base + newlines + single_numbers
+        return base + newlines + syntax_escapes + single_numbers
 
     many_numbers = [
         ("opened %d files and skipped %d", ["7", "3"]),
@@ -62,7 +73,7 @@ def cases():
         ("release %d.%d.%d", ["1", "2", "3"]),
     ]
     if MODE == "printf-numbers":
-        return base + newlines + single_numbers + many_numbers
+        return base + newlines + syntax_escapes + single_numbers + many_numbers
 
     strings = [
         ("hello, %s", ["hacker"]),
@@ -73,7 +84,7 @@ def cases():
         (f"{word()}=%s", [word()]),
     ]
     if MODE == "printf-string":
-        return base + newlines + single_numbers + many_numbers + strings
+        return base + newlines + syntax_escapes + single_numbers + many_numbers + strings
 
     hexes = [
         ("\\x41\\x42\\x43", []),
@@ -82,7 +93,7 @@ def cases():
         ("\\x7e\\n", []),
         ("byte=\\x2a", []),
     ]
-    return base + newlines + single_numbers + many_numbers + strings + hexes
+    return base + newlines + syntax_escapes + single_numbers + many_numbers + strings + hexes
 
 
 def parse_hex_digit(ch):
@@ -102,9 +113,13 @@ def render(fmt, args, features):
     while i < len(fmt):
         ch = fmt[i]
 
-        if ch == "%" and ("d" in features or "s" in features):
+        if ch == "%" and ("syntax_escapes" in features or "d" in features or "s" in features):
             assert i + 1 < len(fmt), "test bug: dangling %"
             spec = fmt[i + 1]
+            if spec == "%" and "syntax_escapes" in features:
+                out.append(ord("%"))
+                i += 2
+                continue
             assert spec in features, f"test bug: unsupported %{spec}"
             assert argi < len(args), "test bug: missing format argument"
             if spec == "d":
@@ -115,9 +130,13 @@ def render(fmt, args, features):
             i += 2
             continue
 
-        if ch == "\\" and ("newline" in features or "hex" in features):
+        if ch == "\\" and ("newline" in features or "syntax_escapes" in features or "hex" in features):
             assert i + 1 < len(fmt), "test bug: dangling backslash"
             esc = fmt[i + 1]
+            if esc == "\\" and "syntax_escapes" in features:
+                out.append(ord("\\"))
+                i += 2
+                continue
             if esc == "n" and "newline" in features:
                 out.append(0x0A)
                 i += 2
@@ -138,6 +157,10 @@ def render(fmt, args, features):
 def diagnose(fmt, expected, got):
     if b"%d" in got or b"%s" in got:
         return " A percent marker was copied literally instead of being handled."
+    if "%%" in fmt and b"%%" in got:
+        return " The two percent bytes should become one percent byte."
+    if "\\\\" in fmt and b"\\\\" in got:
+        return " The two backslash bytes should become one backslash byte."
     if "\\n" in fmt and b"\\n" in got:
         return " The two bytes backslash+n should become one newline byte."
     if "\\x" in fmt and b"\\x" in got:
@@ -150,6 +173,12 @@ check_runtime_failure = "That output was wrong:\n"
 if MODE == "printf-literal":
     check_runtime_prologue = "Let's run your printf on literal format strings..."
     check_runtime_success = "Every literal format printed correctly!"
+elif MODE == "printf-newline":
+    check_runtime_prologue = "Let's run your printf on newline escapes..."
+    check_runtime_success = "Every newline escape printed correctly!"
+elif MODE == "printf-escapes":
+    check_runtime_prologue = "Let's run your printf on doubled syntax bytes..."
+    check_runtime_success = "Every doubled syntax byte printed correctly!"
 elif MODE == "printf-number":
     check_runtime_prologue = "Let's run your printf on decimal format markers..."
     check_runtime_success = "Every decimal marker printed correctly!"
@@ -159,9 +188,6 @@ elif MODE == "printf-numbers":
 elif MODE == "printf-string":
     check_runtime_prologue = "Let's run your printf on string and decimal markers..."
     check_runtime_success = "Every string and decimal marker printed correctly!"
-elif MODE == "printf-newline":
-    check_runtime_prologue = "Let's run your printf on newline escapes..."
-    check_runtime_success = "Every newline escape printed correctly!"
 else:
     check_runtime_prologue = "Let's run your printf on hex byte escapes..."
     check_runtime_success = "Every hex byte escape printed correctly!"
