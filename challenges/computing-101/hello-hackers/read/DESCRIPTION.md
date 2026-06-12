@@ -29,12 +29,11 @@ They are _hexadecimal_ representations of _ASCII_-encoded letters.
 If those words don't make sense, please run through the first half or so of the [Dealing with Data](/fundamentals/data-dealings) module and then come back here!
 
 In this level, we will combine `read` with our previous `write` abilities.
-The checker will pipe a fixed-size, padded flag buffer into your program's stdin.
-It will print the fixed byte count when it runs.
+The flag will be piped into your program's stdin --- 128 bytes of it.
 Your program should:
 
-1. first `read` the complete buffer from stdin to your program's memory
-2. `write` the complete buffer from that memory location to stdout
+1. first `read` 128 bytes from stdin to your program's memory
+2. `write` those 128 bytes from that memory location to stdout
 3. finally, exit with the exit code `42`.
 
 But what address should you use?
@@ -42,8 +41,8 @@ You need somewhere that's valid and writable, and you already know about one suc
 The `rsp` register points to the top of the stack, and there's plenty of writable space there.
 So you can just use `rsp` as your memory address: `mov rsi, rsp`.
 
-Later in this dojo, we'll learn how to use scratch space on the stack without clobbering any existing content!
 
+----
 **DEBUGGING:**
 Having trouble?
 Recall the Introspection module!
