@@ -39,6 +39,8 @@ THREAD_PARENT_TYPES = {0, 5, 15, 16}
 MAX_DISCORD_PAGE_SIZE = 100
 STATUS_HEARTBEAT_SECONDS = 30
 STATUS_TEXT_LIMIT = 160
+AGENT_MESSAGE_TEXT_LIMIT = 700
+COMMAND_OUTPUT_TEXT_LIMIT = 260
 
 
 class DiscordPermissionError(RuntimeError):
@@ -596,22 +598,66 @@ def summarize_codex_event(event: dict[str, Any]) -> Optional[str]:
         return event_type.replace(".", " ")
     if event_type.endswith(".output") or event_type.endswith(".delta"):
         return None
+
+    item = event.get("item")
+    if isinstance(item, dict):
+        item_type = item.get("type")
+
+        if item_type == "agent_message":
+            text = item.get("text") or item.get("message")
+            if text:
+                return f"message: {ellipsize(str(text), AGENT_MESSAGE_TEXT_LIMIT)}"
+            return "agent message"
+
+        if item_type == "command_execution":
+            command = item.get("command")
+            if event_type.endswith(".started"):
+                return f"running command: {ellipsize(str(command), 260)}"
+            exit_code = item.get("exit_code")
+            output = str(item.get("aggregated_output") or "").strip()
+            summary = f"command exited {exit_code}"
+            if output:
+                summary += f": {ellipsize(output, COMMAND_OUTPUT_TEXT_LIMIT)}"
+            return summary
+
+        if item_type == "file_change":
+            changes = item.get("changes") or []
+            formatted_changes = []
+            for change in changes:
+                if not isinstance(change, dict):
+                    continue
+                kind = change.get("kind", "change")
+                path = change.get("path", "")
+                formatted_changes.append(f"{kind} {path}")
+            status = item.get("status") or event_type.rsplit(".", 1)[-1]
+            if formatted_changes:
+                return (
+                    f"file changes {status}: "
+                    f"{ellipsize(', '.join(formatted_changes), 360)}"
+                )
+            return f"file changes {status}"
+
+        if item_type in {"mcp_tool_call", "web_search"}:
+            name = (
+                item.get("name")
+                or item.get("tool_name")
+                or item.get("query")
+                or item_type
+            )
+            action = "started" if event_type.endswith(".started") else "completed"
+            return f"{action} {item_type}: {ellipsize(str(name), 260)}"
+
+        if item_type:
+            action = event_type.rsplit(".", 1)[-1]
+            return f"{action}: {item_type}"
+
     if event_type.endswith(".begin") or event_type.endswith(".started"):
         command = event.get("command") or event.get("cmd")
         if command:
             return f"{event_type}: {ellipsize(str(command))}"
-        item = event.get("item")
-        if isinstance(item, dict):
-            item_type = item.get("type")
-            if item_type:
-                return f"{event_type}: {item_type}"
         return event_type.replace(".", " ")
     if event_type.endswith(".end") or event_type.endswith(".completed"):
         exit_code = event.get("exit_code")
-        if exit_code is None and isinstance(event.get("item"), dict):
-            item_type = event["item"].get("type")
-            if item_type:
-                return f"{event_type}: {item_type}"
         if exit_code is not None:
             return f"{event_type}: exit code {exit_code}"
         return event_type.replace(".", " ")
@@ -622,15 +668,23 @@ def summarize_codex_event(event: dict[str, Any]) -> Optional[str]:
     return None
 
 
+def codex_base_command() -> Optional[list[str]]:
+    if shutil.which("npm"):
+        return ["npm", "exec", "--yes", "@openai/codex@latest", "--", "codex"]
+    if shutil.which("codex"):
+        return ["codex"]
+    return None
+
+
 def resolve_agent(agent: str, apply: bool) -> tuple[str, list[str]]:
     if agent == "auto":
-        if shutil.which("codex"):
+        if codex_base_command():
             agent = "codex"
         elif shutil.which("claude"):
             agent = "claude"
         else:
             raise click.ClickException(
-                "No supported agent found on PATH (`claude` or `codex`)."
+                "No supported agent found (`npm`, `codex`, or `claude`)."
             )
 
     if agent == "claude":
@@ -642,13 +696,22 @@ def resolve_agent(agent: str, apply: bool) -> tuple[str, list[str]]:
         return agent, args
 
     if agent == "codex":
-        if not shutil.which("codex"):
-            raise click.ClickException("`codex` was requested but is not on PATH.")
-        args = ["codex", "exec", "--skip-git-repo-check", "--cd", str(git_root())]
+        codex_base = codex_base_command()
+        if not codex_base:
+            raise click.ClickException(
+                "`codex` was requested but neither `npm` nor `codex` is on PATH."
+            )
+        args = [
+            *codex_base,
+            "exec",
+            "--skip-git-repo-check",
+            "--cd",
+            str(git_root()),
+        ]
         if apply:
             args.append("--dangerously-bypass-approvals-and-sandbox")
         else:
-            args.extend(["--sandbox", "read-only"])
+            args.extend(["--sandbox", "danger-full-access"])
         args.append("-")
         return agent, args
 

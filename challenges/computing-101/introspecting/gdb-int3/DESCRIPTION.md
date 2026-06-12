@@ -18,6 +18,12 @@ Go and write a program that:
 1. Moves `1337` into `rdi`
 2. Executes `int3` to cooperatively hand control to the debugger
 
+Assemble and link your code into an ELF executable, then submit that executable:
+
+```console
+hacker@dojo:~$ /challenge/check /tmp/your-program
+```
+
 ----
 **NOTE:**
 When an `int3` is executed by a program _not_ running under a debugger, you will see:
