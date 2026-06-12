@@ -25,7 +25,7 @@ def check_disassembly(disas):
         f"You should pop into rdi (the exit code register), but you popped into {operands[pop_idx]}."
     )
 
-    mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
+    mov_operands = checker.mov_operands(disas)
     assert ['rax', '0x3c'] in mov_operands, (
         "You need to set rax to 60 (0x3c), the syscall number for exit!"
     )

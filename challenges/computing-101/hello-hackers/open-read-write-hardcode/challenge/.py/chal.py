@@ -15,7 +15,7 @@ check_runtime_success = "Your program opened, read, and wrote the flag!"
 check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
-	mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
+	mov_operands = checker.mov_operands(disas)
 
 	byte_stores = [dst for dst, _ in mov_operands if "byte ptr [rsp" in dst]
 	assert len(byte_stores) >= 6, (

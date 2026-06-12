@@ -13,7 +13,7 @@ check_runtime_success = "Your program correctly uses cmp and setz to compare arg
 check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
-	mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
+	mov_operands = checker.mov_operands(disas)
 	cmp_operands = [d.op_str for d in disas if d.mnemonic == 'cmp']
 
 	has_rsp_in_mov = any("[rsp]" in src for _, src in mov_operands)

@@ -19,6 +19,21 @@ import sys
 
 cs = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
 
+# A mov to a 32-bit register zero-extends into the full 64-bit register, so
+# e.g. `mov eax, 2` leaves rax == 2 exactly like `mov rax, 2` does. Normalize
+# mov destinations to the 64-bit name so chal.py operand checks accept either
+# spelling. (16- and 8-bit writes do NOT zero-extend, so they stay as-is.)
+SUBREG_TO_64 = {
+    "eax": "rax", "ebx": "rbx", "ecx": "rcx", "edx": "rdx",
+    "esi": "rsi", "edi": "rdi", "ebp": "rbp", "esp": "rsp",
+    "r8d": "r8", "r9d": "r9", "r10d": "r10", "r11d": "r11",
+    "r12d": "r12", "r13d": "r13", "r14d": "r14", "r15d": "r15",
+}
+
+def mov_operands(disas):
+    pairs = (d.op_str.split(", ") for d in disas if d.mnemonic == "mov")
+    return [[SUBREG_TO_64.get(dst, dst), src] for dst, src in pairs]
+
 sys.path.append(os.path.dirname(__file__)+"/.py")
 import chal #pylint:disable=import-error,wrong-import-position
 
@@ -185,12 +200,13 @@ def do_check(stage_id, stage_description, *args, **kwargs):
             return None
 
         print("")
-        console.print(getattr(chal, stage_id+"_prologue", f"{stage_description}...").format(**chal.__dict__), style="bold magenta")
+        # markup=False so brackets like [rsp] aren't parsed (and stripped) as rich markup tags
+        console.print(getattr(chal, stage_id+"_prologue", f"{stage_description}...").format(**chal.__dict__), style="bold magenta", markup=False)
         r = getattr(chal, stage_id)(*args, **kwargs)
-        console.print(getattr(chal, stage_id+"_success", "... YES! Great job!").format(**chal.__dict__), style="bold green")
+        console.print(getattr(chal, stage_id+"_success", "... YES! Great job!").format(**chal.__dict__), style="bold green", markup=False)
         return r
     except (ChallengeFailed, AssertionError) as _e:
-        console.print(getattr(chal, stage_id+"_failure", "... oops, we found an issue! Details below:\n").format(**chal.__dict__), style="bold red")
+        console.print(getattr(chal, stage_id+"_failure", "... oops, we found an issue! Details below:\n").format(**chal.__dict__), style="bold red", markup=False)
         # markup=False so brackets like [rsp+0x18] aren't parsed as rich markup tags
         console.print(str(_e), style="bold red", markup=False)
         raise
