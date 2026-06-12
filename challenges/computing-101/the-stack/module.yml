@@ -32,5 +32,3 @@ resources:
     Negative offsets, such as `[rsp-8]`, read bytes at smaller addresses.
 
     When a program starts, the kernel has already placed launch data at the starting `rsp` and at larger addresses to its right on this number line.
-    In a short one-shot program, you can sometimes overwrite that data after you are done with it.
-    In a function that must return cleanly, you normally reserve scratch space by moving `rsp` toward smaller addresses with `sub rsp, N`, use the reserved bytes, and move `rsp` back before returning.
