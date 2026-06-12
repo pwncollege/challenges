@@ -29,11 +29,11 @@ They are _hexadecimal_ representations of _ASCII_-encoded letters.
 If those words don't make sense, please run through the first half or so of the [Dealing with Data](/fundamentals/data-dealings) module and then come back here!
 
 In this level, we will combine `read` with our previous `write` abilities.
-The flag will be piped into your program's stdin --- 64 bytes of it.
+The flag will be piped into your program's stdin --- 128 bytes of it.
 Your program should:
 
-1. first `read` 64 bytes from stdin to your program's memory
-2. `write` those 64 bytes from that memory location to stdout
+1. first `read` 128 bytes from stdin to your program's memory
+2. `write` those 128 bytes from that memory location to stdout
 3. finally, exit with the exit code `42`.
 
 But what address should you use?

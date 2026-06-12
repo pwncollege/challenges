@@ -35,6 +35,21 @@ resources:
 - type: challenge
   id: shift-right
   name: "Shifting Right"
+- type: markdown
+  name: "Reading Stored Data in GDB"
+  content: |
+    Back in [Opening the Flag, with RIP](/computing-101/hello-hackers/open-read-write-rip-relative), you used a label and `lea` to pass the address of stored bytes to `open`.
+    In [Examining Memory with GDB](/computing-101/introspecting/gdb-examine-argv1), you used `x/s` to display the string at an address.
+
+    The next challenge combines those ideas in a binary you are reversing.
+    Instead of looking for every secret byte as an immediate inside a `cmp`, step through the code until a register points at the stored string, then examine that address as a string:
+
+    ```gdb
+    (gdb) x/s $rsi
+    ```
+
+    Here, `$rsi` is just an example register.
+    Use the register that the binary loads with the stored string's address, then run `/challenge/reverse-me` directly with the string you found.
 - type: challenge
   id: strcmp-stored
   name: "Loops on Data"

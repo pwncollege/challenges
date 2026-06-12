@@ -5,20 +5,21 @@ import os
 
 give_flag = False
 
-FLAG_SIZE = 64
+# Fixed challenge I/O size; keep this above the repo's minimum flag buffer size.
+FLAG_SIZE = 128
 
 try:
 	_flag = open("/flag").read().strip()
 except FileNotFoundError:
 	_flag = "pwn.college{test_placeholder_00000000000000}"
 
-_flag_padded = (_flag + "\n").ljust(FLAG_SIZE, "\r")[:FLAG_SIZE]
+_flag_padded = (_flag + "\n").encode().ljust(FLAG_SIZE, b" ")[:FLAG_SIZE]
 _flag_masked = "pwn.college{" + "*" * (len(_flag) - len("pwn.college{}")) + "}"
 
 # Write padded flag to a temp file so the shell can pipe it as stdin
 _flag_stdin_file = tempfile.mktemp(prefix='check_flag_')
 with open(_flag_stdin_file, 'wb') as f:
-	f.write(_flag_padded.encode())
+	f.write(_flag_padded)
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -74,7 +75,7 @@ def check_runtime(filename):
 		time.sleep(0.1)
 
 		actual_bytes = open("/tmp/stdout", "rb").read()
-		assert actual_bytes == _flag_padded.encode(), (
+		assert actual_bytes == _flag_padded, (
 			f"Your program should echo the flag to stdout!"
 		)
 

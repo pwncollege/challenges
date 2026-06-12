@@ -32,7 +32,9 @@ import click
 logger = logging.getLogger(__name__)
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
+GITHUB_API_BASE = "https://api.github.com"
 PWN_COLLEGE_GUILD_ID = "750635557666816031"
+PWN_COLLEGE_GITHUB_ORG = "pwncollege"
 TEXT_CHANNEL_TYPES = {0, 5}
 PUBLIC_THREAD_TYPES = {10, 11}
 THREAD_PARENT_TYPES = {0, 5, 15, 16}
@@ -41,9 +43,32 @@ STATUS_HEARTBEAT_SECONDS = 30
 STATUS_TEXT_LIMIT = 160
 AGENT_MESSAGE_TEXT_LIMIT = 700
 COMMAND_OUTPUT_TEXT_LIMIT = 260
+DEFAULT_PR_WATCH_INTERVAL_SECONDS = 60
+CI_FAILURE_CONCLUSIONS = {
+    "action_required",
+    "cancelled",
+    "failure",
+    "startup_failure",
+    "timed_out",
+}
+CI_FAILURE_STATES = {"error", "failure"}
+TRUSTED_PR_BOT_LOGINS = {
+    "chatgpt-codex-connector[bot]",
+    "github-copilot[bot]",
+    "openai-codex[bot]",
+    "copilot-pull-request-reviewer[bot]",
+}
 
 
 class DiscordPermissionError(RuntimeError):
+    pass
+
+
+class GitHubAPIError(RuntimeError):
+    pass
+
+
+class GitHubNotFound(GitHubAPIError):
     pass
 
 
@@ -98,6 +123,115 @@ class DiscordAPI:
         reset_after = headers.get("X-RateLimit-Reset-After")
         if remaining == "0" and reset_after:
             time.sleep(float(reset_after))
+
+
+class GitHubAPI:
+    def __init__(self, token: str):
+        self.token = token
+
+    @classmethod
+    def from_environment(cls, repo: pathlib.Path) -> "GitHubAPI":
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if not token and shutil.which("gh"):
+            try:
+                token = subprocess.check_output(
+                    ["gh", "auth", "token"], cwd=repo, text=True
+                ).strip()
+            except subprocess.CalledProcessError:
+                token = ""
+        if not token:
+            raise click.ClickException(
+                "A GitHub token is required for PR watching. "
+                "Set GH_TOKEN/GITHUB_TOKEN or authenticate `gh`."
+            )
+        return cls(token)
+
+    def request(
+        self,
+        path: str,
+        params: Optional[dict[str, Any]] = None,
+        *,
+        accept: str = "application/vnd.github+json",
+    ) -> Any:
+        payload, _headers = self._request(path, params=params, accept=accept)
+        return payload
+
+    def request_all(
+        self,
+        path: str,
+        params: Optional[dict[str, Any]] = None,
+        *,
+        accept: str = "application/vnd.github+json",
+    ) -> list[Any]:
+        page_params = dict(params or {})
+        page_params.setdefault("per_page", 100)
+        payload, headers = self._request(path, params=page_params, accept=accept)
+        if not isinstance(payload, list):
+            raise GitHubAPIError(f"Expected list response for {path}")
+        items = list(payload)
+        next_url = next_link(headers.get("Link"))
+        while next_url:
+            payload, headers = self._request(next_url, accept=accept)
+            if not isinstance(payload, list):
+                raise GitHubAPIError(f"Expected list response for {path}")
+            items.extend(payload)
+            next_url = next_link(headers.get("Link"))
+        return items
+
+    def is_org_member(self, org: str, login: str) -> bool:
+        quoted_login = urllib.parse.quote(login, safe="")
+        try:
+            self.request(f"/orgs/{org}/members/{quoted_login}")
+        except GitHubNotFound:
+            return False
+        return True
+
+    def _request(
+        self,
+        path_or_url: str,
+        params: Optional[dict[str, Any]] = None,
+        *,
+        accept: str,
+    ) -> tuple[Any, Any]:
+        if path_or_url.startswith("http://") or path_or_url.startswith("https://"):
+            url = path_or_url
+        else:
+            query = f"?{urllib.parse.urlencode(params)}" if params else ""
+            url = f"{GITHUB_API_BASE}{path_or_url}{query}"
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": accept,
+                "Authorization": f"Bearer {self.token}",
+                "User-Agent": "pwnshop-feedback",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                body = response.read().decode()
+                if response.status == 204 or not body:
+                    return None, response.headers
+                return json.loads(body), response.headers
+        except urllib.error.HTTPError as error:
+            body = error.read().decode(errors="replace")
+            if error.code == 404:
+                raise GitHubNotFound(f"404 for {url}") from error
+            raise GitHubAPIError(
+                f"GitHub API request failed: {error.code} {url}: {body}"
+            ) from error
+
+
+def next_link(link_header: Optional[str]) -> Optional[str]:
+    if not link_header:
+        return None
+    for part in link_header.split(","):
+        pieces = [piece.strip() for piece in part.split(";")]
+        if len(pieces) < 2 or pieces[1] != 'rel="next"':
+            continue
+        if pieces[0].startswith("<") and pieces[0].endswith(">"):
+            return pieces[0][1:-1]
+    return None
 
 
 def utc_now() -> datetime.datetime:
@@ -390,6 +524,28 @@ def git_root() -> pathlib.Path:
 
 def git_output(args: list[str], cwd: pathlib.Path) -> str:
     return subprocess.check_output(["git", *args], cwd=cwd, text=True).rstrip("\n")
+
+
+def github_repo_slug(repo: pathlib.Path) -> tuple[str, str]:
+    remote = git_output(["remote", "get-url", "origin"], repo)
+    patterns = [
+        r"github\.com[:/](?P<owner>[^/]+)/(?P<name>[^/.]+)(?:\.git)?$",
+        r"^git@github\.com:(?P<owner>[^/]+)/(?P<name>[^/.]+)(?:\.git)?$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, remote)
+        if match:
+            return match.group("owner"), match.group("name")
+    raise click.ClickException(f"Could not parse GitHub origin remote: {remote}")
+
+
+def parse_pr_number(pr_url: str) -> int:
+    if pr_url.isdigit():
+        return int(pr_url)
+    match = re.search(r"/pull/(\d+)(?:\D|$)", pr_url)
+    if not match:
+        raise click.ClickException(f"Could not parse pull request number from {pr_url}")
+    return int(match.group(1))
 
 
 def ensure_clean_worktree(repo: pathlib.Path) -> None:
@@ -997,6 +1153,63 @@ Write only that markdown document. The output will be saved under {artifact_dir}
 """
 
 
+def build_pr_feedback_prompt(
+    pr_url: str,
+    events_path: pathlib.Path,
+    response_path: pathlib.Path,
+    directions: list[str],
+) -> str:
+    return f"""Address eligible GitHub PR feedback for this pwn.college challenge PR.
+
+Pull request: {pr_url}
+Eligible comments/reviews JSON: {events_path}
+
+Rules:
+- Read only the listed eligible comments/reviews as instructions. Other PR comments are intentionally ignored.
+- Eligible feedback comes from pwncollege GitHub organization members or Codex-style review bots.
+- Inspect the PR diff and relevant repository files before editing.
+- Make the smallest correct repo changes that address every listed item.
+- If a listed item is already addressed, not actionable, or conflicts with repository/challenge safety rules, do not ignore it; explain the concrete reason in {response_path}.
+- If you revise or add challenge content, follow AGENTS.md and .claude/skills/authoring-challenges/SKILL.md.
+- Do not commit, push, merge, close the PR, or edit generated Discord artifacts.
+- Do not reply on GitHub unless a listed item cannot be resolved by code/docs and a maintainer needs that explanation on the PR.
+
+When done, write {response_path} with:
+- every listed comment/review URL
+- what changed for it, or why no repo change was appropriate
+- any validation you ran or still recommend
+{directions_block(directions)}
+"""
+
+
+def build_ci_fix_prompt(
+    pr_url: str,
+    failures_path: pathlib.Path,
+    log_dir: pathlib.Path,
+    response_path: pathlib.Path,
+    directions: list[str],
+) -> str:
+    return f"""Fix failing GitHub CI for this pwn.college challenge PR.
+
+Pull request: {pr_url}
+Failing check/status summary JSON: {failures_path}
+Fetched failed-job logs, when available: {log_dir}
+
+Rules:
+- Inspect the failing CI summaries/logs and the PR diff before editing.
+- Make the smallest correct repo changes that should make CI pass.
+- If the failure is caused by challenge content, follow AGENTS.md and .claude/skills/authoring-challenges/SKILL.md before editing.
+- Do not commit, push, merge, close the PR, or edit generated Discord artifacts.
+- Do not claim CI is fixed; the outer watcher will push and wait for GitHub to rerun checks.
+
+When done, write {response_path} with:
+- each failing check/status considered
+- changes made
+- any local validation you ran
+{directions_block(directions)}
+"""
+
+
 def relpath(path: pathlib.Path, repo: pathlib.Path) -> str:
     try:
         return path.resolve().relative_to(repo.resolve()).as_posix()
@@ -1352,6 +1565,460 @@ def run_casts(
     return cast_dir
 
 
+def load_watch_state(path: pathlib.Path) -> dict[str, Any]:
+    if not path.exists():
+        return {
+            "batch": 0,
+            "handled_events": [],
+            "ignored_events": [],
+            "ci_attempts": {},
+        }
+    try:
+        state = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {
+            "batch": 0,
+            "handled_events": [],
+            "ignored_events": [],
+            "ci_attempts": {},
+        }
+    state.setdefault("batch", 0)
+    state.setdefault("handled_events", [])
+    state.setdefault("ignored_events", [])
+    state.setdefault("ci_attempts", {})
+    return state
+
+
+def save_watch_state(path: pathlib.Path, state: dict[str, Any]) -> None:
+    path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+
+
+def get_pull_request(
+    api: GitHubAPI, owner: str, repo_name: str, pr_number: int
+) -> dict[str, Any]:
+    return api.request(f"/repos/{owner}/{repo_name}/pulls/{pr_number}")
+
+
+def event_time(item: dict[str, Any]) -> str:
+    return (
+        item.get("updated_at")
+        or item.get("submitted_at")
+        or item.get("created_at")
+        or ""
+    )
+
+
+def pr_event_key(kind: str, item: dict[str, Any]) -> str:
+    return f"{kind}:{item.get('id')}:{event_time(item)}"
+
+
+def is_codex_author(login: str) -> bool:
+    return login.lower() in TRUSTED_PR_BOT_LOGINS
+
+
+def accepted_pr_actor_reason(
+    api: GitHubAPI,
+    membership_cache: dict[str, bool],
+    login: str,
+) -> Optional[str]:
+    if not login:
+        return None
+    if is_codex_author(login):
+        return "codex-review"
+    if login not in membership_cache:
+        try:
+            membership_cache[login] = api.is_org_member(
+                PWN_COLLEGE_GITHUB_ORG, login
+            )
+        except GitHubAPIError as error:
+            logger.warning(
+                "could not verify GitHub org membership for %s: %s", login, error
+            )
+            membership_cache[login] = False
+    if membership_cache[login]:
+        return f"{PWN_COLLEGE_GITHUB_ORG}-org-member"
+    return None
+
+
+def compact_text(value: Optional[str], limit: int = 6000) -> str:
+    if not value:
+        return ""
+    if len(value) <= limit:
+        return value
+    return value[: limit - 80].rstrip() + "\n...[truncated]..."
+
+
+def compact_pr_event(
+    kind: str,
+    item: dict[str, Any],
+    reason: str,
+) -> Optional[dict[str, Any]]:
+    body = (item.get("body") or "").strip()
+    state = item.get("state")
+    if kind == "review" and not body and state not in {"CHANGES_REQUESTED"}:
+        return None
+    if kind != "review" and not body:
+        return None
+
+    user = item.get("user") or {}
+    event: dict[str, Any] = {
+        "key": pr_event_key(kind, item),
+        "kind": kind,
+        "accepted_reason": reason,
+        "author": user.get("login"),
+        "url": item.get("html_url"),
+        "created_at": item.get("created_at") or item.get("submitted_at"),
+        "updated_at": item.get("updated_at"),
+        "body": compact_text(body),
+    }
+    if state:
+        event["state"] = state
+    if kind == "review_comment":
+        event.update(
+            {
+                "path": item.get("path"),
+                "line": item.get("line") or item.get("original_line"),
+                "side": item.get("side"),
+                "diff_hunk": compact_text(item.get("diff_hunk"), limit=3000),
+                "review_id": item.get("pull_request_review_id"),
+            }
+        )
+    return event
+
+
+def collect_pr_feedback_events(
+    api: GitHubAPI,
+    owner: str,
+    repo_name: str,
+    pr_number: int,
+    membership_cache: dict[str, bool],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    sources = [
+        (
+            "issue_comment",
+            api.request_all(f"/repos/{owner}/{repo_name}/issues/{pr_number}/comments"),
+        ),
+        (
+            "review_comment",
+            api.request_all(f"/repos/{owner}/{repo_name}/pulls/{pr_number}/comments"),
+        ),
+        (
+            "review",
+            api.request_all(f"/repos/{owner}/{repo_name}/pulls/{pr_number}/reviews"),
+        ),
+    ]
+    accepted: list[dict[str, Any]] = []
+    ignored: list[dict[str, Any]] = []
+    for kind, items in sources:
+        for item in items:
+            user = item.get("user") or {}
+            login = user.get("login") or ""
+            key = pr_event_key(kind, item)
+            reason = accepted_pr_actor_reason(api, membership_cache, login)
+            if reason:
+                event = compact_pr_event(kind, item, reason)
+                if event:
+                    accepted.append(event)
+                continue
+            ignored.append(
+                {
+                    "key": key,
+                    "kind": kind,
+                    "author": login,
+                    "url": item.get("html_url"),
+                }
+            )
+    accepted.sort(key=lambda item: item.get("created_at") or "")
+    return accepted, ignored
+
+
+def check_run_failures(
+    api: GitHubAPI, owner: str, repo_name: str, sha: str
+) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        payload = api.request(
+            f"/repos/{owner}/{repo_name}/commits/{sha}/check-runs",
+            params={"per_page": 100, "page": page},
+        )
+        runs = payload.get("check_runs", []) if isinstance(payload, dict) else []
+        for run in runs:
+            conclusion = run.get("conclusion")
+            if (
+                run.get("status") == "completed"
+                and conclusion in CI_FAILURE_CONCLUSIONS
+            ):
+                output = run.get("output") or {}
+                failures.append(
+                    {
+                        "kind": "check_run",
+                        "id": run.get("id"),
+                        "name": run.get("name"),
+                        "status": run.get("status"),
+                        "conclusion": conclusion,
+                        "html_url": run.get("html_url"),
+                        "details_url": run.get("details_url"),
+                        "started_at": run.get("started_at"),
+                        "completed_at": run.get("completed_at"),
+                        "output_title": output.get("title"),
+                        "output_summary": compact_text(output.get("summary")),
+                    }
+                )
+        if len(runs) < 100:
+            return failures
+        page += 1
+
+
+def status_failures(
+    api: GitHubAPI, owner: str, repo_name: str, sha: str
+) -> list[dict[str, Any]]:
+    payload = api.request(f"/repos/{owner}/{repo_name}/commits/{sha}/status")
+    statuses = payload.get("statuses", []) if isinstance(payload, dict) else []
+    failures = []
+    for status in statuses:
+        state = status.get("state")
+        if state in CI_FAILURE_STATES:
+            failures.append(
+                {
+                    "kind": "status",
+                    "id": status.get("id"),
+                    "context": status.get("context"),
+                    "state": state,
+                    "description": status.get("description"),
+                    "target_url": status.get("target_url"),
+                    "created_at": status.get("created_at"),
+                    "updated_at": status.get("updated_at"),
+                }
+            )
+    return failures
+
+
+def collect_ci_failures(
+    api: GitHubAPI, owner: str, repo_name: str, sha: str
+) -> list[dict[str, Any]]:
+    return [
+        *check_run_failures(api, owner, repo_name, sha),
+        *status_failures(api, owner, repo_name, sha),
+    ]
+
+
+def ci_failure_fingerprint(sha: str, failures: list[dict[str, Any]]) -> str:
+    parts = []
+    for failure in failures:
+        name = failure.get("name") or failure.get("context") or failure.get("id")
+        result = failure.get("conclusion") or failure.get("state")
+        parts.append(f"{failure.get('kind')}:{name}:{result}")
+    digest = hashlib.sha256("\n".join(sorted(parts)).encode()).hexdigest()[:12]
+    return f"{sha}:{digest}"
+
+
+def extract_actions_run_id(failure: dict[str, Any]) -> Optional[str]:
+    for key in ("details_url", "html_url", "target_url"):
+        value = failure.get(key) or ""
+        match = re.search(r"/actions/runs/(\d+)", value)
+        if match:
+            return match.group(1)
+    return None
+
+
+def write_ci_failure_artifacts(
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    failures: list[dict[str, Any]],
+    batch: int,
+) -> tuple[pathlib.Path, pathlib.Path]:
+    log_dir = artifact_dir / f"ci-failure-logs-{batch:03d}"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    failures_with_logs = json.loads(json.dumps(failures))
+    for index, failure in enumerate(failures_with_logs, start=1):
+        run_id = extract_actions_run_id(failure)
+        if not run_id:
+            continue
+        title = safe_title(str(failure.get("name") or run_id))
+        log_path = log_dir / f"{index:02d}-{title}.log"
+        if not shutil.which("gh"):
+            log_path.write_text(
+                "gh is not available; failed-job logs were not fetched.\n"
+            )
+            failure["failed_log"] = str(log_path)
+            continue
+        try:
+            run = subprocess.run(
+                ["gh", "run", "view", run_id, "--log-failed"],
+                cwd=repo,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=300,
+                check=False,
+            )
+            log_path.write_text(run.stdout)
+            failure["failed_log"] = str(log_path)
+            failure["failed_log_exit_code"] = run.returncode
+        except subprocess.TimeoutExpired:
+            log_path.write_text(f"Timed out fetching failed logs for run {run_id}.\n")
+            failure["failed_log"] = str(log_path)
+            failure["failed_log_exit_code"] = "timeout"
+
+    failures_path = artifact_dir / f"ci-failures-{batch:03d}.json"
+    failures_path.write_text(
+        json.dumps(failures_with_logs, indent=2, sort_keys=True) + "\n"
+    )
+    return failures_path, log_dir
+
+
+def commit_and_push(repo: pathlib.Path, message: str) -> bool:
+    status = git_output(["status", "--porcelain"], repo)
+    if not status:
+        return False
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", message], cwd=repo, check=True)
+    subprocess.run(["git", "push", "-u", "origin", "HEAD"], cwd=repo, check=True)
+    return True
+
+
+def next_watch_batch(state: dict[str, Any]) -> int:
+    batch = int(state.get("batch", 0)) + 1
+    state["batch"] = batch
+    return batch
+
+
+def watch_pull_request(
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    pr_url: str,
+    agent: str,
+    directions: list[str],
+    watch_interval: int,
+    max_watch_fix_attempts: int,
+) -> None:
+    owner, repo_name = github_repo_slug(repo)
+    pr_number = parse_pr_number(pr_url)
+    api = GitHubAPI.from_environment(repo)
+    membership_cache: dict[str, bool] = {}
+    state_path = artifact_dir / "pr-watch-state.json"
+    state = load_watch_state(state_path)
+
+    click.echo(
+        f"Watching PR #{pr_number} for pwncollege/Codex feedback and failing CI "
+        f"until it is merged"
+    )
+    while True:
+        pr = get_pull_request(api, owner, repo_name, pr_number)
+        if pr.get("merged_at"):
+            click.echo(f"PR #{pr_number} is merged; stopping watcher")
+            state["merged_at"] = pr.get("merged_at")
+            save_watch_state(state_path, state)
+            return
+        if pr.get("state") != "open":
+            click.echo(f"PR #{pr_number} is {pr.get('state')}; stopping watcher")
+            save_watch_state(state_path, state)
+            return
+
+        accepted_events, ignored_events = collect_pr_feedback_events(
+            api, owner, repo_name, pr_number, membership_cache
+        )
+        handled = set(state.get("handled_events", []))
+        ignored = set(state.get("ignored_events", []))
+        new_ignored = [
+            event for event in ignored_events if event.get("key") not in ignored
+        ]
+        if new_ignored:
+            ignored.update(event["key"] for event in new_ignored if event.get("key"))
+            state["ignored_events"] = sorted(ignored)
+            click.echo(
+                f"Ignored {len(new_ignored)} external PR comment/review event(s)"
+            )
+
+        new_events = [
+            event for event in accepted_events if event.get("key") not in handled
+        ]
+        if new_events:
+            batch = next_watch_batch(state)
+            events_path = artifact_dir / f"pr-feedback-events-{batch:03d}.json"
+            response_path = artifact_dir / f"pr-feedback-response-{batch:03d}.md"
+            events_path.write_text(
+                json.dumps(new_events, indent=2, sort_keys=True) + "\n"
+            )
+            save_watch_state(state_path, state)
+            click.echo(
+                f"Addressing {len(new_events)} eligible PR comment/review event(s)"
+            )
+            run_agent(
+                agent,
+                build_pr_feedback_prompt(pr_url, events_path, response_path, directions),
+                repo=repo,
+                artifact_dir=artifact_dir,
+                output_name=f"pr-feedback-agent-{batch:03d}.log",
+                apply=True,
+            )
+            pushed = commit_and_push(repo, "Address PR feedback")
+            if pushed:
+                click.echo("Pushed PR feedback fixes")
+            else:
+                click.echo("PR feedback agent produced no repository changes")
+            handled.update(event["key"] for event in new_events if event.get("key"))
+            state["handled_events"] = sorted(handled)
+            save_watch_state(state_path, state)
+            if pushed:
+                time.sleep(min(10, watch_interval))
+            continue
+
+        head = pr.get("head") or {}
+        sha = head.get("sha")
+        if sha:
+            failures = collect_ci_failures(api, owner, repo_name, sha)
+        else:
+            failures = []
+        if failures:
+            fingerprint = ci_failure_fingerprint(sha, failures)
+            attempts = dict(state.get("ci_attempts", {}))
+            attempt = int(attempts.get(fingerprint, 0))
+            if attempt >= max_watch_fix_attempts:
+                click.echo(
+                    "CI is still failing for the same head/failure set after "
+                    f"{attempt} watcher repair attempt(s); waiting for new signal"
+                )
+            else:
+                batch = next_watch_batch(state)
+                attempts[fingerprint] = attempt + 1
+                state["ci_attempts"] = attempts
+                failures_path, log_dir = write_ci_failure_artifacts(
+                    repo, artifact_dir, failures, batch
+                )
+                response_path = artifact_dir / f"ci-fix-response-{batch:03d}.md"
+                save_watch_state(state_path, state)
+                click.echo(
+                    f"Fixing {len(failures)} failing CI check/status item(s) "
+                    f"for {sha[:12]}"
+                )
+                run_agent(
+                    agent,
+                    build_ci_fix_prompt(
+                        pr_url, failures_path, log_dir, response_path, directions
+                    ),
+                    repo=repo,
+                    artifact_dir=artifact_dir,
+                    output_name=f"ci-fix-agent-{batch:03d}.log",
+                    apply=True,
+                )
+                pushed = commit_and_push(repo, "Fix PR CI failures")
+                if pushed:
+                    click.echo("Pushed CI fixes")
+                    time.sleep(min(10, watch_interval))
+                else:
+                    click.echo("CI fix agent produced no repository changes")
+                save_watch_state(state_path, state)
+                continue
+
+        save_watch_state(state_path, state)
+        click.echo(
+            f"No eligible PR feedback or failing CI right now; sleeping {watch_interval}s"
+        )
+        time.sleep(watch_interval)
+
+
 def create_pull_request(
     repo: pathlib.Path,
     artifact_dir: pathlib.Path,
@@ -1365,15 +2032,10 @@ def create_pull_request(
             "`gh` is required for --create-pr but is not on PATH."
         )
 
-    status = git_output(["status", "--porcelain"], repo)
-    if not status:
+    if not commit_and_push(repo, title):
         raise click.ClickException(
             "No repository changes to commit; refusing to open an empty PR."
         )
-
-    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-m", title], cwd=repo, check=True)
-    subprocess.run(["git", "push", "-u", "origin", "HEAD"], cwd=repo, check=True)
 
     base_branch = base_ref.split("/", 1)[1] if "/" in base_ref else base_ref
     command = [
@@ -1485,6 +2147,26 @@ def create_pull_request(
     help="Skip asciinema playtest planning/recording/review.",
 )
 @click.option(
+    "--watch-pr/--no-watch-pr",
+    default=True,
+    show_default=True,
+    help="After --create-pr, monitor org/Codex PR feedback and failing CI until merge.",
+)
+@click.option(
+    "--watch-pr-interval",
+    type=click.IntRange(10, None),
+    default=DEFAULT_PR_WATCH_INTERVAL_SECONDS,
+    show_default=True,
+    help="Seconds between PR watcher polls.",
+)
+@click.option(
+    "--max-watch-fix-attempts",
+    type=click.IntRange(0, 10),
+    default=3,
+    show_default=True,
+    help="Maximum watcher repair attempts for the same CI failure fingerprint.",
+)
+@click.option(
     "--fetch-only",
     is_flag=True,
     help="Only scrape and write sanitized transcript artifacts.",
@@ -1513,6 +2195,9 @@ def feedback_command(
     include_threads,
     skip_tests,
     skip_casts,
+    watch_pr,
+    watch_pr_interval,
+    max_watch_fix_attempts,
     fetch_only,
     allow_dirty,
 ):
@@ -1584,6 +2269,9 @@ def feedback_command(
                 "include_threads": include_threads,
                 "include_authors": include_authors,
                 "directions": directions,
+                "watch_pr": watch_pr,
+                "watch_pr_interval": watch_pr_interval,
+                "max_watch_fix_attempts": max_watch_fix_attempts,
             },
             indent=2,
             sort_keys=True,
@@ -1715,6 +2403,16 @@ def feedback_command(
             draft_pr,
         )
         click.echo(f"Opened PR: {pr_url}")
+        if watch_pr:
+            watch_pull_request(
+                repo,
+                artifact_dir,
+                pr_url,
+                agent,
+                directions,
+                watch_pr_interval,
+                max_watch_fix_attempts,
+            )
     else:
         status = git_output(["status", "--short"], repo)
         click.echo(f"Feedback run complete. Artifacts: {artifact_dir}")
