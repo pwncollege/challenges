@@ -53,7 +53,7 @@ resources:
     [rdi+7]    48
     ```
 
-    A qword load reads those bytes starting at the lowest address:
+    A 64-bit load reads those bytes starting at the lowest address:
 
     ```asm
     mov rax, [rdi]
