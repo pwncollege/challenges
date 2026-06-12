@@ -9,6 +9,7 @@ with open("/flag") as f:
 
 ENCS = ["sdec", "udec", "hex", "bin"]
 NAME = {"sdec": "signed decimal", "udec": "unsigned decimal", "hex": "hex", "bin": "binary"}
+MAX_ATTEMPTS = 3
 ASK = {
     "sdec": "a signed (two's-complement) decimal number",
     "udec": "an unsigned decimal number",
@@ -50,9 +51,9 @@ def explain_wrong_value(b, src, dst, got):
 def ask_conversion(b, src, dst):
     expected = b - 256 if dst == "sdec" else b
     want_digits = 2 if dst == "hex" else 8 if dst == "bin" else None
-    prompt = f"  TARGET {NAME[dst].upper()} ({ASK[dst]}) > "
+    prompt = f"  CONVERT THE SOURCE VALUE TO {NAME[dst].upper()} ({ASK[dst]}) > "
 
-    for attempt in range(2):
+    for attempt in range(MAX_ATTEMPTS):
         try:
             got, dlen = parse(input(prompt), dst)
         except (EOFError, ValueError):
@@ -66,8 +67,8 @@ def ask_conversion(b, src, dst):
                 print("  Correct!")
                 return
 
-        if attempt == 0:
-            print("  Try this conversion one more time.")
+        if attempt < MAX_ATTEMPTS - 1:
+            print("  Try this conversion again.")
 
     print("  Run me again when you're ready.")
     sys.exit(1)
@@ -84,7 +85,7 @@ print("  - a SIGNED decimal number, -128 to 127 (two's complement)")
 print("  - two HEX digits")
 print("  - eight BINARY bits")
 print(f"I'll show you {len(sources)} bytes. For each, write it in all three of the other forms.")
-print("Get every conversion right in a row, and the flag is yours.\n")
+print("Work through every conversion, and the flag is yours.\n")
 
 for i, src in enumerate(sources, 1):
     b = random.randint(128, 255)  # high bit set, so the signed and unsigned readings differ
