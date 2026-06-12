@@ -41,11 +41,14 @@ But what address should you use?
 You need somewhere that's valid and writable, and you already know about one such place: the stack!
 The `rsp` register points to the top of the stack, and there's plenty of writable space there.
 So you can just use `rsp` as your memory address: `mov rsi, rsp`.
-In this one-shot program, that means you will overwrite some of the launch data that started at `[rsp]`, but you will not need that data again before exiting.
-Later, when a function needs scratch space while still preserving the stack's current contents, it will first reserve a frame with something like `sub rsp, N` and restore it with `add rsp, N`.
 
 
 ----
+**FUN FACT!**
+Using `rsp` here overwrites some launch data that starts at `[rsp]`.
+That is fine in this one-shot program because it exits before needing that data again.
+Later, when a function needs scratch space while preserving the stack's current contents, it first reserves a frame with something like `sub rsp, N` and restores it with `add rsp, N`.
+
 **DEBUGGING:**
 Having trouble?
 Recall the Introspection module!
