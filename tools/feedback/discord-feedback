@@ -52,12 +52,12 @@ CI_FAILURE_CONCLUSIONS = {
     "timed_out",
 }
 CI_FAILURE_STATES = {"error", "failure"}
-CODEX_AUTHOR_MARKERS = (
-    "codex",
-    "github-copilot",
-    "openai-codex",
-    "copilot-pull-request-reviewer",
-)
+TRUSTED_PR_BOT_LOGINS = {
+    "chatgpt-codex-connector[bot]",
+    "github-copilot[bot]",
+    "openai-codex[bot]",
+    "copilot-pull-request-reviewer[bot]",
+}
 
 
 class DiscordPermissionError(RuntimeError):
@@ -1613,8 +1613,7 @@ def pr_event_key(kind: str, item: dict[str, Any]) -> str:
 
 
 def is_codex_author(login: str) -> bool:
-    lowered = login.lower()
-    return any(marker in lowered for marker in CODEX_AUTHOR_MARKERS)
+    return login.lower() in TRUSTED_PR_BOT_LOGINS
 
 
 def accepted_pr_actor_reason(
