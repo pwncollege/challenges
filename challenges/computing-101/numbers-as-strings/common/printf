@@ -81,7 +81,7 @@ def cases():
         ("%s:%d", ["count", "5"]),
         ("%s\\n%d", ["row", "7"]),
         ("%d:%s:%d", ["7", "left", "-2"]),
-        ("[%s]", [""]),
+        ("empty=%s.", [""]),
         (f"{word()}=%s", [word()]),
     ]
     if MODE == "printf-string":
@@ -155,6 +155,41 @@ def render(fmt, args, features):
     return bytes(out)
 
 
+def quote_text(text):
+    pieces = []
+    for ch in text:
+        value = ord(ch)
+        if ch == "\\":
+            pieces.append("\\\\")
+        elif ch == "'":
+            pieces.append("\\'")
+        elif ch == "\n":
+            pieces.append("\\n")
+        elif 32 <= value <= 126:
+            pieces.append(ch)
+        else:
+            pieces.append(f"\\x{value:02x}")
+    return "'" + "".join(pieces) + "'"
+
+
+def describe_bytes(data):
+    if not data:
+        return "nothing"
+    return quote_text(data.decode("latin-1"))
+
+
+def describe_args(args):
+    if not args:
+        return "no extra values"
+    if len(args) == 1:
+        return f"extra value {quote_text(args[0])}"
+    return "extra values " + ", ".join(quote_text(arg) for arg in args)
+
+
+def describe_case(fmt, args):
+    return f"format {quote_text(fmt)} with {describe_args(args)}"
+
+
 def diagnose(fmt, args, expected, got):
     if "%s" in fmt and any("\\" in arg for arg in args) and got != expected:
         return (
@@ -201,11 +236,15 @@ else:
 
 def check_runtime(binary_path):
     checker.print_prompt()
-    checker.slow_print(f"{binary_path} <format> [values...]")
+    if MODE in ("printf-number", "printf-numbers", "printf-string", "printf-hex"):
+        checker.slow_print(f"{binary_path} FORMAT_TEXT EXTRA_VALUE ...")
+    else:
+        checker.slow_print(f"{binary_path} FORMAT_TEXT")
     print("")
 
     features = feature_set()
     for i, (fmt, args) in enumerate(cases()):
+        case = describe_case(fmt, args)
         expected = render(fmt, args, features)
         try:
             p = subprocess.run(
@@ -216,22 +255,22 @@ def check_runtime(binary_path):
             )
         except subprocess.TimeoutExpired:
             raise AssertionError(
-                f"Your program did not finish on format {fmt!r}. "
+                f"Your program did not finish on {case}. "
                 "Make sure the format scan advances on every path."
             )
         if p.returncode < 0:
             signum = -p.returncode
             signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
-            raise AssertionError(f"Your program crashed ({signame}) on format {fmt!r}.")
+            raise AssertionError(f"Your program crashed ({signame}) on {case}.")
         if p.returncode != 0:
             raise AssertionError(
-                f"On format {fmt!r} with values {args!r}, your program should print {expected!r} "
+                f"On {case}, your program should print {describe_bytes(expected)} "
                 f"and exit cleanly, but it exited with status {p.returncode}."
                 f"{diagnose(fmt, args, expected, p.stdout)}"
             )
         assert p.stdout == expected, (
-            f"On format {fmt!r} with values {args!r}, your program should print {expected!r}, "
-            f"but it printed {p.stdout!r}.{diagnose(fmt, args, expected, p.stdout)}"
+            f"On {case}, your program should print {describe_bytes(expected)}, "
+            f"but it printed {describe_bytes(p.stdout)}.{diagnose(fmt, args, expected, p.stdout)}"
         )
-        print(f"  ok: {fmt!r} {args!r} -> {p.stdout!r}")
+        print(f"  ok: {case} printed {describe_bytes(p.stdout)}")
     return True
