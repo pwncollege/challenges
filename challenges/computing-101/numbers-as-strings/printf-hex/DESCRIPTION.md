@@ -16,7 +16,7 @@ After recognizing the `\x`, the conversion uses the ASCII bytes for `4` and `a`.
 First convert each ASCII hex character into a 4-bit number, called a nibble.
 For `0` through `9`, subtract the ASCII value of `0` to get `0` through `9`.
 For `a` through `f`, subtract the ASCII value of `a` and add `10`; for `A` through `F`, subtract the ASCII value of `A` and add `10`.
-Then put the first nibble in the high half of the byte and the second nibble in the low half: `(first << 4) | second`.
+Then put the first nibble in the high half of the byte (using left shift, which you learned earlier!) and the second nibble in the low half: `(first << 4) | second`.
 
 ```
 format text:      \ x 4 a
