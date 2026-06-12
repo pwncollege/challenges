@@ -1,4 +1,4 @@
-Literal output, newline bytes, and escaped syntax give you the scan-and-write loop.
+Literal output, newline escapes, and escaped syntax give you the scan-and-write loop.
 Now add the first marker: `%d`.
 
 The `%` byte says "this is a marker".

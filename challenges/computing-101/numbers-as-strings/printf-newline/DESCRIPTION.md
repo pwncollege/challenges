@@ -1,22 +1,34 @@
-Literal output is byte-for-byte copying: read one byte from the format string, then `write` that byte.
-So far, those bytes have all drawn visible characters.
+Literal output can copy visible characters, but text also needs a way to name bytes that are awkward to type directly.
+A newline is the classic example: it moves the terminal to the next line instead of drawing a visible symbol.
 
-Text also has control bytes.
-A newline is the byte that moves the terminal to the next line.
-You've seen ASCII before: the ASCII newline byte is `0x0a`, which is decimal `10`.
+You've seen ASCII before: it assigns byte values to text characters and text controls.
+The ASCII newline byte is `0x0a`, which is decimal `10`.
 
-In this level, the format string can already contain newline bytes.
-Do not treat them as special syntax.
-Copy each newline byte just like any other byte, and `write` will move the output to the next line.
+The common standard for writing special characters in a format string is the `\` prefix, and a newline is written as `\n`.
+In this level, the two input bytes `\n` in the format string mean "write one output byte with value `0x0a`".
+The backslash starts an **escape sequence**, and the next byte says which special byte to write.
 
-Keep supporting ordinary visible text.
+```
+argv[1]:  "hello\nworld"
+output:   "hello"
+          "world"
+```
+
+When your scan sees a backslash followed by `n`, skip both bytes and `write` one byte with value `0x0a`.
+Keep supporting ordinary text.
+
+When testing your program yourself, beware that some shell syntax can interpret `\n` before your program sees it.
+Use plain quotes around the format string so your program receives the two bytes `\` and `n`, as in `./prog 'hello\nworld'`.
 
 Build and submit as before:
 
 ```console
 hacker@dojo:~$ as -o prog.o prog.s
 hacker@dojo:~$ ld -o prog prog.o
+hacker@dojo:~$ ./prog 'hello\nworld'
+hello
+world
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Copy newline bytes as part of the format string.
+Turn `\n` into a newline byte.
