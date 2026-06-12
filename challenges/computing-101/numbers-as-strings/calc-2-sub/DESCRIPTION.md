@@ -25,4 +25,4 @@ hacker@dojo:~$ ./prog 3 - 10
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Add the subtract branch, print the signed result, and score!
+Add the subtract branch and print the signed result.

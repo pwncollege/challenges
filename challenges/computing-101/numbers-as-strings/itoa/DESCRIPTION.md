@@ -24,4 +24,4 @@ hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
 hacker@dojo:~$ /challenge/check your-solve.so
 ```
 
-Reverse the digits, return the length, and score!
+Reverse the digits and return the length.

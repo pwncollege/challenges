@@ -36,4 +36,4 @@ hacker@dojo:~$ ./prog '~' 5
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Split on the argument count, handle both unary operators, and score!
+Split on the argument count and handle both unary operators.

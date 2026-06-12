@@ -13,4 +13,4 @@ We'll start with `itoa_digit`.
 Your `itoa_digit` gets a value in `rdi` (a single digit, `0`-`9`) and returns its ASCII character in `rax`.
 Remember to `.global itoa_digit` so the challenge can find it.
 
-Build and submit it as a library, add `0x30`, return the character, and score!
+Build and submit it as a library, add `0x30`, and return the character.
