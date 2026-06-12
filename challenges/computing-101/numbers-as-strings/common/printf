@@ -77,6 +77,7 @@ def cases():
 
     strings = [
         ("hello, %s", ["hacker"]),
+        ("%s", ["LITERAL\\WITH\\SLASHES"]),
         ("%s:%d", ["count", "5"]),
         ("%s\\n%d", ["row", "7"]),
         ("%d:%s:%d", ["7", "left", "-2"]),
@@ -154,7 +155,12 @@ def render(fmt, args, features):
     return bytes(out)
 
 
-def diagnose(fmt, expected, got):
+def diagnose(fmt, args, expected, got):
+    if "%s" in fmt and any("\\" in arg for arg in args) and got != expected:
+        return (
+            " A %s argument should be copied literally. Do not run argv strings through "
+            "your format-string scanner; escapes only apply inside the format string."
+        )
     if b"%d" in got or b"%s" in got:
         return " A percent marker was copied literally instead of being handled."
     if "%%" in fmt and b"%%" in got:
@@ -221,10 +227,11 @@ def check_runtime(binary_path):
             raise AssertionError(
                 f"On format {fmt!r} with values {args!r}, your program should print {expected!r} "
                 f"and exit cleanly, but it exited with status {p.returncode}."
+                f"{diagnose(fmt, args, expected, p.stdout)}"
             )
         assert p.stdout == expected, (
             f"On format {fmt!r} with values {args!r}, your program should print {expected!r}, "
-            f"but it printed {p.stdout!r}.{diagnose(fmt, expected, p.stdout)}"
+            f"but it printed {p.stdout!r}.{diagnose(fmt, args, expected, p.stdout)}"
         )
         print(f"  ok: {fmt!r} {args!r} -> {p.stdout!r}")
     return True
