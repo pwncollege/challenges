@@ -874,14 +874,225 @@ Inputs:
 - UX review: {ux_review}
 - Test log: {test_log}
 
-Do not quote Discord messages or include usernames. Mention that the feedback came from sanitized public Discord messages.
-Include:
-- Summary
-- Validation
-- Notes / deferred follow-ups
+Hard requirements:
+- Return the PR body itself, not a description of a PR body.
+- Do not write sentences such as "PR body written to...", "It covers...", or "Structure:".
+- Do not quote Discord messages or include usernames.
+- Mention that the feedback came from sanitized public Discord messages.
+- Be concrete: name the changed modules/files and what behavior changed.
+- Be honest about validation: only claim tests or playtests that appear in the inputs.
+- Keep it reviewer-facing and concise. Do not include process chatter or agent notes.
 
-Write only the PR body markdown. The output will be saved under {artifact_dir}.
+Use exactly this top-level structure:
+
+## Summary
+- ...
+
+## Validation
+- ...
+
+## Notes / deferred follow-ups
+- ...
+
+Write only that markdown document. The output will be saved under {artifact_dir}.
 """
+
+
+def relpath(path: pathlib.Path, repo: pathlib.Path) -> str:
+    try:
+        return path.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def read_text_if_exists(path: pathlib.Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(errors="replace")
+
+
+def first_line_after_heading(text: str, heading: str) -> Optional[str]:
+    in_section = False
+    marker = f"## {heading}".lower()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.lower() == marker:
+            in_section = True
+            continue
+        if not in_section or not stripped:
+            continue
+        if stripped.startswith("#"):
+            return None
+        return ellipsize(stripped, 260)
+    return None
+
+
+def markdown_headings(text: str, *, limit: int = 8) -> list[str]:
+    headings: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("##"):
+            continue
+        title = stripped.lstrip("#").strip()
+        lowered = title.lower()
+        if lowered in {"verdict", "files changed"}:
+            continue
+        if lowered.startswith("changed paths"):
+            continue
+        if lowered.startswith("recommended validation"):
+            continue
+        headings.append(ellipsize(title, 220))
+        if len(headings) >= limit:
+            break
+    return headings
+
+
+def test_log_summary(test_log: pathlib.Path) -> str:
+    text = read_text_if_exists(test_log)
+    if not text:
+        return f"Validation log was not found at `{test_log}`."
+
+    for line in reversed(text.splitlines()):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if (
+            "all tests passed" in stripped.lower()
+            or "tests failed" in stripped.lower()
+            or "failed" in stripped.lower()
+        ):
+            return stripped
+    return "Validation log was captured, but no final pass/fail summary was found."
+
+
+def git_diff_stat(repo: pathlib.Path, base_ref: str, *, max_lines: int = 24) -> str:
+    try:
+        stat = git_output(["diff", "--stat", base_ref, "--"], repo)
+    except subprocess.CalledProcessError:
+        return ""
+    lines = stat.strip().splitlines()
+    if len(lines) > max_lines:
+        hidden = len(lines) - max_lines
+        lines = [*lines[:max_lines], f"... ({hidden} more stat lines)"]
+    return "\n".join(lines)
+
+
+def pr_body_is_usable(body: str) -> bool:
+    lowered = body.lower()
+    forbidden = [
+        "pr body written to",
+        "it covers",
+        "structure:",
+        "one judgment call:",
+        "the **validation** section",
+        "the **summary** section",
+    ]
+    if any(marker in lowered for marker in forbidden):
+        return False
+    required = [
+        "## summary",
+        "## validation",
+        "## notes / deferred follow-ups",
+    ]
+    return all(marker in lowered for marker in required)
+
+
+def build_fallback_pr_body(
+    repo: pathlib.Path,
+    base_ref: str,
+    analysis_path: pathlib.Path,
+    implementation_notes: pathlib.Path,
+    ux_review: pathlib.Path,
+    test_log: pathlib.Path,
+) -> str:
+    implementation_text = read_text_if_exists(implementation_notes)
+    ux_text = read_text_if_exists(ux_review)
+    validation_line = test_log_summary(test_log)
+    stat = git_diff_stat(repo, base_ref)
+
+    implementation_headings = markdown_headings(implementation_text, limit=8)
+    ux_headings = markdown_headings(ux_text, limit=8)
+    summary_lines = [
+        heading
+        for heading in implementation_headings
+        if not any(
+            marker in heading.lower()
+            for marker in [
+                "already merged",
+                "no repo change",
+                "not changed",
+                "unrelated working-tree",
+            ]
+        )
+    ][:4]
+    summary_lines.extend(
+        heading
+        for heading in ux_headings
+        if not heading.lower().startswith(("fixed", "checked", "observations"))
+    )
+    summary_lines = summary_lines[:5]
+    if not summary_lines:
+        summary_lines = []
+
+    ux_verdict = first_line_after_heading(ux_text, "Verdict")
+    notes_lines = [
+        heading
+        for heading in implementation_headings
+        if any(
+            marker in heading.lower()
+            for marker in [
+                "already merged",
+                "no repo change",
+                "not changed",
+                "deferred",
+                "unrelated working-tree",
+            ]
+        )
+    ]
+    notes_lines.extend(
+        heading
+        for heading in ux_headings
+        if heading.lower().startswith(("observations", "checked"))
+    )
+
+    body: list[str] = [
+        "## Summary",
+        "",
+        "- Addresses feedback collected from sanitized public Discord messages.",
+    ]
+    for line in summary_lines:
+        body.append(f"- {line}")
+
+    if stat:
+        body.extend(["", "Changed file summary:", "", "```", stat, "```"])
+
+    body.extend(
+        [
+            "",
+            "## Validation",
+            "",
+            f"- {validation_line} (`{relpath(test_log, repo)}`)",
+        ]
+    )
+    if ux_verdict:
+        body.append(f"- UX review: {ux_verdict}")
+    elif ux_text:
+        body.append(f"- UX review captured in `{relpath(ux_review, repo)}`.")
+
+    body.extend(
+        [
+            "",
+            "## Notes / deferred follow-ups",
+            "",
+            f"- Analysis artifact: `{relpath(analysis_path, repo)}`",
+            f"- Implementation notes: `{relpath(implementation_notes, repo)}`",
+            f"- UX review: `{relpath(ux_review, repo)}`",
+        ]
+    )
+    for line in notes_lines[:3]:
+        body.append(f"- {line}")
+
+    return "\n".join(body).rstrip() + "\n"
 
 
 def pwnshop_invocation(repo: pathlib.Path, args: list[str]) -> list[str]:
@@ -1358,7 +1569,23 @@ def feedback_command(
         artifact_dir=artifact_dir,
         output_name="pr-body.raw",
     )
-    pr_body.write_text(pr_body_agent_output.read_text())
+    agent_pr_body = pr_body_agent_output.read_text()
+    if pr_body_is_usable(agent_pr_body):
+        pr_body.write_text(agent_pr_body.rstrip() + "\n")
+    else:
+        click.echo(
+            "PR body agent output was not usable markdown; writing local fallback body"
+        )
+        pr_body.write_text(
+            build_fallback_pr_body(
+                repo,
+                base_ref,
+                analysis_path,
+                implementation_notes,
+                ux_review,
+                test_log,
+            )
+        )
 
     if create_pr:
         pr_url = create_pull_request(
