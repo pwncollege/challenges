@@ -808,8 +808,25 @@ def run_agent(
     return output_path
 
 
+def directions_block(directions: list[str]) -> str:
+    cleaned = [direction.strip() for direction in directions if direction.strip()]
+    if not cleaned:
+        return ""
+    lines = [
+        "",
+        "Operator directions for this run:",
+        "- Treat these as mandatory constraints for every recommendation, edit, validation step, and report.",
+        "- If a direction conflicts with repository safety rules or the explicit phase requirements above, stop and explain the conflict in the relevant artifact instead of ignoring it.",
+    ]
+    lines.extend(f"- {direction}" for direction in cleaned)
+    return "\n" + "\n".join(lines)
+
+
 def build_analysis_prompt(
-    transcript_path: pathlib.Path, jsonl_path: pathlib.Path, artifact_dir: pathlib.Path
+    transcript_path: pathlib.Path,
+    jsonl_path: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    directions: list[str],
 ) -> str:
     return f"""Analyze recent pwn.college Discord feedback for actionable challenge/curriculum fixes.
 
@@ -835,11 +852,12 @@ Output markdown with these sections:
 3. Bridge/new challenge work that is not yet actionable, with exact blockers
 4. Non-actionable or deferred feedback
 5. Suggested validation plan
+{directions_block(directions)}
 """
 
 
 def build_implementation_prompt(
-    analysis_path: pathlib.Path, artifact_dir: pathlib.Path
+    analysis_path: pathlib.Path, artifact_dir: pathlib.Path, directions: list[str]
 ) -> str:
     return f"""Implement high-confidence pwn.college challenge/curriculum improvements from this feedback analysis:
 
@@ -861,11 +879,15 @@ When done, write a concise implementation note to {artifact_dir}/implementation-
 - changed challenge/module paths
 - what learner confusion each change addresses
 - any tests or playtests you recommend
+{directions_block(directions)}
 """
 
 
 def build_fix_prompt(
-    analysis_path: pathlib.Path, failure_dir: pathlib.Path, attempt: int
+    analysis_path: pathlib.Path,
+    failure_dir: pathlib.Path,
+    attempt: int,
+    directions: list[str],
 ) -> str:
     return f"""The feedback implementation has failing validation on attempt {attempt}.
 
@@ -875,6 +897,7 @@ Failure logs: {failure_dir}
 Read the failure logs, inspect the changed files, and make the smallest correct fixes.
 Follow AGENTS.md and .claude/skills/authoring-challenges/SKILL.md.
 Do not commit, push, open a PR, or edit generated Discord artifacts.
+{directions_block(directions)}
 """
 
 
@@ -882,6 +905,7 @@ def build_playtest_plan_prompt(
     analysis_path: pathlib.Path,
     changed_challenges: list[str],
     artifact_dir: pathlib.Path,
+    directions: list[str],
 ) -> str:
     changed = (
         "\n".join(f"- {challenge}" for challenge in changed_challenges) or "- none"
@@ -900,6 +924,7 @@ Return ONLY a JSON array. Each object must have:
 
 Prefer learner-realistic commands that exercise the revised description and solve path. If a challenge cannot be usefully cast noninteractively, omit it and explain why in {artifact_dir}/playtest-omissions.md.
 Do not include secrets or Discord transcript content.
+{directions_block(directions)}
 """
 
 
@@ -908,6 +933,7 @@ def build_cast_review_prompt(
     cast_dir: pathlib.Path,
     changed_challenges: list[str],
     artifact_dir: pathlib.Path,
+    directions: list[str],
 ) -> str:
     changed = (
         "\n".join(f"- {challenge}" for challenge in changed_challenges) or "- none"
@@ -925,6 +951,7 @@ Tasks:
 - If you find a small concrete issue, fix it. If you find a large or speculative issue, write it to {artifact_dir}/ux-deferred.md.
 - Do not commit, push, open a PR, or edit Discord transcripts.
 - Write {artifact_dir}/ux-review.md with findings and any changes made.
+{directions_block(directions)}
 """
 
 
@@ -934,6 +961,7 @@ def build_pr_body_prompt(
     ux_review: pathlib.Path,
     test_log: pathlib.Path,
     artifact_dir: pathlib.Path,
+    directions: list[str],
 ) -> str:
     return f"""Draft a GitHub PR body for this pwn.college feedback run.
 
@@ -965,6 +993,7 @@ Use exactly this top-level structure:
 - ...
 
 Write only that markdown document. The output will be saved under {artifact_dir}.
+{directions_block(directions)}
 """
 
 
@@ -1271,12 +1300,15 @@ def run_casts(
     analysis_path: pathlib.Path,
     changed_challenges: list[str],
     agent: str,
+    directions: list[str],
 ) -> pathlib.Path:
     cast_dir = artifact_dir / "casts"
     cast_dir.mkdir(parents=True, exist_ok=True)
     plan_output = run_agent(
         agent,
-        build_playtest_plan_prompt(analysis_path, changed_challenges, artifact_dir),
+        build_playtest_plan_prompt(
+            analysis_path, changed_challenges, artifact_dir, directions
+        ),
         repo=repo,
         artifact_dir=artifact_dir,
         output_name="playtest-plan.raw",
@@ -1410,6 +1442,11 @@ def create_pull_request(
     show_default=True,
 )
 @click.option(
+    "--directions",
+    multiple=True,
+    help="Additional mandatory natural-language directions for every agent phase. Repeatable.",
+)
+@click.option(
     "--apply", is_flag=True, help="Allow the selected agent to edit the repository."
 )
 @click.option(
@@ -1464,6 +1501,7 @@ def feedback_command(
     token_env,
     artifact_root,
     agent,
+    directions,
     apply,
     create_pr,
     draft_pr,
@@ -1480,6 +1518,7 @@ def feedback_command(
 ):
     """Turn recent public Discord feedback into challenge improvement PRs."""
     repo = git_root()
+    directions = [direction.strip() for direction in directions if direction.strip()]
     if create_pr and not apply:
         raise click.ClickException("--create-pr requires --apply.")
     if create_pr and skip_tests:
@@ -1544,6 +1583,7 @@ def feedback_command(
                 "channels": len(channels),
                 "include_threads": include_threads,
                 "include_authors": include_authors,
+                "directions": directions,
             },
             indent=2,
             sort_keys=True,
@@ -1556,7 +1596,7 @@ def feedback_command(
 
     analysis_path = run_agent(
         agent,
-        build_analysis_prompt(transcript_path, jsonl_path, artifact_dir),
+        build_analysis_prompt(transcript_path, jsonl_path, artifact_dir, directions),
         repo=repo,
         artifact_dir=artifact_dir,
         output_name="analysis.md",
@@ -1567,7 +1607,7 @@ def feedback_command(
 
     run_agent(
         agent,
-        build_implementation_prompt(analysis_path, artifact_dir),
+        build_implementation_prompt(analysis_path, artifact_dir, directions),
         repo=repo,
         artifact_dir=artifact_dir,
         output_name="implementation-agent.log",
@@ -1595,7 +1635,7 @@ def feedback_command(
                 failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
                 run_agent(
                     agent,
-                    build_fix_prompt(analysis_path, failure_dir, attempt),
+                    build_fix_prompt(analysis_path, failure_dir, attempt, directions),
                     repo=repo,
                     artifact_dir=artifact_dir,
                     output_name=f"fix-agent-attempt-{attempt}.log",
@@ -1612,12 +1652,12 @@ def feedback_command(
             f"{len(changed_challenges)} changed challenge(s)"
         )
         cast_dir = run_casts(
-            repo, artifact_dir, analysis_path, changed_challenges, agent
+            repo, artifact_dir, analysis_path, changed_challenges, agent, directions
         )
         run_agent(
             agent,
             build_cast_review_prompt(
-                analysis_path, cast_dir, changed_challenges, artifact_dir
+                analysis_path, cast_dir, changed_challenges, artifact_dir, directions
             ),
             repo=repo,
             artifact_dir=artifact_dir,
@@ -1636,7 +1676,12 @@ def feedback_command(
     pr_body_agent_output = run_agent(
         agent,
         build_pr_body_prompt(
-            analysis_path, implementation_notes, ux_review, test_log, artifact_dir
+            analysis_path,
+            implementation_notes,
+            ux_review,
+            test_log,
+            artifact_dir,
+            directions,
         ),
         repo=repo,
         artifact_dir=artifact_dir,
