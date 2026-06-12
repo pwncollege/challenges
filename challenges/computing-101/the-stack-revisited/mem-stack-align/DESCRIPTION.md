@@ -37,7 +37,8 @@ This has an interesting consequence: **the more bytes you stuff into the environ
 An extra env byte means `rsp` ends up at a smaller address, the arg-strings region sits one byte further "left", and `argv[0]` (a pointer into that region) holds a one-byte-smaller value.
 
 In this challenge, run `/challenge/program` to see what address it wants `argv[0]` at.
-Then add a single environment variable, with just the right number of `x`s in its value, to shift `argv[0]` to that address:
+Then add a single environment variable, with just the right number of `x`s in its value, to shift `argv[0]` to that address.
+You can do this with `env -i`, which clears the child program's environment so that it contains _only_ the variables you specify --- otherwise, your shell's own variables would also land on the stack and throw off your count:
 
 ```text
 hacker@dojo:~$ env -i FOO=xxxxxxxx /challenge/program
