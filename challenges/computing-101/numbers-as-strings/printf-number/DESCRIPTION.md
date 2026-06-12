@@ -26,4 +26,4 @@ value=-42
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Replace decimal markers as you scan, and score!
+Replace decimal markers as you scan.

@@ -32,4 +32,4 @@ hacker has 3 flags
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Consume values in order, write each piece on demand, and score!
+Consume values in order and write each piece on demand.

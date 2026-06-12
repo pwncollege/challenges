@@ -44,4 +44,4 @@ hacker@dojo:~$ ./prog 6 + 7
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Read the operands, dispatch on the operator, print the sum, and score!
+Read the operands, dispatch on the operator, and print the sum.

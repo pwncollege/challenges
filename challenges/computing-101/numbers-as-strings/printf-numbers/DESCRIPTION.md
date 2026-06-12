@@ -24,4 +24,4 @@ opened 7 files and skipped 3
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Consume the decimal arguments in order, and score!
+Consume the decimal arguments in order.

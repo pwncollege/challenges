@@ -26,4 +26,4 @@ hacker@dojo:~$ ./prog 6 '*' 7
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Add the multiply branch, print the product, and score!
+Add the multiply branch and print the product.

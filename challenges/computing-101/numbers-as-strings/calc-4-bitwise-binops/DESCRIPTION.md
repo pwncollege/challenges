@@ -29,4 +29,4 @@ hacker@dojo:~$ ./prog 12 '|' 10
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Add the three bitwise branches, and score!
+Add the three bitwise branches.

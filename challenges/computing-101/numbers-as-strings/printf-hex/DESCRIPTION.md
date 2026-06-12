@@ -38,4 +38,4 @@ byte=*
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Decode the hex byte escape, write it, and score!
+Decode the hex byte escape and write it.

@@ -27,4 +27,4 @@ progress: 100%
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Turn doubled syntax bytes into one literal byte, and score!
+Turn doubled syntax bytes into one literal byte.

@@ -22,4 +22,4 @@ hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
 hacker@dojo:~$ /challenge/check your-solve.so
 ```
 
-Handle the sign, return the length, and score!
+Handle the sign and return the length.

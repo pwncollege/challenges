@@ -31,4 +31,4 @@ world
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Turn `\n` into a newline byte, and score!
+Turn `\n` into a newline byte.

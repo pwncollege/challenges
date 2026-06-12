@@ -16,4 +16,4 @@ hacker@dojo:~$ ld -o prog prog.o
 hacker@dojo:~$ /challenge/check prog
 ```
 
-Convert the argument, exit with its value, and score!
+Convert the argument and exit with its value.
