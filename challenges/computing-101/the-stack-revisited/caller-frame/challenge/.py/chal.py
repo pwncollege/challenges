@@ -17,7 +17,7 @@ check_runtime_prologue = (
     "Let's see if your solve reads the flag out of the caller's frame "
     "and writes it to stdout..."
 )
-check_runtime_success = "If your solve is right, the flag is printed above!"
+check_runtime_success = "If your solve is right, your code printed the flag."
 check_runtime_failure = "Hmm, that's not right:\n"
 
 

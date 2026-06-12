@@ -56,6 +56,6 @@ int main(int argc, char **argv) {
 
     caller(solve, flag_buf);
 
-    LOG("caller() returned. (If your write was correct, the flag printed above.)");
+    LOG("caller() returned after your solve ran.");
     return 0;
 }
