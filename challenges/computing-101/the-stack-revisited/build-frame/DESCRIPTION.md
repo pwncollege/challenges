@@ -10,7 +10,8 @@ You need actual memory, and a function gets its own scratch memory by carving it
 
 Recall that the stack grows *downward*: subtracting from `rsp` moves it to a lower address and leaves the region between the old and new `rsp` free for you to use.
 So `sub rsp, 256` reserves 256 bytes of scratch space; your slots live at `[rsp]` through `[rsp+255]`, indexed by byte value.
-Here, "reserves" means moving `rsp` by convention so your function does not overwrite return or caller data; it does not ask the kernel for fresh memory.
+Note that this doesn't bring any new memory into existence!
+The stack memory was already there, it's just that `rsp` was pointing to one specific place inside it before the `sub`, and after the `sub` it will be pointing a bit further "left", so stack accesses using `rsp` (e.g., `mov [rsp], XYZ`, `mov XYZ, [rsp]`, `pop`) will have more previously-_unused_ memory to play with.
 This reserved region is your function's *stack frame*.
 
 In full, the pattern is reserve, use, then put it back:
