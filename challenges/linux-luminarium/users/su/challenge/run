@@ -1,3 +1,9 @@
 #!/bin/bash
 
-cat /challenge/DESCRIPTION.md
+if [ "$(id -u)" = 0 ]
+then
+	echo "Congratulations, you have become root! Here is your flag:"
+	cat /flag
+else
+	fold -s <<< "You are the $(whoami) user... Use su with the root password from the description, then run /challenge/run again."
+fi

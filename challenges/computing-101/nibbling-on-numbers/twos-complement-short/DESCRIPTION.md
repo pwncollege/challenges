@@ -16,20 +16,20 @@ You don't have to program anything in it yet (though we'll get there), just use 
 For example, to convert the binary `1001111101011100`, you can do:
 
 ```console
-hacker@dojo$ ipython
-In [1]: 0b1001111101011100
-Out[1]: 40796
+hacker@dojo$ python3
+>>> 0b1001111101011100
+40796
 
-In [2]: 40796 - 65536
-Out[2]: -24740
+>>> 40796 - 65536
+-24740
 
-In [3]: exit
+>>> exit()
 hacker@dojo$
 ```
 
 A few notes:
 
-- `In [1]` is the input prompt for the `ipython` interactive python interpreter, and `Out [1]` is the result of the expression entered into `In [1]`.
+- `>>>` is the input prompt for the Python interactive interpreter, and the next line is the result.
 - `0b` is Python's prefix to differentiate numbers written in binary from decimal (e.g., `0b101` is 5 and `101` is 101).
 
 Run `/challenge/decode` and get the flag!

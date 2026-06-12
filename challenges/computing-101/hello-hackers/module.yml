@@ -23,3 +23,46 @@ resources:
   - type: challenge
     id: open-read-write-hardcode
     name: "Hardcoding the Filename"
+  - type: markdown
+    name: Static Strings and RIP-Relative Addresses
+    content: |
+      In the previous challenge, you built the filename on the stack byte by byte.
+      That is useful exploit practice, but assembly can also store fixed bytes in a data section and refer to them by a label.
+
+      Here is a complete example that opens a fixed path stored in `.rodata`:
+
+      ```asm
+      .intel_syntax noprefix
+      .global _start
+
+      .section .text
+      _start:
+          lea rdi, [rip + path]
+          mov rsi, 0
+          mov rax, 2
+          syscall
+
+          mov rdi, rax
+          mov rsi, rsp
+          mov rdx, 64
+          mov rax, 0
+          syscall
+
+          mov rdx, rax
+          mov rdi, 1
+          mov rsi, rsp
+          mov rax, 1
+          syscall
+
+          mov rdi, 0
+          mov rax, 60
+          syscall
+
+      .section .rodata
+      path:
+          .asciz "/etc/hostname"
+      ```
+
+      The label `path` names the bytes in `.rodata`.
+      The instruction `lea rdi, [rip + path]` puts the address of those bytes into `rdi`; it does not load the bytes themselves.
+      On 64-bit x86, this `rip + label` form keeps the reference relative to the current instruction instead of baking one absolute address into your instruction.

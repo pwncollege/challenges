@@ -53,7 +53,7 @@ resources:
     The operands are strings you already know how to handle: `atoi` each one.
     The operator is the new piece: a single character you branch on to decide what to compute, quitting on any operator you don't support.
     Then `itoa` the result and `write` it to standard output, exactly as your summing program did.
-    We'll add one operator at a time --- addition, then subtraction, then multiplication, then the bitwise operators, then division and modulo, and finally the unary operators --- each reusing the `atoi` and `itoa` you've already written.
+    We'll add one operator group at a time --- addition, then subtraction, then multiplication, then the bitwise operators, and finally the unary operators --- each reusing the `atoi` and `itoa` you've already written.
 - type: challenge
   id: calc-1-add
   name: "Addition"

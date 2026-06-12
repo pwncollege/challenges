@@ -36,6 +36,7 @@ That's where `rsp` ends up pointing.
 This has an interesting consequence: **the more bytes you stuff into the environment (or the program arguments), the further "left" the stack the kernel pushes everything else**.
 An extra env byte means `rsp` ends up at a smaller address, the arg-strings region sits one byte further "left", and `argv[0]` (a pointer into that region) holds a one-byte-smaller value.
 
+Here, `env -i` means "run the following command with an empty environment"; any `NAME=VALUE` pairs you put after `-i` are the only environment strings the child program receives.
 In this challenge, take a clean baseline with `env -i /challenge/program` to see what address it wants `argv[0]` at.
 Then run it again with exactly one environment variable, with just the right number of `x`s in its value, to shift `argv[0]` to that address.
 Use `env -i` for both runs so your shell's own variables do not also land on the stack and throw off your count:
