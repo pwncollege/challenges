@@ -16,8 +16,8 @@ def word():
 
 def feature_set():
     features = {"literal"}
-    if MODE in ("printf-newline", "printf-escapes", "printf-number", "printf-numbers", "printf-string", "printf-hex"):
-        features.add("newline")
+    if MODE in ("printf-escapes", "printf-number", "printf-numbers", "printf-string", "printf-hex"):
+        features.add("newline_escape")
     if MODE in ("printf-escapes", "printf-number", "printf-numbers", "printf-string", "printf-hex"):
         features.add("syntax_escapes")
     if MODE in ("printf-number", "printf-numbers", "printf-string", "printf-hex"):
@@ -39,13 +39,19 @@ def cases():
     if MODE == "printf-literal":
         return base
 
-    newlines = [
+    actual_newlines = [
+        ("hello\nworld", []),
+        ("\n", []),
+        ("a\nb\nc", []),
+    ]
+    if MODE == "printf-newline":
+        return base + actual_newlines
+
+    newline_escapes = [
         ("hello\\nworld", []),
         ("\\n", []),
         ("a\\nb\\nc", []),
     ]
-    if MODE == "printf-newline":
-        return base + newlines
 
     syntax_escapes = [
         ("path\\\\file", []),
@@ -54,7 +60,7 @@ def cases():
         (f"{word()}\\\\{word()}%%", []),
     ]
     if MODE == "printf-escapes":
-        return base + newlines + syntax_escapes
+        return base + actual_newlines + newline_escapes + syntax_escapes
 
     single_numbers = [
         ("value=%d", ["42"]),
@@ -64,7 +70,7 @@ def cases():
         ("random=%d", [str(random.randint(-(10**6), 10**6))]),
     ]
     if MODE == "printf-number":
-        return base + newlines + syntax_escapes + single_numbers
+        return base + actual_newlines + newline_escapes + syntax_escapes + single_numbers
 
     many_numbers = [
         ("opened %d files and skipped %d", ["7", "3"]),
@@ -73,7 +79,7 @@ def cases():
         ("release %d.%d.%d", ["1", "2", "3"]),
     ]
     if MODE == "printf-numbers":
-        return base + newlines + syntax_escapes + single_numbers + many_numbers
+        return base + actual_newlines + newline_escapes + syntax_escapes + single_numbers + many_numbers
 
     strings = [
         ("hello, %s", ["hacker"]),
@@ -85,7 +91,7 @@ def cases():
         (f"{word()}=%s", [word()]),
     ]
     if MODE == "printf-string":
-        return base + newlines + syntax_escapes + single_numbers + many_numbers + strings
+        return base + actual_newlines + newline_escapes + syntax_escapes + single_numbers + many_numbers + strings
 
     hexes = [
         ("\\x41\\x42\\x43", []),
@@ -94,7 +100,7 @@ def cases():
         ("\\x7e\\n", []),
         ("byte=\\x2a", []),
     ]
-    return base + newlines + syntax_escapes + single_numbers + many_numbers + strings + hexes
+    return base + actual_newlines + newline_escapes + syntax_escapes + single_numbers + many_numbers + strings + hexes
 
 
 def parse_hex_digit(ch):
@@ -131,14 +137,14 @@ def render(fmt, args, features):
             i += 2
             continue
 
-        if ch == "\\" and ("newline" in features or "syntax_escapes" in features or "hex" in features):
+        if ch == "\\" and ("newline_escape" in features or "syntax_escapes" in features or "hex" in features):
             assert i + 1 < len(fmt), "test bug: dangling backslash"
             esc = fmt[i + 1]
             if esc == "\\" and "syntax_escapes" in features:
                 out.append(ord("\\"))
                 i += 2
                 continue
-            if esc == "n" and "newline" in features:
+            if esc == "n" and "newline_escape" in features:
                 out.append(0x0A)
                 i += 2
                 continue
@@ -172,10 +178,21 @@ def quote_text(text):
     return "'" + "".join(pieces) + "'"
 
 
-def describe_bytes(data):
+def describe_text(text, name_newlines=False):
+    if name_newlines and "\n" in text:
+        count = text.count("\n")
+        if text == "\n":
+            return "one newline byte"
+        if count == 1:
+            return "text containing one newline byte"
+        return f"text containing {count} newline bytes"
+    return quote_text(text)
+
+
+def describe_bytes(data, name_newlines=False):
     if not data:
         return "nothing"
-    return quote_text(data.decode("latin-1"))
+    return describe_text(data.decode("latin-1"), name_newlines)
 
 
 def describe_args(args):
@@ -186,8 +203,8 @@ def describe_args(args):
     return "extra values " + ", ".join(quote_text(arg) for arg in args)
 
 
-def describe_case(fmt, args):
-    return f"format {quote_text(fmt)} with {describe_args(args)}"
+def describe_case(fmt, args, name_newlines=False):
+    return f"format {describe_text(fmt, name_newlines)} with {describe_args(args)}"
 
 
 def diagnose(fmt, args, expected, got):
@@ -215,11 +232,11 @@ if MODE == "printf-literal":
     check_runtime_prologue = "Let's run your printf on literal format strings..."
     check_runtime_success = "Every literal format printed correctly!"
 elif MODE == "printf-newline":
-    check_runtime_prologue = "Let's run your printf on newline escapes..."
-    check_runtime_success = "Every newline escape printed correctly!"
+    check_runtime_prologue = "Let's run your printf on newline bytes..."
+    check_runtime_success = "Every newline byte printed correctly!"
 elif MODE == "printf-escapes":
-    check_runtime_prologue = "Let's run your printf on doubled syntax bytes..."
-    check_runtime_success = "Every doubled syntax byte printed correctly!"
+    check_runtime_prologue = "Let's run your printf on escape syntax..."
+    check_runtime_success = "Every escape sequence printed correctly!"
 elif MODE == "printf-number":
     check_runtime_prologue = "Let's run your printf on decimal format markers..."
     check_runtime_success = "Every decimal marker printed correctly!"
@@ -243,8 +260,9 @@ def check_runtime(binary_path):
     print("")
 
     features = feature_set()
+    name_newlines = MODE == "printf-newline"
     for i, (fmt, args) in enumerate(cases()):
-        case = describe_case(fmt, args)
+        case = describe_case(fmt, args, name_newlines)
         expected = render(fmt, args, features)
         try:
             p = subprocess.run(
@@ -264,13 +282,13 @@ def check_runtime(binary_path):
             raise AssertionError(f"Your program crashed ({signame}) on {case}.")
         if p.returncode != 0:
             raise AssertionError(
-                f"On {case}, your program should print {describe_bytes(expected)} "
+                f"On {case}, your program should print {describe_bytes(expected, name_newlines)} "
                 f"and exit cleanly, but it exited with status {p.returncode}."
                 f"{diagnose(fmt, args, expected, p.stdout)}"
             )
         assert p.stdout == expected, (
-            f"On {case}, your program should print {describe_bytes(expected)}, "
-            f"but it printed {describe_bytes(p.stdout)}.{diagnose(fmt, args, expected, p.stdout)}"
+            f"On {case}, your program should print {describe_bytes(expected, name_newlines)}, "
+            f"but it printed {describe_bytes(p.stdout, name_newlines)}.{diagnose(fmt, args, expected, p.stdout)}"
         )
-        print(f"  ok: {case} printed {describe_bytes(p.stdout)}")
+        print(f"  ok: {case} printed {describe_bytes(p.stdout, name_newlines)}")
     return True
