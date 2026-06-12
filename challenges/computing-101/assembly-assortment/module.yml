@@ -36,27 +36,20 @@ resources:
   id: shift-right
   name: "Shifting Right"
 - type: markdown
-  name: "Labels in Data"
+  name: "Reading Stored Data in GDB"
   content: |
-    Back in [Opening the Flag, with RIP](/computing-101/hello-hackers/open-read-write-rip-relative), you used a label to find bytes that your assembly stored after the code.
-    The same idea shows up in ordinary binaries: instructions live in one section, and constant bytes such as strings often live in `.rodata`, the read-only data section.
+    Back in [Opening the Flag, with RIP](/computing-101/hello-hackers/open-read-write-rip-relative), you used a label and `lea` to pass the address of stored bytes to `open`.
+    In [Examining Memory with GDB](/computing-101/introspecting/gdb-examine-argv1), you used `x/s` to display the string at an address.
 
-    In your own assembly, that shape looks like this:
+    The next challenge combines those ideas in a binary you are reversing.
+    Instead of looking for every secret byte as an immediate inside a `cmp`, step through the code until a register points at the stored string, then examine that address as a string:
 
-    ```asm
-    .section .rodata
-    password:
-        .asciz "secret"
-
-    .text
-        lea rdi, [rip+password]
+    ```gdb
+    (gdb) x/s $rsi
     ```
 
-    The label `password` names the address where the bytes begin.
-    `lea rdi, [rip+password]` puts that address in `rdi`; `mov rdi, [rip+password]` would instead read the bytes stored there.
-
-    When you reverse a binary that uses `.rodata`, the useful bytes may not appear as immediate operands in the instructions.
-    Tools such as `strings`, `readelf -p .rodata`, and `objdump -s -j .rodata` let you inspect that data section directly.
+    Here, `$rsi` is just an example register.
+    Use the register that the binary loads with the stored string's address, then run `/challenge/reverse-me` directly with the string you found.
 - type: challenge
   id: strcmp-stored
   name: "Loops on Data"
