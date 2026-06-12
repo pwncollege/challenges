@@ -48,6 +48,13 @@ For example, if you are in gdb at the instruction `mov rax, [rax*8+0x1337000]` (
 (gdb)
 ```
 
+Once you find the table entry that points somewhere different, convert its table position back into the input byte.
+Use the address of that table slot (the address on the left side of the `x/a` output), not the address stored inside it.
+Subtract the table base from that slot address to get its offset into the table.
+Then divide by 8, because each table entry is an 8-byte address.
+In the example above, the unusual entry is at `0x1337310`, so `0x1337310 - 0x1337000 = 0x310`, and `0x310 / 8 = 98`.
+That means the input byte has value `98`, which ASCII represents as `'b'`.
+
 **HINT:**
 You can also print out *several* jump table entries at the same time:
 

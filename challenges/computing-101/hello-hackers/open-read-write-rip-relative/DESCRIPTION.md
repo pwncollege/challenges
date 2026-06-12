@@ -20,7 +20,7 @@ path:
 The `.asciz` directive emits the bytes of the string along with the terminating zero byte that Linux expects at the end of a filename.
 The `path:` label marks where those bytes start.
 
-That leaves one problem: to pass this pass into the `open` syscall, you need to set its address in `rdi`.
+That leaves one problem: to pass this path into the `open` syscall, you need to set its address in `rdi`.
 In the old days, programs would always be loaded to the same address in memory, and so you could hardcode this, as so:
 
 ```asm
