@@ -42,12 +42,7 @@ You need somewhere that's valid and writable, and you already know about one suc
 The `rsp` register points to the top of the stack, and there's plenty of writable space there.
 So you can just use `rsp` as your memory address: `mov rsi, rsp`.
 
-
-----
-**FUN FACT!**
-Using `rsp` here overwrites some launch data that starts at `[rsp]`.
-That is fine in this one-shot program because it exits before needing that data again.
-Later, when a function needs scratch space while preserving the stack's current contents, it first reserves a frame with something like `sub rsp, N` and restores it with `add rsp, N`.
+Later in this dojo, we'll learn how to use scratch space on the stack without clobbering any existing content!
 
 **DEBUGGING:**
 Having trouble?
