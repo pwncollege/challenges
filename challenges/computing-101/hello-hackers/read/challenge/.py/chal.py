@@ -31,7 +31,7 @@ check_runtime_failure = "Hmm, that's not right:\n"
 must_set_regs = [ "rax", "rdi", "rsi", "rdx" ]
 
 def check_disassembly(disas):
-	mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
+	mov_operands = checker.mov_operands(disas)
 
 	set_regs = [dst for dst, _ in mov_operands]
 	assert set(set_regs) >= set(must_set_regs), (

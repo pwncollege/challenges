@@ -23,7 +23,7 @@ check_runtime_failure = "Hmm, that's not right:\n"
 
 
 def check_disassembly(disas):
-    mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == "mov"]
+    mov_operands = checker.mov_operands(disas)
 
     has_envp_deref = any("[rsp + 0x18]" in src for _, src in mov_operands)
     assert has_envp_deref, (

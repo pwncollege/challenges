@@ -14,7 +14,7 @@ check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
 	mnemonics = [d.mnemonic for d in disas]
-	mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
+	mov_operands = checker.mov_operands(disas)
 
 	# Must load argv[1] pointer from stack
 	has_argv1_deref = any(

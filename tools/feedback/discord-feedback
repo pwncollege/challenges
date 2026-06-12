@@ -12,11 +12,14 @@ import json
 import logging
 import os
 import pathlib
+import queue
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -34,6 +37,8 @@ TEXT_CHANNEL_TYPES = {0, 5}
 PUBLIC_THREAD_TYPES = {10, 11}
 THREAD_PARENT_TYPES = {0, 5, 15, 16}
 MAX_DISCORD_PAGE_SIZE = 100
+STATUS_HEARTBEAT_SECONDS = 30
+STATUS_TEXT_LIMIT = 160
 
 
 class DiscordPermissionError(RuntimeError):
@@ -415,12 +420,214 @@ def prepare_branch(
     return current
 
 
+def format_duration(seconds: float) -> str:
+    seconds = int(seconds)
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m{seconds:02d}s"
+    if minutes:
+        return f"{minutes}m{seconds:02d}s"
+    return f"{seconds}s"
+
+
+def ellipsize(value: str, limit: int = STATUS_TEXT_LIMIT) -> str:
+    value = " ".join(value.split())
+    if len(value) <= limit:
+        return value
+    return value[: limit - 3].rstrip() + "..."
+
+
+def stream_log_path(output_path: pathlib.Path, suffix: str) -> pathlib.Path:
+    return output_path.with_name(f"{output_path.name}.{suffix}")
+
+
+def insert_before_stdin_prompt(args: list[str], additions: list[str]) -> list[str]:
+    if args and args[-1] == "-":
+        return [*args[:-1], *additions, args[-1]]
+    return [*args, *additions]
+
+
+def stream_command(
+    command: list[str],
+    *,
+    cwd: pathlib.Path,
+    log_path: pathlib.Path,
+    input_text: Optional[str] = None,
+    timeout: Optional[int] = None,
+    line_handler: Optional[Any] = None,
+    echo_output: bool = False,
+    heartbeat_label: Optional[str] = None,
+) -> int:
+    started = time.monotonic()
+    last_heartbeat = started
+    timed_out = False
+    input_file = None
+
+    if input_text is not None:
+        input_file = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+        input_file.write(input_text)
+        input_file.seek(0)
+
+    click.echo(f"Running: {shlex.join(command)}")
+    click.echo(f"Log: {log_path}")
+
+    try:
+        with log_path.open("w") as log:
+            process = subprocess.Popen(
+                command,
+                cwd=cwd,
+                stdin=input_file or subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            output_queue = queue.Queue()
+
+            def read_output() -> None:
+                assert process.stdout is not None
+                try:
+                    for line in process.stdout:
+                        output_queue.put(line)
+                finally:
+                    output_queue.put(None)
+
+            reader = threading.Thread(target=read_output, daemon=True)
+            reader.start()
+
+            while True:
+                if timeout and time.monotonic() - started > timeout:
+                    timed_out = True
+                    process.kill()
+                    click.echo(
+                        f"{heartbeat_label or 'Command'} timed out after {timeout}s"
+                    )
+                    break
+
+                try:
+                    line = output_queue.get(timeout=0.2)
+                except queue.Empty:
+                    if (
+                        heartbeat_label
+                        and time.monotonic() - last_heartbeat
+                        >= STATUS_HEARTBEAT_SECONDS
+                    ):
+                        click.echo(
+                            f"{heartbeat_label} still running "
+                            f"({format_duration(time.monotonic() - started)} elapsed)"
+                        )
+                        last_heartbeat = time.monotonic()
+                    if process.poll() is not None and not reader.is_alive():
+                        break
+                    continue
+
+                if line is None:
+                    break
+
+                log.write(line)
+                log.flush()
+                if echo_output:
+                    click.echo(line, nl=False)
+                if line_handler:
+                    line_handler(line.rstrip("\n"))
+
+            return_code = process.wait()
+            reader.join(timeout=1)
+    finally:
+        if input_file:
+            input_file.close()
+
+    elapsed = format_duration(time.monotonic() - started)
+    if timed_out:
+        raise subprocess.TimeoutExpired(command, timeout)
+    click.echo(f"Finished with exit code {return_code} in {elapsed}")
+    return return_code
+
+
+def agent_event_type(event: dict[str, Any]) -> str:
+    value = event.get("type") or event.get("event") or event.get("name")
+    return str(value) if value is not None else "event"
+
+
+def summarize_claude_event(event: dict[str, Any]) -> Optional[str]:
+    event_type = agent_event_type(event)
+    if event_type == "system":
+        subtype = event.get("subtype")
+        suffix = f" ({subtype})" if subtype else ""
+        return f"session initialized{suffix}"
+    if event_type == "assistant":
+        message = event.get("message", {})
+        content = message.get("content", [])
+        tool_names = [
+            block.get("name")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "tool_use"
+        ]
+        tool_names = [name for name in tool_names if name]
+        if tool_names:
+            return f"using tool(s): {', '.join(tool_names)}"
+        if any(
+            isinstance(block, dict) and block.get("type") == "text"
+            for block in content
+        ):
+            return "wrote an assistant message"
+        return "assistant event"
+    if event_type == "result":
+        duration = event.get("duration_ms")
+        cost = event.get("total_cost_usd")
+        details = []
+        if duration is not None:
+            details.append(format_duration(float(duration) / 1000))
+        if cost is not None:
+            details.append(f"${float(cost):.4f}")
+        suffix = f" ({', '.join(details)})" if details else ""
+        if event.get("is_error"):
+            return f"failed{suffix}"
+        return f"completed{suffix}"
+    if "error" in event_type.lower() or event.get("error"):
+        return f"error: {ellipsize(str(event.get('error') or event))}"
+    return None
+
+
+def summarize_codex_event(event: dict[str, Any]) -> Optional[str]:
+    event_type = agent_event_type(event)
+    if event_type in {"thread.started", "turn.started", "turn.completed"}:
+        return event_type.replace(".", " ")
+    if event_type.endswith(".output") or event_type.endswith(".delta"):
+        return None
+    if event_type.endswith(".begin") or event_type.endswith(".started"):
+        command = event.get("command") or event.get("cmd")
+        if command:
+            return f"{event_type}: {ellipsize(str(command))}"
+        item = event.get("item")
+        if isinstance(item, dict):
+            item_type = item.get("type")
+            if item_type:
+                return f"{event_type}: {item_type}"
+        return event_type.replace(".", " ")
+    if event_type.endswith(".end") or event_type.endswith(".completed"):
+        exit_code = event.get("exit_code")
+        if exit_code is None and isinstance(event.get("item"), dict):
+            item_type = event["item"].get("type")
+            if item_type:
+                return f"{event_type}: {item_type}"
+        if exit_code is not None:
+            return f"{event_type}: exit code {exit_code}"
+        return event_type.replace(".", " ")
+    if "error" in event_type.lower() or event.get("error"):
+        return f"error: {ellipsize(str(event.get('error') or event))}"
+    if event.get("message"):
+        return f"{event_type}: {ellipsize(str(event['message']))}"
+    return None
+
+
 def resolve_agent(agent: str, apply: bool) -> tuple[str, list[str]]:
     if agent == "auto":
-        if shutil.which("claude"):
-            agent = "claude"
-        elif shutil.which("codex"):
+        if shutil.which("codex"):
             agent = "codex"
+        elif shutil.which("claude"):
+            agent = "claude"
         else:
             raise click.ClickException(
                 "No supported agent found on PATH (`claude` or `codex`)."
@@ -458,21 +665,83 @@ def run_agent(
     apply: bool = False,
 ) -> pathlib.Path:
     resolved, args = resolve_agent(agent, apply)
-    logger.info("running %s agent for %s", resolved, output_name)
     output_path = artifact_dir / output_name
-    run = subprocess.run(
-        args,
-        input=prompt,
-        cwd=repo,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-    output_path.write_text(run.stdout)
-    if run.returncode != 0:
-        raise click.ClickException(
-            f"{resolved} failed for {output_name}; see {output_path}"
+    final_result: list[str] = []
+    assistant_messages: list[str] = []
+
+    if resolved == "codex":
+        stream_path = stream_log_path(output_path, "stream.jsonl")
+        args = insert_before_stdin_prompt(
+            args,
+            [
+                "--json",
+                "--color",
+                "never",
+                "--output-last-message",
+                str(output_path),
+            ],
         )
+    elif resolved == "claude":
+        stream_path = stream_log_path(output_path, "stream.jsonl")
+        args = [*args, "--output-format", "stream-json"]
+    else:
+        stream_path = stream_log_path(output_path, "stream.log")
+
+    def handle_agent_line(line: str) -> None:
+        if not line:
+            return
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            click.echo(f"{resolved}: {ellipsize(line)}")
+            assistant_messages.append(line)
+            return
+
+        if resolved == "claude":
+            if event.get("type") == "result" and isinstance(event.get("result"), str):
+                final_result.append(event["result"])
+            elif event.get("type") == "assistant":
+                message = event.get("message", {})
+                content = message.get("content", [])
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        assistant_messages.append(block.get("text", ""))
+            summary = summarize_claude_event(event)
+        elif resolved == "codex":
+            summary = summarize_codex_event(event)
+        else:
+            summary = None
+
+        if summary:
+            click.echo(f"{resolved}: {summary}")
+
+    click.echo(f"Starting {resolved} agent for {output_name}")
+    rc = stream_command(
+        args,
+        input_text=prompt,
+        cwd=repo,
+        log_path=stream_path,
+        line_handler=handle_agent_line,
+        heartbeat_label=f"{resolved} agent for {output_name}",
+    )
+
+    if resolved == "claude":
+        if final_result:
+            output_path.write_text(final_result[-1])
+        elif assistant_messages:
+            output_path.write_text("\n".join(assistant_messages).rstrip() + "\n")
+        elif rc == 0:
+            output_path.write_text("")
+
+    if rc != 0:
+        raise click.ClickException(
+            f"{resolved} failed for {output_name}; see {stream_path}"
+        )
+    if not output_path.exists():
+        raise click.ClickException(
+            f"{resolved} completed but did not write {output_path}; see {stream_path}"
+        )
+    click.echo(f"Wrote {resolved} final output to {output_path}")
     return output_path
 
 
@@ -628,17 +897,14 @@ def run_logged(
     log_path: pathlib.Path,
     timeout: Optional[int] = None,
 ) -> int:
-    logger.info("running: %s", shlex.join(command))
-    with log_path.open("w") as log:
-        process = subprocess.run(
-            command,
-            cwd=cwd,
-            text=True,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
-        )
-    return process.returncode
+    return stream_command(
+        command,
+        cwd=cwd,
+        log_path=log_path,
+        timeout=timeout,
+        echo_output=True,
+        heartbeat_label=pathlib.Path(command[0]).name,
+    )
 
 
 def changed_paths_since(
@@ -749,6 +1015,7 @@ def run_casts(
         title = safe_title(item.get("title") or pathlib.Path(challenge).name)
         cast_path = cast_dir / f"{index:02d}-{title}.cast"
         log_path = cast_dir / f"{index:02d}-{title}.log"
+        click.echo(f"Recording cast {index}/{len(plan)} for {challenge}: {title}")
         pwnshop_args = [
             "run",
             "--cast-to",
@@ -957,6 +1224,7 @@ def feedback_command(
     channels, channels_by_id = discover_channels(
         api, guild_id, selected_channel_ids, since, include_threads
     )
+    click.echo(f"Discovered {len(channels)} readable channel(s)/thread(s)")
     messages_by_channel: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
     remaining = max_messages
     for channel in channels:
@@ -966,6 +1234,11 @@ def feedback_command(
         remaining -= len(messages)
         if messages:
             messages_by_channel.append((channel, messages))
+            click.echo(
+                "Fetched "
+                f"{len(messages)} message(s) from "
+                f"{channel_display_name(channel, channels_by_id)}"
+            )
             logger.info(
                 "fetched %d message(s) from %s",
                 len(messages),
@@ -1027,12 +1300,14 @@ def feedback_command(
         test_log.write_text("Tests skipped by --skip-tests.\n")
     else:
         for attempt in range(1, max_fix_attempts + 2):
+            click.echo(f"Running pwnshop validation attempt {attempt}")
             try:
                 test_log = run_tests(repo, artifact_dir, base_ref, attempt)
                 break
             except click.ClickException:
                 if attempt > max_fix_attempts:
                     raise
+                click.echo(f"Validation attempt {attempt} failed; starting fix agent")
                 failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
                 run_agent(
                     agent,
@@ -1048,6 +1323,10 @@ def feedback_command(
     if skip_casts or not changed_challenges:
         ux_review.write_text("Asciinema UX review skipped.\n")
     else:
+        click.echo(
+            "Planning and recording UX casts for "
+            f"{len(changed_challenges)} changed challenge(s)"
+        )
         cast_dir = run_casts(
             repo, artifact_dir, analysis_path, changed_challenges, agent
         )
@@ -1066,6 +1345,7 @@ def feedback_command(
                 "UX review agent did not write a separate report; see ux-review-agent.log.\n"
             )
         if not skip_tests:
+            click.echo("Running final pwnshop validation after UX review")
             test_log = run_tests(repo, artifact_dir, base_ref, max_fix_attempts + 2)
 
     pr_body = artifact_dir / "pr-body.md"

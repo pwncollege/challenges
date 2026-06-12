@@ -16,7 +16,7 @@ check_runtime_success = "Neat! Your program correctly exits with the secret valu
 check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
-    mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
+    mov_operands = checker.mov_operands(disas)
 
     has_rsp_offset_deref = any(
         "[rsp + 0x80]" in src
