@@ -2,8 +2,8 @@
 
 if [ "$(id -u)" = 0 ]
 then
-	echo "Congratulations, you have become root! Here is your flag:"
-	cat /flag
+	echo "Congratulations, you have become root!"
+	echo "You can now read the flag yourself. Run: cat /flag"
 else
 	fold -s <<< "You are the $(whoami) user... Use su with the root password from the description, then run /challenge/run again."
 fi
