@@ -23,3 +23,6 @@ resources:
   - type: challenge
     id: open-read-write-hardcode
     name: "Hardcoding the Filename"
+  - type: challenge
+    id: open-read-write-rip-relative
+    name: "RIP-Relative Strings"

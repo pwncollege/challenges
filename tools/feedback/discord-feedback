@@ -825,12 +825,14 @@ Rules:
 - Identify issues such as inadequate challenge descriptions, missing bridge challenges, concepts not covered, repeated confusing mechanics, misleading output, brittle tests, or docs gaps.
 - Filter out isolated support requests unless they reveal a repo-level problem.
 - Ground every recommendation in message links and repository paths when possible.
-- Prefer small, reviewable fixes. For large curriculum ideas, propose a design instead of pretending it can be safely automated.
+- Treat missing bridge content, missing tooling guidance, and missing module resources as actionable when the feedback is repeated or maintainer-supported and you can identify a repository location and validation path.
+- Do not move a fix to "Possible bridge/new challenge ideas" just because it requires new curriculum content. Use that section only for ideas that lack enough evidence, placement, or validation detail to implement now.
+- For broad curriculum gaps, define the smallest complete reviewable slice that should be implemented now, then list any larger sequence work separately.
 
 Output markdown with these sections:
 1. Executive summary
 2. Actionable fixes, ordered by confidence and impact
-3. Possible bridge/new challenge ideas
+3. Bridge/new challenge work that is not yet actionable, with exact blockers
 4. Non-actionable or deferred feedback
 5. Suggested validation plan
 """
@@ -846,7 +848,11 @@ def build_implementation_prompt(
 Requirements:
 - Read AGENTS.md and .claude/skills/authoring-challenges/SKILL.md before editing challenge content.
 - If you revise or add a challenge, follow the local authoring-challenges guidance. Read 2-3 sibling levels first, extend common templates, keep one new concept per level, and avoid unverified learner-facing claims.
-- Make only changes that are directly supported by the analysis. Leave large speculative curriculum ideas as notes in {artifact_dir}/deferred.md rather than implementing them.
+- Make all changes directly supported by the analysis, including new bridge challenges, module resources, and tooling guidance when the analysis gives enough evidence, placement, and a validation path.
+- Size alone is not a reason to defer. If an item is broad, implement the smallest complete reviewable slice that addresses the feedback now, then document only the remaining unsolved scope.
+- "Verify available runtime tools" is an action, not a deferral reason: inspect the relevant Dockerfile/common image or run the tool check, then update guidance or package dependencies based on what you find.
+- Write to {artifact_dir}/deferred.md only for items with a concrete blocker such as missing evidence, ambiguous placement requiring maintainer choice, external repository ownership, unavailable encrypted tests, or an implementation that cannot be validated in this repo.
+- Every deferred item must name its blocker and the next action that would unblock it. Do not write generic phrases like "larger design item", "speculative", or "needs design" without the concrete blocker.
 - Do not commit, push, open a PR, or add the Discord transcript to the repo.
 - Do not claim tests pass unless you run them. The outer tool will run pwnshop tests afterward, so focus on making the repo changes and noting any special validation needed.
 - Keep changes reviewable and scoped.
@@ -945,6 +951,7 @@ Hard requirements:
 - Be concrete: name the changed modules/files and what behavior changed.
 - Be honest about validation: only claim tests or playtests that appear in the inputs.
 - Keep it reviewer-facing and concise. Do not include process chatter or agent notes.
+- Do not write generic deferred-work bullets. Include a deferred item only when it has a concrete blocker from the inputs; size or "needs design" alone is not a blocker.
 
 Use exactly this top-level structure:
 
@@ -1047,6 +1054,9 @@ def pr_body_is_usable(body: str) -> bool:
         "it covers",
         "structure:",
         "one judgment call:",
+        "deferred larger design",
+        "larger design items",
+        "needs design",
         "the **validation** section",
         "the **summary** section",
     ]
