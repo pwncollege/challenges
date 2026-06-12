@@ -41,22 +41,6 @@ resources:
     Back in [Opening the Flag, with RIP](/computing-101/hello-hackers/open-read-write-rip-relative), you used a label and `lea` to pass the address of stored bytes to `open`.
     In [Examining Memory with GDB](/computing-101/introspecting/gdb-examine-argv1), you used `x/s` to display the string at an address.
 
-    The same pattern works for data that you store yourself.
-    If `label` names bytes in your assembly, `lea reg, [rip+label]` puts the address of those bytes into `reg`.
-    `mov reg, [rip+label]` is different: it reads the bytes at that address.
-
-    ```asm
-    lea rdx, [rip+nums]      # rdx = address of the array
-    mov eax, [rdx+rcx*4]     # eax = nums[rcx], with 4-byte elements
-
-    nums:
-        .long 10, 20, 30
-    ```
-
-    The `[rip+label]` syntax is a little odd.
-    In the machine code, x86 stores the distance from the next instruction to `label`; the CPU adds that distance to `rip` at runtime.
-    That is why the same code can still find its own data even when the program is loaded at a different address.
-
     The next challenge combines those ideas in a binary you are reversing.
     Instead of looking for every secret byte as an immediate inside a `cmp`, step through the code until a register points at the stored string, then examine that address as a string:
 

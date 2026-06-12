@@ -42,35 +42,4 @@ hacker@dojo:~$ /challenge/check solve.so
 **HINT:**
 You'll need _two_ loops in this level, one after the other: one to mark each value you see, and another one to count them afterwards.
 
-**Debugging your solution.**
-Because your submitted code is a function inside a shared library, there is no `_start` for `gdb` to run directly.
-For a debugging build, add a temporary `_start` that sets up a small byte buffer, calls `solve`, and then exits with the return value.
-Keep your `.global solve` and `solve:` function in the same file; this `_start` is just extra scaffolding for the debug executable.
-
-```asm
-.global _start
-_start:
-    lea rdi, [rip+sample]        # first argument: pointer to bytes
-    mov rsi, sample_end-sample   # second argument: number of bytes
-    int3                         # optional: gdb breaks here
-    call solve
-    mov rdi, rax                 # exit code = returned distinct count
-    mov rax, 60
-    syscall
-
-sample:
-    .byte 0x41, 0x42, 0x41, 0x43
-sample_end:
-```
-
-Assemble and link that version as a normal executable, then run it in `gdb`:
-
-```console
-hacker@dojo:~$ as -o debug.o debug.s
-hacker@dojo:~$ ld -o debug debug.o
-hacker@dojo:~$ gdb ./debug
-(gdb) run
-```
-
-Step through from the `int3`, watch `rsp` before and after `solve`, and make sure your function reaches `ret` with `rsp` restored.
-When you are ready to submit, build the shared library version with `ld -shared` as usual.
+For debugging a submitted function inside a shared library, refer back to [Writing From a Shared Library](/computing-101/control-flow/callee-write).
