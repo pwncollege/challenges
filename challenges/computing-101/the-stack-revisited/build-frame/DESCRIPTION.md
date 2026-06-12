@@ -10,6 +10,8 @@ You need actual memory, and a function gets its own scratch memory by carving it
 
 Recall that the stack grows *downward*: subtracting from `rsp` moves it to a lower address and leaves the region between the old and new `rsp` free for you to use.
 So `sub rsp, 256` reserves 256 bytes of scratch space; your slots live at `[rsp]` through `[rsp+255]`, indexed by byte value.
+Note that this doesn't bring any new memory into existence!
+The stack memory was already there, it's just that `rsp` was pointing to one specific place inside it before the `sub`, and after the `sub` it will be pointing a bit further "left", so stack accesses using `rsp` (e.g., `mov [rsp], XYZ`, `mov XYZ, [rsp]`, `pop`) will have more previously-_unused_ memory to play with.
 This reserved region is your function's *stack frame*.
 
 In full, the pattern is reserve, use, then put it back:
@@ -26,7 +28,7 @@ As long as you don't `push` or `pop` anything inside the function, `rsp` stays p
 (One more detail: the stack starts as whatever bytes were left there before --- it is not zeroed. Clear your slots before you tally into them.)
 
 Write a function called `solve` that takes a pointer to a buffer in `rdi` and a length in `rsi`, and returns, in `rax`, the number of distinct byte values among those `rsi` bytes.
-You might find the instruction `mov [rsp+rcx], 1` useful for marking a given value (stored in `rcx`) as "present" in your buffer (pointed to by `rsp`).
+You might find the instruction `mov byte ptr [rsp+rcx], 1` useful for marking a given value (stored in `rcx`) as "present" in your scratch table (based at `rsp`).
 
 Build it into a shared library and hand it to the grader:
 

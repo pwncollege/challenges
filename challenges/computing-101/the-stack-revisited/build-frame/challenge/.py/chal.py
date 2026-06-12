@@ -42,8 +42,9 @@ def run_one(so_path, data, *, quiet):
         sys.stderr.flush()
         raise AssertionError(
             f"The harness crashed with {signame} on {data!r}. "
-            "If you made room with `sub rsp`, you must put the stack back the way you "
-            "found it before `ret` (`mov rsp, rbp; pop rbp`), or the `ret` jumps to the wrong place."
+            "Before `ret`, `rsp` must point back at the saved return address. "
+            "If you made room with `sub rsp, 256`, undo it with `add rsp, 256`; "
+            "if you built a different frame, restore `rsp` equivalently."
         )
     if p.returncode != 0:
         raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on {data!r}.")
