@@ -46,4 +46,4 @@ Interestingly, if you treat the value as _unsigned_, you can happily use it as 2
 
 Now, put this to use.
 This challenge will force you to understand twos-complement on bytes.
-Run `/challenge/decode` and get the flag.
+Run `/challenge/decode` and get the flag!
