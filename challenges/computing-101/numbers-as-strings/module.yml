@@ -42,7 +42,7 @@ resources:
   id: memory-sum
   name: "Sum Them All"
 - type: header
-  name: "The Calculator"
+  content: "The Calculator"
 - type: markdown
   expandable: False
   name: "The Calculator"
@@ -70,7 +70,7 @@ resources:
   id: calc-5-unop
   name: "Unary Operators"
 - type: header
-  name: "printf"
+  content: "printf"
 - type: markdown
   expandable: False
   name: "printf"
