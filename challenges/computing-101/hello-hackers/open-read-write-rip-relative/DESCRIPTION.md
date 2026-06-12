@@ -1,72 +1,55 @@
-In the previous level, you built the filename on the stack one byte at a time.
-That works, but assembly can also store fixed bytes directly in your program.
+In the previous level, you created the filename by writing each byte onto the stack.
+That is a useful technique, but it is not the only way to keep a fixed string in an assembly program.
 
-Assembly source can contain data as well as instructions.
-Linux expects filenames to end with a zero byte.
-The `.asciz` directive writes a string's bytes and automatically adds that zero byte.
+Your assembly can also contain bytes that are not meant to execute.
+If you put those bytes after your final `exit` syscall, the CPU will stop before it reaches them.
+The bytes will still live in your program's memory.
+
+For strings, the assembler gives you a convenient directive:
 
 ```asm
 path:
     .asciz "/flag"
 ```
 
-The label `path` names the address where those bytes begin.
-The `open` syscall needs that address in `rdi`.
+The `.asciz` directive emits the bytes of the string.
+Then it emits the terminating zero byte that Linux expects at the end of a filename.
+The `path:` label marks where those bytes start.
 
-On 64-bit x86, you cannot copy the instruction pointer directly with an instruction like `mov rdi, rip`.
-The instruction pointer is special: the CPU uses it to know where it is executing.
-It is not exposed as a normal source register.
-x86-64 does, however, support memory addresses written relative to `rip`.
-The `lea` instruction lets you calculate one of those addresses without reading from it:
+That leaves one problem: `open` needs the address of `path` in `rdi`.
+On 64-bit x86, the instruction pointer (`rip`) is not a normal register you can copy with something like `mov rdi, rip`.
+The architecture lets instructions use addresses relative to `rip`.
+It does not give you a direct "put the current `rip` into this register" instruction.
+
+This is where `lea` is useful.
+You have used memory operands to load bytes from memory.
+The `lea` instruction uses the same address syntax.
+It stores the calculated address instead of reading from that address.
+For this level, use this form:
 
 ```asm
 lea rdi, [rip + path]
 ```
 
-This puts the address of `path` into `rdi`.
-It does not load the bytes at `path`; that would be `mov rdi, [rip + path]`, which is not what `open` wants.
+This puts the address of the string into `rdi`.
+It does not load the contents of the string into `rdi`.
 
-Because your program now has both instructions and data, write it as a real assembly file:
-Put the string after your final `exit` syscall, where your program will never execute it:
+Put the string after your code, after the final `exit` syscall:
 
 ```asm
 .intel_syntax noprefix
 .global _start
 
 _start:
-    # your syscalls here
-    mov rax, 60
-    mov rdi, 42
-    syscall
+    # open/read/write/exit here
 
 path:
     .asciz "/flag"
 ```
 
-**Your turn!**
-This time, no arguments are passed to your program.
-Store the filename with `.asciz`, load its address with `lea rdi, [rip + path]`, and use it to open the flag.
+Your program should do the same `open`, `read`, `write`, and `exit` sequence as before, with two changes:
 
-Your program should:
+1. Store the filename with `.asciz` after your code.
+2. Load the filename address for `open` with `lea rdi, [rip + path]`.
 
-1. Store `"/flag"` as a null-terminated static string with `.asciz`.
-2. Load the address of that string into `rdi` with `lea`.
-3. `open` it (syscall `2`): `rsi` = `0`.
-4. `read` from the returned fd into memory (syscall `0`).
-5. `write` the bytes to stdout (syscall `1`).
-6. `exit` with code `42` (syscall `60`).
-
-Assemble and link your program, then pass the executable to the checker:
-
-```console
-hacker@dojo:~$ as -o solve.o solve.s
-hacker@dojo:~$ ld -o solve solve.o
-hacker@dojo:~$ /challenge/check ./solve
-```
-
-----
-**DEBUGGING:**
-Having trouble?
-Use `strace` to trace your syscalls.
-If `open` returns `-1`, your string pointer might be off.
-Try `x/s &path` in `gdb` to see the string stored in your program.
+Run `/challenge/check` with your program, read the flag, and write it to stdout.
