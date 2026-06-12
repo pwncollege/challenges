@@ -5,6 +5,7 @@ import os
 
 give_flag = False
 
+# Fixed challenge I/O size; keep this above the repo's minimum flag buffer size.
 FLAG_SIZE = 128
 
 try:
@@ -24,7 +25,7 @@ check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
 check_disassembly_failure = "There's an issue with your assembly:\n"
 
-check_runtime_prologue = f"Let's pipe {FLAG_SIZE} bytes of flag input into your program and check that it echoes them back!"
+check_runtime_prologue = f"Let's pipe a fixed {FLAG_SIZE}-byte padded flag buffer into your program and check that it echoes it back!"
 check_runtime_success = "YES! You read and wrote the flag! Great job!"
 check_runtime_failure = "Hmm, that's not right:\n"
 

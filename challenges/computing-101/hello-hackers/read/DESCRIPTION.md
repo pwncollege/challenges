@@ -29,11 +29,12 @@ They are _hexadecimal_ representations of _ASCII_-encoded letters.
 If those words don't make sense, please run through the first half or so of the [Dealing with Data](/fundamentals/data-dealings) module and then come back here!
 
 In this level, we will combine `read` with our previous `write` abilities.
-The checker will pipe a fixed-size flag buffer into your program's stdin and tell you the byte count when it runs.
+The checker will pipe a fixed-size, padded flag buffer into your program's stdin.
+It will print the fixed byte count when it runs.
 Your program should:
 
-1. first `read` that many bytes from stdin to your program's memory
-2. `write` those same bytes from that memory location to stdout
+1. first `read` the complete buffer from stdin to your program's memory
+2. `write` the complete buffer from that memory location to stdout
 3. finally, exit with the exit code `42`.
 
 But what address should you use?
