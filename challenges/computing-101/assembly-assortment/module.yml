@@ -35,6 +35,28 @@ resources:
 - type: challenge
   id: shift-right
   name: "Shifting Right"
+- type: markdown
+  name: "Labels in Data"
+  content: |
+    Back in [Opening the Flag, with RIP](/computing-101/hello-hackers/open-read-write-rip-relative), you used a label to find bytes that your assembly stored after the code.
+    The same idea shows up in ordinary binaries: instructions live in one section, and constant bytes such as strings often live in `.rodata`, the read-only data section.
+
+    In your own assembly, that shape looks like this:
+
+    ```asm
+    .section .rodata
+    password:
+        .asciz "secret"
+
+    .text
+        lea rdi, [rip+password]
+    ```
+
+    The label `password` names the address where the bytes begin.
+    `lea rdi, [rip+password]` puts that address in `rdi`; `mov rdi, [rip+password]` would instead read the bytes stored there.
+
+    When you reverse a binary that uses `.rodata`, the useful bytes may not appear as immediate operands in the instructions.
+    Tools such as `strings`, `readelf -p .rodata`, and `objdump -s -j .rodata` let you inspect that data section directly.
 - type: challenge
   id: strcmp-stored
   name: "Loops on Data"

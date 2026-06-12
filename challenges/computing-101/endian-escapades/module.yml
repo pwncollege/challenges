@@ -36,6 +36,42 @@ resources:
     For example, you've already stored and loaded multi-byte values without reversing byte order, because a value (say `mov rax, 0x1234; push rax`) written to memory and read straight back (e.g., `pop rax`) comes out unchanged: it's written in little-endian order on the stack by `push` and endian-corrected when it's read back into the register by `pop`.
     Endianness only matters _in memory_, but the moment you look at memory _as bytes_ (in a hex dump, in a debugger, in an exploit) the byte order is right there, and you have to read it the way the CPU wrote it.
 - type: markdown
+  name: "Memory Order and Register Values"
+  content: |
+    The easiest place to get turned around is the boundary between memory order and the value printed from a register.
+    Suppose `rdi` points at these eight bytes:
+
+    ```text
+    Address    Byte
+    [rdi+0]    41
+    [rdi+1]    42
+    [rdi+2]    43
+    [rdi+3]    44
+    [rdi+4]    45
+    [rdi+5]    46
+    [rdi+6]    47
+    [rdi+7]    48
+    ```
+
+    A qword load reads those bytes starting at the lowest address:
+
+    ```asm
+    mov rax, [rdi]
+    ```
+
+    Because x86 is little-endian, `[rdi+0]` becomes the low byte of `rax`, `[rdi+1]` becomes the next byte, and so on.
+    The register value is therefore `0x4847464544434241`.
+    Written as hex, the most-significant byte prints on the left, so the bytes look reversed compared to address order:
+
+    ```text
+    memory address order:  41 42 43 44 45 46 47 48
+    register hex order:   48 47 46 45 44 43 42 41
+    rax value:            0x4847464544434241
+    ```
+
+    The bytes did not move in memory.
+    The CPU interpreted the byte at the lowest address as the least-significant part of the number.
+- type: markdown
   name: "Bytes, Words, and Friends"
   content: |
     When you work in assembly, you're constantly choosing *how many bytes* an operation touches: one, two, four, or eight.
@@ -68,6 +104,9 @@ resources:
     When you read "word", work out which is meant: the fixed 16-bit x86 size, or the loose "how wide is a register" sense.
     To avoid this confusion, there is another term often used for a 16-bit value: a _short_.
     So, `byte`, `short`, `dword`, and `qword` don't have this problem --- they always mean 8, 16, 32, and 64 bits.
+- type: challenge
+  id: sign-extension
+  name: "Sign Extension"
 - type: challenge
   id: endian-qword
   name: "Little-Endian Bytes"

@@ -5,26 +5,26 @@ import os
 
 give_flag = False
 
-FLAG_SIZE = 64
+FLAG_SIZE = 128
 
 try:
 	_flag = open("/flag").read().strip()
 except FileNotFoundError:
 	_flag = "pwn.college{test_placeholder_00000000000000}"
 
-_flag_padded = (_flag + "\n").ljust(FLAG_SIZE, "\r")[:FLAG_SIZE]
+_flag_padded = (_flag + "\n").encode().ljust(FLAG_SIZE, b"\x00")[:FLAG_SIZE]
 _flag_masked = "pwn.college{" + "*" * (len(_flag) - len("pwn.college{}")) + "}"
 
 # Write padded flag to a temp file so the shell can pipe it as stdin
 _flag_stdin_file = tempfile.mktemp(prefix='check_flag_')
 with open(_flag_stdin_file, 'wb') as f:
-	f.write(_flag_padded.encode())
+	f.write(_flag_padded)
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
 check_disassembly_failure = "There's an issue with your assembly:\n"
 
-check_runtime_prologue = "Let's pipe the flag into your program and check that it echoes it back!"
+check_runtime_prologue = f"Let's pipe {FLAG_SIZE} bytes of flag input into your program and check that it echoes them back!"
 check_runtime_success = "YES! You read and wrote the flag! Great job!"
 check_runtime_failure = "Hmm, that's not right:\n"
 
@@ -65,29 +65,29 @@ def check_disassembly(disas):
 	return True
 
 def check_runtime(filename):
-	try:
-		print("")
-		returncode = checker.dramatic_command(
-			f"echo {_flag_masked} | {filename}",
-			actual_command=f"bash -c 'cat {_flag_stdin_file} | {filename} 2> >(tee /tmp/stderr 2>&1) > >(tee /tmp/stdout)'"
-		)
-		time.sleep(0.1)
+    try:
+        print("")
+        returncode = checker.dramatic_command(
+            f"echo {_flag_masked} | {filename}",
+            actual_command=f"bash -c 'cat {_flag_stdin_file} | {filename} 2> >(tee /tmp/stderr 2>&1) > >(tee /tmp/stdout)'"
+        )
+        time.sleep(0.1)
 
-		actual_bytes = open("/tmp/stdout", "rb").read()
-		assert actual_bytes == _flag_padded.encode(), (
-			f"Your program should echo the flag to stdout!"
-		)
+        actual_bytes = open("/tmp/stdout", "rb").read()
+        assert actual_bytes == _flag_padded, (
+            f"Your program should echo the flag to stdout!"
+        )
 
-		checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")
-		assert returncode == 42, (
-			f"Your program should exit with code 42, but it exited with {returncode}!"
-		)
-	finally:
-		try:
-			os.unlink(_flag_stdin_file)
-		except OSError:
-			pass
-		checker.dramatic_command("")
-		print("")
+        checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")
+        assert returncode == 42, (
+            f"Your program should exit with code 42, but it exited with {returncode}!"
+        )
+    finally:
+        try:
+            os.unlink(_flag_stdin_file)
+        except OSError:
+            pass
+        checker.dramatic_command("")
+        print("")
 
-	return True
+    return True

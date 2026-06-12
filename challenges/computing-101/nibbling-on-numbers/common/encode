@@ -6,6 +6,7 @@ import sys
 WIDTH = {{ width }}
 MOD = 1 << WIDTH         # 2**WIDTH
 HIGH = 1 << (WIDTH - 1)  # the sign bit
+MAX_ATTEMPTS = 3
 
 # Read the flag now, while we have the privileges to (this program is SUID).
 with open("/flag") as f:
@@ -26,18 +27,26 @@ print(f"I'll give you {len(nums)} numbers. Write each one's {WIDTH}-bit binary.\
 for i, n in enumerate(nums, 1):
     expected = n % MOD  # the two's-complement bit pattern, as an integer
     print(f"Number {i} of {len(nums)}:  {n}")
-    try:
-        got = int(input(f"  as {WIDTH}-bit two's-complement binary > ").strip().replace(" ", ""), 2)
-    except (EOFError, ValueError):
-        print("  That doesn't look like binary. Run me again!")
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            got = int(input(f"  as {WIDTH}-bit two's-complement binary > ").strip().replace(" ", ""), 2)
+        except (EOFError, ValueError):
+            print("  That doesn't look like binary.")
+        else:
+            if got == expected:
+                print("  Correct!\n")
+                break
+
+            hint = ""
+            if n < 0 and got == -n:
+                hint = f" (That's just the magnitude. For {n}, encode {n} + {MOD} = {expected}.)"
+            print(f"  Not quite --- {n} in {WIDTH}-bit two's complement is {format(expected, f'0{WIDTH}b')}.{hint}")
+
+        if attempt < MAX_ATTEMPTS - 1:
+            print("  Try this one again.")
+    else:
+        print("  Run me again when you're ready.")
         sys.exit(1)
-    if got != expected:
-        hint = ""
-        if n < 0 and got == -n:
-            hint = f" (That's just the magnitude. For {n}, encode {n} + {MOD} = {expected}.)"
-        print(f"  Not quite --- {n} in {WIDTH}-bit two's complement is {format(expected, f'0{WIDTH}b')}.{hint}")
-        sys.exit(1)
-    print("  Correct!\n")
 
 print("All correct --- you can write two's complement! Here is your flag:")
 print(flag)
