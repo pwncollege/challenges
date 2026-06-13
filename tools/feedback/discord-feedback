@@ -1751,6 +1751,10 @@ def compact_pr_event(
     return event
 
 
+def is_generated_feedback_item(item: dict[str, Any]) -> bool:
+    return (item.get("body") or "").lstrip().startswith(AUTOMATED_MESSAGE_NOTICE)
+
+
 def collect_pr_feedback_events(
     api: GitHubAPI,
     owner: str,
@@ -1776,6 +1780,8 @@ def collect_pr_feedback_events(
     ignored: list[dict[str, Any]] = []
     for kind, items in sources:
         for item in items:
+            if is_generated_feedback_item(item):
+                continue
             user = item.get("user") or {}
             login = user.get("login") or ""
             key = pr_event_key(kind, item)
