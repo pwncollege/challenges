@@ -42,6 +42,7 @@ resources:
     In [Examining Memory with GDB](/computing-101/introspecting/gdb-examine-argv1), you used `x/s` to display the string at an address.
 
     The next challenge combines those ideas in a binary you are reversing.
+    The binary has already done the `lea`-style work for you: one of its registers will hold the runtime address of a stored string.
     Instead of looking for every secret byte as an immediate inside a `cmp`, step through the code until a register points at the stored string, then examine that address as a string:
 
     ```gdb

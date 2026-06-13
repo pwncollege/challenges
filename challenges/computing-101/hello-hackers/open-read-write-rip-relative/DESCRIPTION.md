@@ -19,6 +19,7 @@ path:
 
 The `.asciz` directive emits the bytes of the string along with the terminating zero byte that Linux expects at the end of a filename.
 The `path:` label marks where those bytes start.
+In later challenges, when you see a compiled binary load a pointer to a stored string, you are seeing the same idea from the other side: the bytes are stored in the program, and an instruction computes their address at runtime.
 
 That leaves one problem: to pass this path into the `open` syscall, you need to set its address in `rdi`.
 In the old days, programs would always be loaded to the same address in memory, and so you could hardcode this, as so:
@@ -74,7 +75,8 @@ Now, a quick note about the math here: though we write `[rip+path]` above, what 
 It's a weird syntax, and yet another little quirk of x86.
 
 Use this in this challenge to set the path passed to `open`.
-Your program should do the same `open`, `read`, `write`, and `exit` sequence as before, with two changes:
+Your program should open the stored filename, read enough bytes from the returned fd to include the flag, write those bytes to stdout, and exit with code `42`.
+The new parts are:
 
 1. Store the filename with `.asciz` after your code.
 2. Load the filename address for `open` with `lea rdi, [rip + path]`.

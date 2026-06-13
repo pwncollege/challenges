@@ -108,7 +108,7 @@ def check_runtime(filename):
 		os.seteuid(0)
 		with open("/flag", "r") as f:
 			flag_content = f.read().strip()
-		padded = (flag_content + "\n").ljust(FLAG_SIZE)[:FLAG_SIZE]
+		padded = (flag_content + "\n").ljust(FLAG_SIZE, "\r")[:FLAG_SIZE]
 		with open("/flag", "w") as f:
 			f.write(padded)
 		os.chmod("/flag", 0o644)
