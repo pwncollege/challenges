@@ -88,6 +88,18 @@
               uv
             ];
             shellHook = ''
+              # Install the secret-test encryption pre-commit hook (idempotent,
+              # non-destructive): symlink it in unless a foreign hook is present.
+              if git_dir="$(git rev-parse --git-dir 2>/dev/null)"; then
+                hook="$git_dir/hooks/pre-commit"
+                target="../../tools/git-hooks/pre-commit"
+                if [ ! -e "$hook" ] && [ ! -L "$hook" ]; then
+                  ln -s "$target" "$hook"
+                elif [ "$(readlink "$hook" 2>/dev/null)" != "$target" ]; then
+                  echo "note: $hook already exists; not overwriting (encryption hook: tools/git-hooks/pre-commit)" >&2
+                fi
+              fi
+
               if [ "$(id -u)" -eq 0 ]; then
                 export DOCKER_HOST="$(${lib.getExe pwn-challenge-runtime})"
               elif command -v sudo >/dev/null 2>&1; then

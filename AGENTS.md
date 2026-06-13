@@ -68,7 +68,10 @@ per archetype (templated web/service, interpreted checker, compiled SUID binary,
   qualify a pass with its environment.
 - **Git/comms:** on an unpushed WIP branch just amend obvious fixes (no permission menus);
   state persistence precisely (working-tree vs committed vs pushed); never assert an
-  uncommitted change is "the user's" without evidence.
+  uncommitted change is "the user's" without evidence. **Before every commit run the
+  secret-test encryption hook** (`tools/git-hooks/pre-commit`, see below) — or install it
+  once so `git commit` runs it for you — so an unencrypted `tests_private` solution never
+  lands in history.
 
 ## Key Commands
 
@@ -114,6 +117,31 @@ pwnshop run --user 0 --volume /tmp/debug challenges/web-security/path-traversal-
 ```
 
 DO NOT run these scripts without pwnshop: the dependencies are not installed in the host, and some of these challenges do permanent damage to their environment.
+
+### Secret-Test Encryption (pre-commit hook)
+
+Everything under `tests_private/` is the solution and **must** be git-crypt encrypted in
+every commit (each `challenges/MODULE_ID/.gitattributes` routes `tests_private/` through a
+per-module `git-crypt` filter). A plaintext `tests_private` file leaks the flag-grade solve
+into history.
+
+`tools/git-hooks/pre-commit` enforces this against the **staged index**. Entering `nix
+develop` installs it automatically (idempotent, and it won't clobber a pre-existing hook), so
+`git commit` runs it for you. To install by hand, or to run it on demand:
+
+```bash
+# install once per clone (the symlink resolves from any working directory)
+ln -sf ../../tools/git-hooks/pre-commit "$(git rev-parse --git-dir)/hooks/pre-commit"
+
+# or run on demand, after `git add` and before `git commit`
+tools/git-hooks/pre-commit
+```
+
+It blocks the commit when a staged file is unencrypted but either (a) `.gitattributes` routes
+it through a `git-crypt` filter, or (b) lives under `tests_private/` (so a missing or
+misconfigured module `.gitattributes` can't slip plaintext through). On a hit, `git-crypt
+unlock` and re-`git add` the file so the clean filter encrypts it, then commit. This catches
+the leak locally, before the `check-encryption` CI gate would reject it.
 
 ## Architecture
 
