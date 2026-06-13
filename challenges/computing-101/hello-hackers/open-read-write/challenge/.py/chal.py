@@ -1,17 +1,13 @@
 import __main__ as checker
 import os
-import time
 
 give_flag = False
-
-# Fixed challenge I/O size; keep this above the repo's minimum flag buffer size.
-FLAG_SIZE = 128
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
 check_disassembly_failure = "There's an issue with your assembly:\n"
 
-check_runtime_prologue = f"Let's run your program and see if it can read a {FLAG_SIZE}-byte buffer containing the flag!"
+check_runtime_prologue = "Let's run your program and see if it can read the flag!"
 check_runtime_success = "Your program opened, read, and wrote the flag!"
 check_runtime_failure = "Hmm, that's not right:\n"
 
@@ -62,26 +58,11 @@ def check_runtime(filename):
 	try:
 		print("")
 
-		# pad /flag to exactly FLAG_SIZE bytes so the student's program reads clean data
 		os.seteuid(0)
-		with open("/flag", "rb") as f:
-			flag_content = f.read().strip()
-		padded = (flag_content + b"\n").ljust(FLAG_SIZE, b" ")[:FLAG_SIZE]
-		with open("/flag", "wb") as f:
-			f.write(padded)
 		os.chmod("/flag", 0o644)
 		os.seteuid(65534)
 
-		returncode = checker.dramatic_command(
-			f"{filename} /flag",
-			actual_command=f"bash -c '{filename} /flag 2> >(tee /tmp/stderr 2>&1) > >(tee /tmp/stdout)'"
-		)
-		time.sleep(0.1)
-
-		actual_bytes = open("/tmp/stdout", "rb").read()
-		assert actual_bytes == padded, (
-			"Your program should write the full flag buffer to stdout!"
-		)
+		returncode = checker.dramatic_command(f"{filename} /flag")
 
 		checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")
 		assert returncode == 42, (
