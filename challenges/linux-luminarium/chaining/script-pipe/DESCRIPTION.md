@@ -21,4 +21,9 @@ hacker@dojo:~$
 All of the various redirection methods work: `>` for stdout, `2>` for stderr, `<` for stdin, `>>` and `2>>` for append-mode redirection, `>&` for redirecting to other file descriptors, and `|` for piping to another command.
 
 In this level, we will practice piping (`|`) from your script to another program.
-Like before, you need to create a script that calls the `/challenge/pwn` command followed by the `/challenge/college` command, and pipe the output of the script into a single invocation of the `/challenge/solve` command!
+Like before, you need to create a script that calls the `/challenge/pwn` command followed by the `/challenge/college` command, and pipe the output of the script into a single invocation of the `/challenge/solve` command.
+Run your script the same way you did in the previous level:
+
+```console
+hacker@dojo:~$ bash script.sh | /challenge/solve
+```
