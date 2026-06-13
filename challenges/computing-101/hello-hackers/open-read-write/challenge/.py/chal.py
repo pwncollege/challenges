@@ -1,10 +1,7 @@
 import __main__ as checker
 import os
-import time
 
 give_flag = False
-
-FLAG_SIZE = 64
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -61,13 +58,7 @@ def check_runtime(filename):
 	try:
 		print("")
 
-		# pad /flag to exactly FLAG_SIZE bytes so the student's program reads clean data
 		os.seteuid(0)
-		with open("/flag", "r") as f:
-			flag_content = f.read().strip()
-		padded = (flag_content + "\n"+"\r"*100)[:FLAG_SIZE]
-		with open("/flag", "w") as f:
-			f.write(padded)
 		os.chmod("/flag", 0o644)
 		os.seteuid(65534)
 

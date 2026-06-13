@@ -1,10 +1,7 @@
 import __main__ as checker
 import os
-import time
 
 give_flag = False
-
-FLAG_SIZE = 64
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -20,7 +17,7 @@ def check_disassembly(disas):
 	byte_stores = [dst for dst, _ in mov_operands if "byte ptr [rsp" in dst]
 	assert len(byte_stores) >= 6, (
 		"You need to write the filename '/flag\\0' byte by byte onto the stack!\n"
-		"Use 'mov BYTE PTR [rsp], '/'' for each character, plus the null terminator."
+		'Use instructions such as "mov BYTE PTR [rsp], \'/\'", one byte per character, plus the null terminator.'
 	)
 
 	assert ['rax', '2'] in mov_operands, (
@@ -58,13 +55,7 @@ def check_runtime(filename):
 	try:
 		print("")
 
-		# pad /flag to exactly FLAG_SIZE bytes so the student's program reads clean data
 		os.seteuid(0)
-		with open("/flag", "r") as f:
-			flag_content = f.read().strip()
-		padded = (flag_content + "\n").ljust(FLAG_SIZE)[:FLAG_SIZE]
-		with open("/flag", "w") as f:
-			f.write(padded)
 		os.chmod("/flag", 0o644)
 		os.seteuid(65534)
 
