@@ -25,7 +25,10 @@ check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
 check_disassembly_failure = "There's an issue with your assembly:\n"
 
-check_runtime_prologue = "Let's pipe the flag into your program and check that it echoes it back!"
+check_runtime_prologue = (
+	f"Let's pipe {FLAG_SIZE} bytes of input into your program (the flag line "
+	"plus padding) and check that it echoes exactly those bytes back!"
+)
 check_runtime_success = "YES! You read and wrote the flag! Great job!"
 check_runtime_failure = "Hmm, that's not right:\n"
 
@@ -68,15 +71,21 @@ def check_disassembly(disas):
 def check_runtime(filename):
 	try:
 		print("")
+		actual_command = (
+			"bash -c '"
+			f"cat {_flag_stdin_file} | {filename} "
+			"2> >(tee /tmp/stderr 2>&1) "
+			"> >(tee /tmp/stdout | sed \"s/[[:space:]]*$//\")'"
+		)
 		returncode = checker.dramatic_command(
 			f"echo {_flag_masked} | {filename}",
-			actual_command=f"bash -c 'cat {_flag_stdin_file} | {filename} 2> >(tee /tmp/stderr 2>&1) > >(tee /tmp/stdout)'"
+			actual_command=actual_command,
 		)
 		time.sleep(0.1)
 
 		actual_bytes = open("/tmp/stdout", "rb").read()
 		assert actual_bytes == _flag_padded, (
-			f"Your program should echo the flag to stdout!"
+			f"Your program should echo exactly {FLAG_SIZE} bytes from stdin to stdout, including the padding bytes!"
 		)
 
 		checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")

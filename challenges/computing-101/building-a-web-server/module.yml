@@ -1,27 +1,4 @@
 name: Building a Web Server
-challenges:
-- id: exit
-  name: Exit
-- id: socket
-  name: Socket
-- id: bind
-  name: Bind
-- id: listen
-  name: Listen
-- id: accept
-  name: Accept
-- id: static-response
-  name: Static Response
-- id: dynamic-response
-  name: Dynamic Response
-- id: iterative-get-server
-  name: Iterative GET Server
-- id: concurrent-get-server
-  name: Concurrent GET Server
-- id: concurrent-post-server
-  name: Concurrent POST Server
-- id: web-server
-  name: Web Server
 resources:
 - name: "Building a Web Server: Introduction"
   type: lecture
@@ -48,3 +25,72 @@ resources:
   video: 9jH2Le-MWuI
   playlist: PL-ymxv0nOtqqYlFBiJ_gMff9zHfHMNCtG
   slides: 1tycdciuY8aMmBGj98qUMq0-ubClkqeT10QNIT0hE9kU
+- type: challenge
+  id: exit
+  name: Exit
+- type: challenge
+  id: socket
+  name: Socket
+- type: markdown
+  name: "Stored Bytes for Networking"
+  content: |
+    Back in [Opening the Flag, with RIP](/computing-101/hello-hackers/open-read-write-rip-relative), you used `.asciz`, a label, and `lea` to pass stored bytes to a syscall.
+    `bind` needs the same idea, but the stored bytes are a binary structure instead of a filename string.
+
+    Your assembler can manage both text bytes and raw storage.
+    `.ascii "GET "` emits exactly those characters, while `.asciz "/flag"` emits those characters followed by a zero byte.
+    For empty writable space, a `.bss` section with `.skip N` reserves `N` zero-filled bytes without making you write each zero yourself.
+
+    The IPv4 address structure that `bind` receives is 16 bytes:
+
+    ```text
+    bytes 0..1    address family, `AF_INET` (`2`)
+    bytes 2..3    port, in network byte order (`00 50` for port 80)
+    bytes 4..7    address (`0.0.0.0` is four zero bytes)
+    bytes 8..15   padding
+    ```
+
+    One way to ask the assembler for those bytes is:
+
+    ```asm
+    .section .data
+    server_addr:
+        .short 2
+        .short 0x5000
+        .long 0
+        .quad 0
+
+    .section .bss
+    scratch:
+        .skip 1024
+    ```
+
+    On 64-bit x86, `.short 0x5000` emits the bytes `00 50`, which is port `80` in network byte order.
+    To pass stored bytes to a syscall, put their runtime address in the syscall's pointer argument with the same RIP-relative pattern you used before: `lea register, [rip + server_addr]`.
+- type: challenge
+  id: bind
+  name: Bind
+- type: challenge
+  id: listen
+  name: Listen
+- type: challenge
+  id: accept
+  name: Accept
+- type: challenge
+  id: static-response
+  name: Static Response
+- type: challenge
+  id: dynamic-response
+  name: Dynamic Response
+- type: challenge
+  id: iterative-get-server
+  name: Iterative GET Server
+- type: challenge
+  id: concurrent-get-server
+  name: Concurrent GET Server
+- type: challenge
+  id: concurrent-post-server
+  name: Concurrent POST Server
+- type: challenge
+  id: web-server
+  name: Web Server
