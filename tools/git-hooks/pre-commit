@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+# pre-commit hook: refuse to commit secret test files that should be git-crypt
+# encrypted but are staged as plaintext.
+#
+# Two independent rules, both enforced against the *staged* content (the index),
+# which is exactly what the commit will record:
+#
+#   (a) any file that .gitattributes routes through a git-crypt filter must be
+#       encrypted in the index;
+#   (b) any file under a tests_private/ directory must be encrypted in the index,
+#       even if .gitattributes is missing or misconfigured for its module
+#       (a new module without a .gitattributes, a typo'd filter name, ...).
+#
+# git-crypt stores an encrypted blob with a 10-byte magic header, "\0GITCRYPT\0".
+# A staged blob that should be encrypted but lacks that header was cleaned
+# without the filter -- git-crypt locked, key missing, .gitattributes absent --
+# and would leak the plaintext solution if committed.
+#
+# Run it by hand after staging and before committing, or install it as the
+# repo's hook (resolves from any working directory):
+#
+#   ln -sf ../../tools/git-hooks/pre-commit "$(git rev-parse --git-dir)/hooks/pre-commit"
+
+set -euo pipefail
+
+# hex of git-crypt's header magic: 0x00 "GITCRYPT" 0x00
+readonly GITCRYPT_MAGIC_HEX="00474954435259505400"
+
+# Diff the index against HEAD, or against the empty tree on the first commit.
+if git rev-parse --verify --quiet HEAD >/dev/null; then
+    against=HEAD
+else
+    against=$(git hash-object -t tree /dev/null)
+fi
+
+errors=()
+
+# Staged additions/copies/modifications/renames/type-changes (deletions skipped).
+while IFS= read -r -d '' path; do
+    reason=
+
+    # Rule (b): anything under tests_private/ must be encrypted, no matter what
+    # .gitattributes says.
+    case "$path" in
+        tests_private/* | */tests_private/*)
+            reason="under tests_private/"
+            ;;
+    esac
+
+    # Rule (a): anything .gitattributes routes through a git-crypt filter.
+    if [ -z "$reason" ]; then
+        filter=$(git check-attr filter -- "$path" | sed 's/.*: filter: //')
+        case "$filter" in
+            git-crypt*) reason="gitattributes filter=$filter" ;;
+        esac
+    fi
+
+    [ -n "$reason" ] || continue
+
+    # Empty blobs carry no header and leak nothing; git-crypt leaves them empty.
+    size=$(git cat-file -s ":$path")
+    [ "$size" -gt 0 ] || continue
+
+    # Read the whole blob (test files are tiny) and slice the header, rather than
+    # `head -c`, whose early pipe close would SIGPIPE git cat-file under pipefail.
+    header=$(git cat-file blob ":$path" | od -An -v -tx1 | tr -d ' \n')
+    if [ "${header:0:20}" != "$GITCRYPT_MAGIC_HEX" ]; then
+        errors+=("  $path  ($reason)")
+    fi
+done < <(git diff --cached -z --name-only --diff-filter=ACMRT "$against")
+
+if [ "${#errors[@]}" -gt 0 ]; then
+    {
+        echo "pre-commit: refusing to commit unencrypted secret test files."
+        echo
+        echo "These staged files must be git-crypt encrypted but are plaintext in the index:"
+        printf '%s\n' "${errors[@]}"
+        echo
+        echo "Unlock git-crypt and re-stage so the clean filter encrypts them:"
+        echo "    git-crypt unlock           # supply the module key(s) if needed"
+        echo "    git add -- <file>...       # re-stage to run the filter"
+        echo
+        echo "Bypass only if you are certain (NOT recommended): git commit --no-verify"
+    } >&2
+    exit 1
+fi
