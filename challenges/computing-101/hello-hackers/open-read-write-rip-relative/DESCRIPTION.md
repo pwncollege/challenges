@@ -5,7 +5,6 @@ This challenge will show you a better way.
 Luckily, your assembly can also contain bytes that are not meant to execute.
 For example, if you put those bytes after your final `exit` syscall, the CPU will stop before it reaches them.
 The bytes will still live in your program's memory, but will not crash your program by being interpreted as instructions.
-Code bytes and data bytes can live in the same program; labels are how your assembly gives names to the data bytes you want to use later.
 
 For strings, the assembler gives you a convenient directive to specify these bytes:
 
