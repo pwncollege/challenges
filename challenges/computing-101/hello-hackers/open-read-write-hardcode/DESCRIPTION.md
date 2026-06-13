@@ -29,13 +29,14 @@ After writing these bytes, `rsp` points to the null-terminated string `"/flag"`,
 **Your turn!**
 This time, no arguments are passed to your program.
 You must construct the filename yourself.
+When `/challenge/check` runs your program, it will make `/flag` a fixed-size buffer containing the flag and tell you the byte count.
 
 Your program should:
 
 1. Write `"/flag\0"` onto the stack byte by byte using `mov BYTE PTR [rsp+N], ...`
 2. `open` it (syscall `2`): `rdi` = `rsp` (the string you just wrote), `rsi` = `0`
-3. `read` 64 bytes from the returned fd into memory (syscall `0`)
-4. `write` those 64 bytes to stdout (syscall `1`)
+3. `read` that many bytes from the returned fd into memory (syscall `0`)
+4. `write` those bytes to stdout (syscall `1`)
 5. `exit` with code `42` (syscall `60`)
 
 ----

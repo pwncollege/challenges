@@ -29,17 +29,19 @@ They are _hexadecimal_ representations of _ASCII_-encoded letters.
 If those words don't make sense, please run through the first half or so of the [Dealing with Data](/fundamentals/data-dealings) module and then come back here!
 
 In this level, we will combine `read` with our previous `write` abilities.
-The flag will be piped into your program's stdin --- 128 bytes of it.
+The checker will pipe a fixed-size buffer containing the flag into your program's stdin, and it will tell you the byte count when it runs.
 Your program should:
 
-1. first `read` 128 bytes from stdin to your program's memory
-2. `write` those 128 bytes from that memory location to stdout
+1. first `read` that many bytes from stdin to your program's memory
+2. `write` that many bytes from that memory location to stdout
 3. finally, exit with the exit code `42`.
 
 But what address should you use?
 You need somewhere that's valid and writable, and you already know about one such place: the stack!
 The `rsp` register points to the top of the stack, and there's plenty of writable space there.
-So you can just use `rsp` as your memory address: `mov rsi, rsp`.
+Earlier, you used `[rsp]` to read the startup argument count.
+This one-shot program no longer needs that startup stack data after it begins echoing stdin, so it can intentionally reuse that area as scratch space.
+So you can use `rsp` as your memory address: `mov rsi, rsp`.
 
 
 ----

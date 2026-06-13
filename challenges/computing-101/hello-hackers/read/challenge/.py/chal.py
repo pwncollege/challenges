@@ -25,7 +25,7 @@ check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
 check_disassembly_failure = "There's an issue with your assembly:\n"
 
-check_runtime_prologue = "Let's pipe the flag into your program and check that it echoes it back!"
+check_runtime_prologue = f"Let's pipe a {FLAG_SIZE}-byte buffer containing the flag into your program and check that it echoes it back!"
 check_runtime_success = "YES! You read and wrote the flag! Great job!"
 check_runtime_failure = "Hmm, that's not right:\n"
 
@@ -42,7 +42,8 @@ def check_disassembly(disas):
 
 	has_rsp_src = any(src == "rsp" for _, src in mov_operands)
 	assert has_rsp_src, (
-		"You need to use rsp as your memory address for read/write!\n"
+		"You need to use rsp as scratch memory for read/write!\n"
+		"This intentionally reuses the startup stack after argc/argv are no longer needed.\n"
 		"Use 'mov rsi, rsp' to point rsi at the stack."
 	)
 

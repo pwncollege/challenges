@@ -22,17 +22,27 @@ Recall that file descriptor 0 is stdin, file descriptor 1 is stdout, and file de
 Other files that are open are just represented by other file descriptors, incrementing from 3 onwards!
 You'll use this fd as the first argument to `read`, just like you did for stdin earlier, but this time `read` will read from your file.
 
+This means `rax` has two different roles at different moments:
+
+| Moment | Meaning |
+|--------|---------|
+| Before `open` | `rax = 2` selects the `open` syscall |
+| After `open` returns | `rax` contains the new file descriptor |
+| Before `read` | move that file descriptor into `rdi`, then set `rax = 0` to select `read` |
+
 How to load the filename into memory?
 In this level, the path to the flag (`/flag`) will be passed as the first argument to your program.
 You already know how to load that: `mov rdi, [rsp+16]`.
+
+When `/challenge/check` runs your program, it will make `/flag` a fixed-size buffer containing the flag and tell you the byte count.
 
 Your program should:
 
 1. Load a pointer to the filename (stored at `[rsp+16]`, the first argument) into `rdi`
 2. Specify the default of read access for the second argument (set `rsi` to `0`).
 3. `open` it (syscall `2`)
-4. `read` 64 bytes from the returned fd into memory. The returned fd will be stored in `rax`; you'll need to move that to `rdi` for `read`'s first argument. Make sure to do this _before_ you set the syscall number for write!
-5. `write` those 64 bytes to stdout
+4. `read` that many bytes from the returned fd into memory. The returned fd will be stored in `rax`; move that to `rdi` for `read`'s first argument before you set `rax` to the syscall number for `read`!
+5. `write` those bytes to stdout
 6. `exit` with code `42` (syscall `60`)
 
 ----
