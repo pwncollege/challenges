@@ -130,8 +130,8 @@ develop` installs it automatically (idempotent, and it won't clobber a pre-exist
 `git commit` runs it for you. To install by hand, or to run it on demand:
 
 ```bash
-# install once per clone (the symlink resolves from any working directory)
-ln -sf ../../tools/git-hooks/pre-commit "$(git rev-parse --git-dir)/hooks/pre-commit"
+# install once per clone (uses Git's resolved hooks dir, so worktrees work too)
+ln -sf ../../tools/git-hooks/pre-commit "$(git rev-parse --git-path hooks)/pre-commit"
 
 # or run on demand, after `git add` and before `git commit`
 tools/git-hooks/pre-commit
