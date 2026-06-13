@@ -5,8 +5,9 @@ function set_secret {
 
 function check_cmd {
 	BCMD=($BASH_COMMAND)
+	BCMD_BASE=$(basename -- "${BCMD[0]}")
 
-	if [ "${BCMD[0]}" != "bash" ] && [ "${BCMD[0]}" != "sh" ]
+	if [ "$BCMD_BASE" != "bash" ] && [ "$BCMD_BASE" != "sh" ]
 	then
 		unset BASH_ENV
 		return 0

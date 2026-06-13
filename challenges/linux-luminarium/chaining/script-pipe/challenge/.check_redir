@@ -14,10 +14,26 @@ def check_challenge_solve(process):
     assert "/challenge/solve" in process.cmdline()
 
 
+def wait_for_challenge_solve():
+    deadline = time.monotonic() + 3
+    last_error = None
+
+    while time.monotonic() < deadline:
+        try:
+            partner = psutil.Process(chio.resolve_fd_pipe_partner(os.getpid(), 1, parent_ok=False))
+            check_challenge_solve(partner)
+            return
+        except (AssertionError, FileNotFoundError, ProcessLookupError, psutil.Error) as e:
+            last_error = e
+            time.sleep(0.1)
+
+    if last_error:
+        raise last_error
+    raise AssertionError("Unable to find /challenge/solve on the other end of the stdout pipe.")
+
+
 try:
-    time.sleep(1) # sleep to give the parent process enough time to spawn the partner, in case of stdout piping
-    partner = psutil.Process(chio.resolve_fd_pipe_partner(os.getpid(), 1, parent_ok=False))
-    check_challenge_solve(partner)
+    wait_for_challenge_solve()
     sys.exit(0)
-except AssertionError as e:
+except (AssertionError, FileNotFoundError, ProcessLookupError, psutil.Error):
     sys.exit(1)

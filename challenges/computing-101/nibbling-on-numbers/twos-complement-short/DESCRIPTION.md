@@ -32,4 +32,4 @@ A few notes:
 - `In [1]` is the input prompt for the `ipython` interactive python interpreter, and `Out [1]` is the result of the expression entered into `In [1]`.
 - `0b` is Python's prefix to differentiate numbers written in binary from decimal (e.g., `0b101` is 5 and `101` is 101).
 
-Run `/challenge/decode` and get the flag!
+Run `/challenge/decode` directly, answer its questions, and get the flag!
