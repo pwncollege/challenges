@@ -1,27 +1,4 @@
 name: Building a Web Server
-challenges:
-- id: exit
-  name: Exit
-- id: socket
-  name: Socket
-- id: bind
-  name: Bind
-- id: listen
-  name: Listen
-- id: accept
-  name: Accept
-- id: static-response
-  name: Static Response
-- id: dynamic-response
-  name: Dynamic Response
-- id: iterative-get-server
-  name: Iterative GET Server
-- id: concurrent-get-server
-  name: Concurrent GET Server
-- id: concurrent-post-server
-  name: Concurrent POST Server
-- id: web-server
-  name: Web Server
 resources:
 - name: "Building a Web Server: Introduction"
   type: lecture
@@ -48,3 +25,36 @@ resources:
   video: 9jH2Le-MWuI
   playlist: PL-ymxv0nOtqqYlFBiJ_gMff9zHfHMNCtG
   slides: 1tycdciuY8aMmBGj98qUMq0-ubClkqeT10QNIT0hE9kU
+- type: challenge
+  id: exit
+  name: Exit
+- type: challenge
+  id: socket
+  name: Socket
+- type: challenge
+  id: bind
+  name: Bind
+- type: challenge
+  id: listen
+  name: Listen
+- type: challenge
+  id: accept
+  name: Accept
+- type: challenge
+  id: static-response
+  name: Static Response
+- type: challenge
+  id: dynamic-response
+  name: Dynamic Response
+- type: challenge
+  id: iterative-get-server
+  name: Iterative GET Server
+- type: challenge
+  id: concurrent-get-server
+  name: Concurrent GET Server
+- type: challenge
+  id: concurrent-post-server
+  name: Concurrent POST Server
+- type: challenge
+  id: web-server
+  name: Web Server
