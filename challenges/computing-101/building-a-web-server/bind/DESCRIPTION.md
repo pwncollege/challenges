@@ -1,6 +1,10 @@
 After creating a socket, the next step is to assign it a network identity.
 In this challenge, you will use the [bind](https://man7.org/linux/man-pages/man2/bind.2.html) syscall to connect your socket to a specific IP address and port number.
 The call requires the socket file descriptor, a pointer to a `struct sockaddr`, and the size of that structure.
+Back in [Endian Escapades](/computing-101/endian-escapades), you saw that x86 stores multi-byte values little-endian in memory, and that non-CPU contexts such as network protocols can use a different byte order.
+For IP socket structures, multi-byte numbers use big-endian order: the most-significant byte comes first.
+This convention is called **network byte order**.
+For a 16-bit port number, that means port `80` (`0x0050`) is represented as bytes `00 50`.
 For IPv4, the structure is a `struct sockaddr_in`, and `bind` reads the 16 bytes at that pointer as fields:
 
 ```text
