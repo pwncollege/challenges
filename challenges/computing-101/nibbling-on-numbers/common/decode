@@ -48,7 +48,7 @@ def ask(prompt, expected, *, kind=None, value=None):
                 hint = f" That's the UNSIGNED reading; subtract {MOD} for the signed value."
             elif kind == "unsigned" and value is not None and answer == value - MOD:
                 hint = " That's the SIGNED reading; the unsigned value just adds the bits up."
-            print(f"  Not quite --- the answer was {expected}.{hint}")
+            print(f"  Not quite.{hint}")
 
         if attempt < MAX_ATTEMPTS - 1:
             print("  Try this one again.")

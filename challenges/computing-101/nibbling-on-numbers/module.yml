@@ -78,6 +78,11 @@ resources:
     Now, let's talk about notation.
     How do you differentiate `11` in decimal, `11` in binary (which equals `3` in decimal), and 11 in hex (which equals `17` in decimal)?
     For numerical constants, we sometimes prepend binary data with `0b`, hexadecimal with `0x`, and keep decimal as is, resulting in `11 == 0b1011 == 0xb`, `3 == 0b11 == 0x3`, and `17 == 0b10001 == 0x11`.
+- type: markdown
+  name: Interactive Number Challenges
+  content: |
+    The next few challenges are interactive number drills.
+    They do not use `/challenge/check`; run the program named in each challenge, such as `/challenge/decode` or `/challenge/encode`, and get the flag there.
 - type: challenge
   id: twos-complement
   name: "Negative Numbers"

@@ -1006,11 +1006,33 @@ def directions_block(directions: list[str]) -> str:
     return "\n" + "\n".join(lines)
 
 
+def pr_feedback_block(pr_feedback_path: Optional[pathlib.Path]) -> str:
+    if pr_feedback_path is None:
+        return ""
+    lines = [
+        "",
+        f"Recent maintainer feedback on prior PRs: {pr_feedback_path}",
+        "- Read this file before proposing or implementing changes. It records concrete edits"
+        " that pwn.college maintainers already requested, corrected, or rejected on earlier"
+        " PRs.",
+        "- Treat each item as a hard constraint: do NOT reintroduce a pattern a maintainer"
+        " rejected. Recurring examples maintainers have rejected include forcing dynamic"
+        " flag-length handling into an intro read level instead of fixed padding,"
+        " re-teaching a concept already taught in an earlier module instead of linking back,"
+        " introducing an instruction or concept before the curriculum does, revealing the"
+        " solution in a DESCRIPTION, and leaving tests_private unencrypted.",
+        "- If the Discord feedback seems to call for something a maintainer already rejected,"
+        " note the conflict in your report instead of repeating the rejected change.",
+    ]
+    return "\n" + "\n".join(lines)
+
+
 def build_analysis_prompt(
     transcript_path: pathlib.Path,
     jsonl_path: pathlib.Path,
     artifact_dir: pathlib.Path,
     directions: list[str],
+    pr_feedback_path: Optional[pathlib.Path] = None,
 ) -> str:
     return f"""Analyze recent pwn.college Discord feedback for actionable challenge/curriculum fixes.
 
@@ -1036,12 +1058,15 @@ Output markdown with these sections:
 3. Bridge/new challenge work that is not yet actionable, with exact blockers
 4. Non-actionable or deferred feedback
 5. Suggested validation plan
-{directions_block(directions)}
+{directions_block(directions)}{pr_feedback_block(pr_feedback_path)}
 """
 
 
 def build_implementation_prompt(
-    analysis_path: pathlib.Path, artifact_dir: pathlib.Path, directions: list[str]
+    analysis_path: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    directions: list[str],
+    pr_feedback_path: Optional[pathlib.Path] = None,
 ) -> str:
     return f"""Implement high-confidence pwn.college challenge/curriculum improvements from this feedback analysis:
 
@@ -1063,7 +1088,7 @@ When done, write a concise implementation note to {artifact_dir}/implementation-
 - changed challenge/module paths
 - what learner confusion each change addresses
 - any tests or playtests you recommend
-{directions_block(directions)}
+{directions_block(directions)}{pr_feedback_block(pr_feedback_path)}
 """
 
 
@@ -1072,6 +1097,7 @@ def build_fix_prompt(
     failure_dir: pathlib.Path,
     attempt: int,
     directions: list[str],
+    pr_feedback_path: Optional[pathlib.Path] = None,
 ) -> str:
     return f"""The feedback implementation has failing validation on attempt {attempt}.
 
@@ -1081,7 +1107,7 @@ Failure logs: {failure_dir}
 Read the failure logs, inspect the changed files, and make the smallest correct fixes.
 Follow AGENTS.md and .claude/skills/authoring-challenges/SKILL.md.
 Do not commit, push, open a PR, or edit generated Discord artifacts.
-{directions_block(directions)}
+{directions_block(directions)}{pr_feedback_block(pr_feedback_path)}
 """
 
 
@@ -1803,6 +1829,163 @@ def collect_pr_feedback_events(
     return accepted, ignored
 
 
+def is_maintainer_login(
+    api: GitHubAPI,
+    membership_cache: dict[str, bool],
+    login: str,
+) -> bool:
+    """True only for pwn.college org members; bots and outside contributors are excluded."""
+    if not login:
+        return False
+    if login not in membership_cache:
+        try:
+            membership_cache[login] = api.is_org_member(PWN_COLLEGE_GITHUB_ORG, login)
+        except GitHubAPIError as error:
+            logger.warning(
+                "could not verify GitHub org membership for %s: %s", login, error
+            )
+            membership_cache[login] = False
+    return membership_cache[login]
+
+
+def fetch_recent_pull_requests(
+    api: GitHubAPI,
+    owner: str,
+    repo_name: str,
+    since_iso: str,
+) -> list[dict[str, Any]]:
+    """Pull requests in owner/repo_name updated at or after since_iso, newest first."""
+    pulls = api.request_all(
+        f"/repos/{owner}/{repo_name}/pulls",
+        params={
+            "state": "all",
+            "sort": "updated",
+            "direction": "desc",
+            "per_page": 100,
+        },
+    )
+    recent = [pull for pull in pulls if (pull.get("updated_at") or "") >= since_iso]
+    recent.sort(key=lambda pull: pull.get("updated_at") or "", reverse=True)
+    return recent
+
+
+def collect_maintainer_pr_feedback(
+    api: GitHubAPI,
+    owner: str,
+    repo_name: str,
+    pulls: list[dict[str, Any]],
+    membership_cache: dict[str, bool],
+) -> list[dict[str, Any]]:
+    """Org-member (maintainer) comments/reviews on the given PRs, grouped per PR.
+
+    Drops our own automated-notice replies and any non-org-member author (bots, outside
+    contributors), so the agents only ever see real maintainer guidance.
+    """
+    feedback: list[dict[str, Any]] = []
+    for pull in pulls:
+        number = pull.get("number")
+        if number is None:
+            continue
+        sources = [
+            (
+                "issue_comment",
+                api.request_all(f"/repos/{owner}/{repo_name}/issues/{number}/comments"),
+            ),
+            (
+                "review_comment",
+                api.request_all(f"/repos/{owner}/{repo_name}/pulls/{number}/comments"),
+            ),
+            (
+                "review",
+                api.request_all(f"/repos/{owner}/{repo_name}/pulls/{number}/reviews"),
+            ),
+        ]
+        events: list[dict[str, Any]] = []
+        for kind, items in sources:
+            for item in items:
+                if is_generated_feedback_item(item):
+                    continue
+                login = (item.get("user") or {}).get("login") or ""
+                if not is_maintainer_login(api, membership_cache, login):
+                    continue
+                event = compact_pr_event(kind, item, "pwncollege-org-member")
+                if event:
+                    events.append(event)
+        if not events:
+            continue
+        events.sort(key=lambda event: event.get("created_at") or "")
+        feedback.append(
+            {
+                "number": number,
+                "title": pull.get("title"),
+                "state": pull.get("state"),
+                "merged": pull.get("merged_at") is not None,
+                "url": pull.get("html_url"),
+                "updated_at": pull.get("updated_at"),
+                "events": events,
+            }
+        )
+    return feedback
+
+
+def write_pr_feedback(
+    artifact_dir: pathlib.Path,
+    feedback: list[dict[str, Any]],
+    since: datetime.datetime,
+    until: datetime.datetime,
+) -> Optional[pathlib.Path]:
+    """Write maintainer PR feedback artifacts. Returns the markdown path, or None if empty."""
+    total_events = sum(len(pull["events"]) for pull in feedback)
+    if total_events == 0:
+        return None
+
+    jsonl_path = artifact_dir / "recent-pr-feedback.jsonl"
+    with jsonl_path.open("w") as handle:
+        for pull in feedback:
+            for event in pull["events"]:
+                record = dict(event)
+                record["pr_number"] = pull["number"]
+                record["pr_title"] = pull["title"]
+                record["pr_url"] = pull["url"]
+                handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+    lines = [
+        "# Recent maintainer feedback on prior PRs",
+        "",
+        f"Window: {since.isoformat()} .. {until.isoformat()}",
+        f"{total_events} maintainer comment(s)/review(s) across {len(feedback)} PR(s).",
+        "",
+        "These are changes pwn.college maintainers already requested, corrected, or "
+        "rejected on earlier PRs. Do not reintroduce a pattern a maintainer rejected.",
+        "",
+    ]
+    for pull in feedback:
+        state = "merged" if pull["merged"] else pull["state"]
+        lines.append(f"## PR #{pull['number']} — {pull['title']} ({state})")
+        if pull["url"]:
+            lines.append(pull["url"])
+        lines.append("")
+        for event in pull["events"]:
+            location = ""
+            if event.get("path"):
+                location = f" {event['path']}"
+                if event.get("line"):
+                    location += f":{event['line']}"
+            review_state = f" [{event['state']}]" if event.get("state") else ""
+            lines.append(
+                f"- **{event['kind']}**{review_state} by {event.get('author')}{location}:"
+            )
+            body = (event.get("body") or "").strip() or "(no body)"
+            for body_line in body.splitlines():
+                lines.append(f"  > {body_line}")
+            lines.append("")
+        lines.append("")
+
+    md_path = artifact_dir / "recent-pr-feedback.md"
+    md_path.write_text("\n".join(lines).rstrip() + "\n")
+    return md_path
+
+
 def check_run_failures(
     api: GitHubAPI, owner: str, repo_name: str, sha: str
 ) -> list[dict[str, Any]]:
@@ -2266,6 +2449,19 @@ def create_pull_request(
     help="How far back to scrape messages.",
 )
 @click.option(
+    "--pr-feedback/--no-pr-feedback",
+    default=True,
+    show_default=True,
+    help="Fetch recent maintainer PR comments/reviews and feed them to agents as do-not-repeat context.",
+)
+@click.option(
+    "--pr-feedback-hours",
+    type=click.IntRange(1, None),
+    default=168,
+    show_default=True,
+    help="How far back to scan pull requests for maintainer feedback.",
+)
+@click.option(
     "--token-env",
     default="DISCORD_BOT_TOKEN",
     show_default=True,
@@ -2361,6 +2557,8 @@ def feedback_command(
     guild_id,
     channel_ids,
     hours,
+    pr_feedback,
+    pr_feedback_hours,
     token_env,
     artifact_root,
     agent,
@@ -2438,6 +2636,37 @@ def feedback_command(
         messages_by_channel, channels_by_id, guild_id, include_authors
     )
     jsonl_path, transcript_path = write_transcript(artifact_dir, messages, since, until)
+
+    pr_feedback_path: Optional[pathlib.Path] = None
+    pr_feedback_prs = 0
+    pr_feedback_events = 0
+    if pr_feedback:
+        pr_since = until - datetime.timedelta(hours=pr_feedback_hours)
+        try:
+            api = GitHubAPI.from_environment(repo)
+            owner, repo_name = github_repo_slug(repo)
+            recent_pulls = fetch_recent_pull_requests(
+                api, owner, repo_name, pr_since.isoformat()
+            )
+            maintainer_feedback = collect_maintainer_pr_feedback(
+                api, owner, repo_name, recent_pulls, {}
+            )
+            pr_feedback_path = write_pr_feedback(
+                artifact_dir, maintainer_feedback, pr_since, until
+            )
+            pr_feedback_prs = len(maintainer_feedback)
+            pr_feedback_events = sum(
+                len(pull["events"]) for pull in maintainer_feedback
+            )
+            click.echo(
+                "Collected maintainer PR feedback: "
+                f"{pr_feedback_events} comment(s)/review(s) across "
+                f"{pr_feedback_prs} recent PR(s)"
+            )
+        except (click.ClickException, GitHubAPIError, OSError) as error:
+            click.echo(f"Skipping PR feedback collection: {error}")
+            pr_feedback_path = None
+
     (artifact_dir / "run.json").write_text(
         json.dumps(
             {
@@ -2450,6 +2679,10 @@ def feedback_command(
                 "include_threads": include_threads,
                 "include_authors": include_authors,
                 "directions": directions,
+                "pr_feedback": pr_feedback,
+                "pr_feedback_hours": pr_feedback_hours,
+                "pr_feedback_prs": pr_feedback_prs,
+                "pr_feedback_events": pr_feedback_events,
                 "watch_pr": watch_pr,
                 "watch_pr_interval": watch_pr_interval,
                 "max_watch_fix_attempts": max_watch_fix_attempts,
@@ -2465,7 +2698,9 @@ def feedback_command(
 
     analysis_path = run_agent(
         agent,
-        build_analysis_prompt(transcript_path, jsonl_path, artifact_dir, directions),
+        build_analysis_prompt(
+            transcript_path, jsonl_path, artifact_dir, directions, pr_feedback_path
+        ),
         repo=repo,
         artifact_dir=artifact_dir,
         output_name="analysis.md",
@@ -2476,7 +2711,9 @@ def feedback_command(
 
     run_agent(
         agent,
-        build_implementation_prompt(analysis_path, artifact_dir, directions),
+        build_implementation_prompt(
+            analysis_path, artifact_dir, directions, pr_feedback_path
+        ),
         repo=repo,
         artifact_dir=artifact_dir,
         output_name="implementation-agent.log",
@@ -2504,7 +2741,13 @@ def feedback_command(
                 failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
                 run_agent(
                     agent,
-                    build_fix_prompt(analysis_path, failure_dir, attempt, directions),
+                    build_fix_prompt(
+                        analysis_path,
+                        failure_dir,
+                        attempt,
+                        directions,
+                        pr_feedback_path,
+                    ),
                     repo=repo,
                     artifact_dir=artifact_dir,
                     output_name=f"fix-agent-attempt-{attempt}.log",
