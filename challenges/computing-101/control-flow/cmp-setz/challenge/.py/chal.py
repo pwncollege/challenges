@@ -2,7 +2,6 @@ import __main__ as checker
 import random
 
 give_flag = True
-num_instructions = 5
 
 check_disassembly_prologue = "Checking that your assembly compares argc against 42..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -13,6 +12,11 @@ check_runtime_success = "Your program correctly uses cmp and setz to compare arg
 check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
+	assert len(disas) in (4, 5), (
+		"This challenge can be solved in 4 instructions if you compare [rsp] directly, "
+		"or 5 instructions if you move argc into a register first."
+	)
+
 	mov_operands = checker.mov_operands(disas)
 	cmp_operands = [d.op_str for d in disas if d.mnemonic == 'cmp']
 
@@ -30,11 +34,11 @@ def check_disassembly(disas):
 	)
 
 	has_setcc = any(
-		d.mnemonic in ('setne', 'sete') and d.op_str == 'dil'
+		d.mnemonic == 'sete' and d.op_str == 'dil'
 		for d in disas
 	)
 	assert has_setcc, (
-		"You need to use 'setz dil' (or 'setnz dil') to store the comparison result\n"
+		"You need to use 'setz dil' to store the comparison result\n"
 		"into the lower byte of rdi! Remember: dil is the lower 8 bits of rdi."
 	)
 
