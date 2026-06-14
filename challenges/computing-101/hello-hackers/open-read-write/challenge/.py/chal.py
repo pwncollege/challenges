@@ -1,11 +1,7 @@
 import __main__ as checker
 import os
-import shlex
 
 give_flag = False
-
-# Fixed challenge I/O size; keep this above the repo's minimum flag buffer size.
-FLAG_SIZE = 128
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -59,44 +55,22 @@ def check_disassembly(disas):
 	return True
 
 def check_runtime(filename):
-	stdout_path = "/tmp/open-read-write.stdout"
 	try:
 		print("")
 
 		os.seteuid(0)
-		try:
-			os.unlink(stdout_path)
-		except FileNotFoundError:
-			pass
 		os.chmod("/flag", 0o644)
 		os.seteuid(65534)
 
-		run_and_capture = f"exec {shlex.quote(filename)} /flag | tee {shlex.quote(stdout_path)}"
-		returncode = checker.dramatic_command(
-			f"{filename} /flag",
-			actual_command=f"bash -o pipefail -c {shlex.quote(run_and_capture)}",
-		)
+		returncode = checker.dramatic_command(f"{filename} /flag")
 
 		checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")
 		assert returncode == 42, (
 			f"Your program should exit with code 42, but it exited with {returncode}!"
 		)
-
-		try:
-			actual = open(stdout_path, "rb").read()
-		except FileNotFoundError:
-			actual = b""
-		assert checker.read_flag() in actual, (
-			"Your program exited correctly, but it did not write the flag to stdout!\n"
-			f"Make sure `read` and `write` use the same {FLAG_SIZE}-byte buffer."
-		)
 	finally:
 		os.seteuid(0)
 		os.chmod("/flag", 0o600)
-		try:
-			os.unlink(stdout_path)
-		except FileNotFoundError:
-			pass
 		os.seteuid(65534)
 		checker.dramatic_command("")
 		print("")

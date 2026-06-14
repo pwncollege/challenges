@@ -22,10 +22,7 @@ Recall that file descriptor 0 is stdin, file descriptor 1 is stdout, and file de
 Other files that are open are just represented by other file descriptors, incrementing from 3 onwards!
 You'll use this fd as the first argument to `read`, just like you did for stdin earlier, but this time `read` will read from your file.
 
-Keep the data flow straight: `open` gives you a file descriptor, `read` uses that file descriptor to copy bytes into your memory, and `write` copies bytes from that same memory to stdout.
-The file descriptor is just the handle to the file; the buffer is the address where the file's bytes actually land.
-
-How do you load the filename pointer?
+How to load the filename into memory?
 In this level, the path to the flag (`/flag`) will be passed as the first argument to your program.
 You already know how to load that: `mov rdi, [rsp+16]`.
 
@@ -34,8 +31,8 @@ Your program should:
 1. Load a pointer to the filename (stored at `[rsp+16]`, the first argument) into `rdi`
 2. Specify the default of read access for the second argument (set `rsi` to `0`).
 3. `open` it (syscall `2`)
-4. `read` 128 bytes from the returned fd into memory. The returned fd will be stored in `rax`; you'll need to move that to `rdi` for `read`'s first argument. Make sure to do this _before_ you overwrite `rax` with the `read` syscall number!
-5. `write` those 128 bytes to stdout
+4. `read` 80 bytes from the returned fd into memory. The returned fd will be stored in `rax`; you'll need to move that to `rdi` for `read`'s first argument. Make sure to do this _before_ you set the syscall number for write!
+5. `write` those 80 bytes to stdout
 6. `exit` with code `42` (syscall `60`)
 
 ----
