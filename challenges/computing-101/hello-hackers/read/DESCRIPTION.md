@@ -29,18 +29,16 @@ They are _hexadecimal_ representations of _ASCII_-encoded letters.
 If those words don't make sense, please run through the first half or so of the [Dealing with Data](/fundamentals/data-dealings) module and then come back here!
 
 In this level, we will combine `read` with our previous `write` abilities.
-The challenge will pipe the flag into your program's stdin.
+The flag will be piped into your program's stdin --- 128 bytes of it.
 Your program should:
 
-1. first `read` the provided bytes from stdin to your program's memory
-2. `write` those same bytes from that memory location to stdout
+1. first `read` 128 bytes from stdin to your program's memory
+2. `write` those 128 bytes from that memory location to stdout
 3. finally, exit with the exit code `42`.
 
 But what address should you use?
 You need somewhere that's valid and writable, and you already know about one such place: the stack!
-The `rsp` register starts out pointing at the stack data that the kernel placed there when launching your program, such as argument information you've used in earlier levels.
-In this level, you do not need that startup data after your program begins, so you can reuse the current stack memory as scratch space for `read`.
-Later programs that still need values from `[rsp]` or nearby stack slots should avoid overwriting those bytes until they are done with them.
+The `rsp` register points to the top of the stack, and there's plenty of writable space there.
 So you can just use `rsp` as your memory address: `mov rsi, rsp`.
 
 
