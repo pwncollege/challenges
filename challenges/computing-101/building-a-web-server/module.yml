@@ -31,6 +31,15 @@ resources:
 - type: challenge
   id: socket
   name: Socket
+- type: markdown
+  name: "Network Byte Order"
+  content: |
+    Back in [Endian Escapades](/computing-101/endian-escapades), you saw that x86 stores multi-byte values little-endian in memory, and that non-CPU contexts such as network protocols can use a different byte order.
+    For IP socket structures, multi-byte numbers use big-endian order: the most-significant byte comes first.
+    This convention is called **network byte order**.
+    For a 16-bit port number, that means port `80` (`0x0050`) is represented as bytes `00 50`.
+
+    In the next challenge, Linux will read those bytes from your `sockaddr_in` structure when you call `bind`.
 - type: challenge
   id: bind
   name: Bind
