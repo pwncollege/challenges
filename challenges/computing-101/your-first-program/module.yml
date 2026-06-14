@@ -1,11 +1,5 @@
 name: Your First Program
 resources:
-  - type: markdown
-    name: Assembly Crash Course Archive
-    content: |
-      Looking for the old Assembly Crash Course?
-      It has been archived at [pwn.college/archive/assembly-crash-course](https://pwn.college/archive/assembly-crash-course).
-      Computing 101 is the current path through that material.
   - name: "Computer Architecture"
     type: lecture
     video: o_kSgUPJk4c
