@@ -4,6 +4,9 @@ import shlex
 
 give_flag = False
 
+# Fixed challenge I/O size; keep this above the repo's minimum flag buffer size.
+FLAG_SIZE = 128
+
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
 check_disassembly_failure = "There's an issue with your assembly:\n"
@@ -85,7 +88,7 @@ def check_runtime(filename):
 			actual = b""
 		assert checker.read_flag() in actual, (
 			"Your program exited correctly, but it did not write the flag to stdout!\n"
-			"Make sure `write` uses the same buffer that `read` filled."
+			f"Make sure `read` and `write` use the same {FLAG_SIZE}-byte buffer."
 		)
 	finally:
 		os.seteuid(0)

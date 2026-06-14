@@ -34,8 +34,8 @@ Your program should:
 1. Load a pointer to the filename (stored at `[rsp+16]`, the first argument) into `rdi`
 2. Specify the default of read access for the second argument (set `rsi` to `0`).
 3. `open` it (syscall `2`)
-4. `read` 80 bytes from the returned fd into memory. The returned fd will be stored in `rax`; you'll need to move that to `rdi` for `read`'s first argument. Make sure to do this _before_ you overwrite `rax` with the `read` syscall number!
-5. `write` those 80 bytes to stdout
+4. `read` 128 bytes from the returned fd into memory. The returned fd will be stored in `rax`; you'll need to move that to `rdi` for `read`'s first argument. Make sure to do this _before_ you overwrite `rax` with the `read` syscall number!
+5. `write` those 128 bytes to stdout
 6. `exit` with code `42` (syscall `60`)
 
 ----
