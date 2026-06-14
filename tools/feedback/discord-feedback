@@ -176,20 +176,29 @@ class GitHubAPI:
         *,
         accept: str = "application/vnd.github+json",
     ) -> list[Any]:
+        items: list[Any] = []
+        for page in self.request_pages(path, params=params, accept=accept):
+            items.extend(page)
+        return items
+
+    def request_pages(
+        self,
+        path: str,
+        params: Optional[dict[str, Any]] = None,
+        *,
+        accept: str = "application/vnd.github+json",
+    ) -> Iterable[list[Any]]:
         page_params = dict(params or {})
         page_params.setdefault("per_page", 100)
         payload, headers = self._request(path, params=page_params, accept=accept)
         if not isinstance(payload, list):
             raise GitHubAPIError(f"Expected list response for {path}")
-        items = list(payload)
-        next_url = next_link(headers.get("Link"))
-        while next_url:
+        yield payload
+        while next_url := next_link(headers.get("Link")):
             payload, headers = self._request(next_url, accept=accept)
             if not isinstance(payload, list):
                 raise GitHubAPIError(f"Expected list response for {path}")
-            items.extend(payload)
-            next_url = next_link(headers.get("Link"))
-        return items
+            yield payload
 
     def is_org_member(self, org: str, login: str) -> bool:
         quoted_login = urllib.parse.quote(login, safe="")
@@ -1855,7 +1864,8 @@ def fetch_recent_pull_requests(
     since_iso: str,
 ) -> list[dict[str, Any]]:
     """Pull requests in owner/repo_name updated at or after since_iso, newest first."""
-    pulls = api.request_all(
+    recent: list[dict[str, Any]] = []
+    for page in api.request_pages(
         f"/repos/{owner}/{repo_name}/pulls",
         params={
             "state": "all",
@@ -1863,9 +1873,11 @@ def fetch_recent_pull_requests(
             "direction": "desc",
             "per_page": 100,
         },
-    )
-    recent = [pull for pull in pulls if (pull.get("updated_at") or "") >= since_iso]
-    recent.sort(key=lambda pull: pull.get("updated_at") or "", reverse=True)
+    ):
+        for pull in page:
+            if (pull.get("updated_at") or "") < since_iso:
+                return recent
+            recent.append(pull)
     return recent
 
 
