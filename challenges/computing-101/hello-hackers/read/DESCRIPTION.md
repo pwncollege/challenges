@@ -29,7 +29,7 @@ They are _hexadecimal_ representations of _ASCII_-encoded letters.
 If those words don't make sense, please run through the first half or so of the [Dealing with Data](/fundamentals/data-dealings) module and then come back here!
 
 In this level, we will combine `read` with our previous `write` abilities.
-The checker will pipe the flag data into your program's stdin and tell you how many bytes it expects your program to echo.
+The challenge will pipe the flag into your program's stdin.
 Your program should:
 
 1. first `read` the provided bytes from stdin to your program's memory
