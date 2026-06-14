@@ -39,7 +39,7 @@ There's also a complementary instruction, `setnz` ("Set if Not Zero"), which doe
 
 But what is `dil`?
 So far, you've worked with 64-bit registers like `rdi`, `rax`, and `rsp`.
-The `setnz` instruction, however, only writes a single byte (8 bits).
+The `setz` instruction, however, only writes a single byte (8 bits).
 Luckily, you can access smaller portions of the full 64-bit registers.
 For `rdi`:
 

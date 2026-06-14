@@ -2,7 +2,6 @@ import __main__ as checker
 import random
 
 give_flag = True
-num_instructions = 5
 
 check_disassembly_prologue = "Checking that your assembly compares argc against 42..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -30,11 +29,11 @@ def check_disassembly(disas):
 	)
 
 	has_setcc = any(
-		d.mnemonic in ('setne', 'sete') and d.op_str == 'dil'
+		d.mnemonic in ('setz', 'sete') and d.op_str == 'dil'
 		for d in disas
 	)
 	assert has_setcc, (
-		"You need to use 'setz dil' (or 'setnz dil') to store the comparison result\n"
+		"You need to use 'setz dil' to store the comparison result\n"
 		"into the lower byte of rdi! Remember: dil is the lower 8 bits of rdi."
 	)
 
