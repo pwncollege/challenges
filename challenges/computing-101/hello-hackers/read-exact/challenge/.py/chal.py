@@ -7,40 +7,31 @@ import os
 executable = True
 give_flag = False
 
-# Fixed challenge I/O size; keep this above the repo's minimum flag buffer size.
-FLAG_SIZE = 128
-
 try:
 	_flag = open("/flag").read().strip()
 except FileNotFoundError:
 	_flag = "pwn.college{test_placeholder_00000000000000}"
 
-_flag_padded = (_flag + "\n").encode().ljust(FLAG_SIZE, b" ")[:FLAG_SIZE]
+# Unlike the `read` level, we do NOT pad the input. The flag arrives at its real length,
+# so a single hardcoded count would over- or under-shoot; the learner must write back
+# exactly the number of bytes read() returned.
+_flag_bytes = (_flag + "\n").encode()
 _flag_masked = "pwn.college{" + "*" * (len(_flag) - len("pwn.college{}")) + "}"
 
-# Write padded flag to a temp file so the shell can pipe it as stdin
 _flag_stdin_file = tempfile.mktemp(prefix='check_flag_')
 with open(_flag_stdin_file, 'wb') as f:
-	f.write(_flag_padded)
+	f.write(_flag_bytes)
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
 check_disassembly_failure = "There's an issue with your assembly:\n"
 
-check_runtime_prologue = "Let's pipe the flag into your program and check that it echoes it back!"
-check_runtime_success = "YES! You read and wrote the flag! Great job!"
+check_runtime_prologue = "Let's pipe the flag in and check that you echo back exactly what you read!"
+check_runtime_success = "YES! You wrote back exactly the bytes you read! Great job!"
 check_runtime_failure = "Hmm, that's not right:\n"
-
-must_set_regs = [ "rax", "rdi", "rsi", "rdx" ]
 
 def check_disassembly(disas):
 	mov_operands = checker.mov_operands(disas)
-
-	set_regs = [dst for dst, _ in mov_operands]
-	assert set(set_regs) >= set(must_set_regs), (
-		"You must set each of the following registers (using the mov instruction):\n    "
-		+ ", ".join(must_set_regs)
-	)
 
 	has_rsp_src = any(src == "rsp" for _, src in mov_operands)
 	assert has_rsp_src, (
@@ -48,21 +39,20 @@ def check_disassembly(disas):
 		"Use 'mov rsi, rsp' to point rsi at the stack."
 	)
 
-	assert ['rax', '0x3c'] in mov_operands, (
-		"You need to set rax to 60 (0x3c), the syscall number for exit!"
-	)
+	# The whole point of this level: write's length must be read's return value.
+	checker.assert_write_count_from_read(disas)
+
 	assert ['rdi', '0x2a'] in mov_operands, (
 		"You need to set rdi to 42 (0x2a), the exit code!"
 	)
 
-	last_rax = max(i for i, m in enumerate(mov_operands) if m[0] == 'rax')
-	assert mov_operands[last_rax] == ['rax', '0x3c'], (
-		"Your last assignment to rax should be 60 (0x3c) for the exit syscall,\n"
+	# Find the exit syscall by scanning, not by assuming it is the final instruction.
+	syscall_indices = [i for i, insn in enumerate(disas) if insn.mnemonic == "syscall"]
+	assert syscall_indices, "You need to invoke the exit syscall!"
+	rax_before_exit = [m for m in checker.mov_operands(disas[:syscall_indices[-1]]) if m[0] == 'rax']
+	assert rax_before_exit and rax_before_exit[-1] == ['rax', '0x3c'], (
+		"Your last assignment to rax before the exit syscall should be 60 (0x3c),\n"
 		"but you're overwriting it afterwards!"
-	)
-
-	assert disas[-1].mnemonic == "syscall", (
-		f"Your last instruction should be 'syscall', but you used '{disas[-1].mnemonic}'!"
 	)
 
 	return True
@@ -76,9 +66,11 @@ def check_runtime(filename):
 		)
 		time.sleep(0.1)
 
+		# The read->write pattern is enforced statically in check_disassembly; here we just
+		# let the learner watch their own program echo the flag back out.
 		actual_bytes = open("/tmp/stdout", "rb").read()
-		assert actual_bytes == _flag_padded, (
-			f"Your program should echo the flag to stdout!"
+		assert _flag.encode() in actual_bytes, (
+			"Your program should read the flag from stdin and write it back to stdout."
 		)
 
 		checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")

@@ -3,6 +3,8 @@ import tempfile
 import time
 import os
 
+# Run the learner's own complete program as-is (executable mode --- no builder rebuild).
+executable = True
 give_flag = False
 num_instructions = 8
 
@@ -31,6 +33,8 @@ check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
 	mov_operands = checker.mov_operands(disas)
+
+	checker.assert_instruction_count(disas, num_instructions)
 
 	has_argv1_deref = any(
 		"[rsp + 0x10]" in src

@@ -18,6 +18,9 @@ resources:
     id: read
     name: "Reading Data"
   - type: challenge
+    id: read-exact
+    name: "Reading Exactly"
+  - type: challenge
     id: open-read-write
     name: "Opening Files"
   - type: challenge

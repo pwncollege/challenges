@@ -1,9 +1,11 @@
 import __main__ as checker
 import os
 
+# Run the learner's own complete program as-is (executable mode --- no builder rebuild),
+# so it executes with exactly the privileges we give it rather than the builder's SUID
+# wrapper. These levels need the program to read the real /flag, so we run it as root.
+executable = True
 give_flag = False
-
-FLAG_SIZE = 128
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -78,6 +80,10 @@ def check_disassembly(disas):
 		"You need to set rdi to 42 (0x2a), the exit code!"
 	)
 
+	# Write back exactly what you read: write's length (rdx) must come from read's
+	# return value (rax), the idiom you learned in read-exact --- not a hardcoded count.
+	checker.assert_write_count_from_read(disas)
+
 	exit_syscall = syscall_indices[-1]
 	rax_writes_before_exit = [
 		insn
@@ -101,19 +107,14 @@ def check_disassembly(disas):
 	return True
 
 def check_runtime(filename):
+	# The program opens and reads the real /flag, so run it as root --- the privilege a
+	# real flag-reading program holds for that protected (0400, root-owned) file. We
+	# never relax the flag's permissions or rewrite it.
+	saved_ids = os.getresuid()
 	try:
 		print("")
 
-		# pad /flag to exactly FLAG_SIZE bytes so the student's program reads clean data
-		os.seteuid(0)
-		with open("/flag", "r") as f:
-			flag_content = f.read().strip()
-		padded = (flag_content + "\n").ljust(FLAG_SIZE, "\r")[:FLAG_SIZE]
-		with open("/flag", "w") as f:
-			f.write(padded)
-		os.chmod("/flag", 0o644)
-		os.seteuid(65534)
-
+		os.setresuid(0, 0, 0)
 		returncode = checker.dramatic_command(filename)
 
 		checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")
@@ -121,9 +122,7 @@ def check_runtime(filename):
 			f"Your program should exit with code 42, but it exited with {returncode}!"
 		)
 	finally:
-		os.seteuid(0)
-		os.chmod("/flag", 0o600)
-		os.seteuid(65534)
+		os.setresuid(*saved_ids)
 		checker.dramatic_command("")
 		print("")
 

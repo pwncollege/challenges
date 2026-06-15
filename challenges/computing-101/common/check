@@ -34,6 +34,46 @@ def mov_operands(disas):
     pairs = (d.op_str.split(", ") for d in disas if d.mnemonic == "mov")
     return [[SUBREG_TO_64.get(dst, dst), src] for dst, src in pairs]
 
+def _mov_parts(insn):
+    # (dst, src) of a simple `mov`, both normalized to 64-bit register names so that
+    # `mov edx, eax` reads as ('rdx', 'rax'); None if it isn't a two-operand mov.
+    if insn.mnemonic != "mov" or not insn.op_str:
+        return None
+    dst, _, src = insn.op_str.partition(", ")
+    dst, src = dst.strip(), src.strip()
+    return SUBREG_TO_64.get(dst, dst), SUBREG_TO_64.get(src, src)
+
+def assert_write_count_from_read(disas):
+    # Statically require the read->write idiom: the length passed to write (rdx) must be
+    # the value read() returned (rax) --- a `mov rdx, rax` after the read syscall and
+    # before the write syscall --- not a hardcoded immediate. Accepts `mov edx, eax`.
+    def rax_imm_before(idx):
+        for j in range(idx - 1, -1, -1):
+            p = _mov_parts(disas[j])
+            if p and p[0] == "rax":
+                return p[1]
+        return None
+    syscalls = [i for i, insn in enumerate(disas) if insn.mnemonic == "syscall"]
+    read_i = next((i for i in syscalls if rax_imm_before(i) == "0"), None)
+    write_i = next((i for i in syscalls if rax_imm_before(i) == "1"), None)
+    assert read_i is not None, "You need to invoke the read syscall (set rax to 0)!"
+    assert write_i is not None, "You need to invoke the write syscall (set rax to 1)!"
+    assert read_i < write_i, "You need to read the data before you write it back out!"
+    rdx_after_read = [p for p in (_mov_parts(d) for d in disas[read_i + 1:write_i]) if p and p[0] == "rdx"]
+    assert rdx_after_read and rdx_after_read[-1][1] == "rax", (
+        "write's length (rdx) must come from read's return value (rax).\n"
+        "read returns how many bytes it actually read, so after your read syscall do\n"
+        "`mov rdx, rax` --- write exactly that many bytes --- rather than hardcoding a length."
+    )
+
+def assert_instruction_count(disas, n):
+    # Statically enforce an exact instruction count on the learner's .text disassembly.
+    count = len(disas)
+    assert count == n, (
+        f"This challenge expects {n} instruction{'s' if n != 1 else ''}, "
+        f"but you provided {count}."
+    )
+
 sys.path.append(os.path.dirname(__file__)+"/.py")
 import chal #pylint:disable=import-error,wrong-import-position
 

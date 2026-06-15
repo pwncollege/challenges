@@ -75,7 +75,7 @@ Now, a quick note about the math here: though we write `[rip+path]` above, what 
 It's a weird syntax, and yet another little quirk of x86.
 
 Use this in this challenge to set the path passed to `open`.
-Your program should open the stored filename, read enough bytes from the returned fd to include the flag, write those bytes to stdout, and exit with code `42`.
+Your program should open the stored filename, `read` from the returned fd into memory, `write` back exactly the number of bytes `read` returned (`mov rdx, rax`, as in read-exact), and `exit` with code `42`.
 The new parts are:
 
 1. Store the filename with `.asciz` after your code.

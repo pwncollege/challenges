@@ -34,8 +34,8 @@ Your program should:
 
 1. Write `"/flag\0"` onto the stack byte by byte using `mov BYTE PTR [rsp+N], ...`
 2. `open` it (syscall `2`): `rdi` = `rsp` (the string you just wrote), `rsi` = `0`
-3. `read` 80 bytes from the returned fd into memory (syscall `0`)
-4. `write` those 80 bytes to stdout (syscall `1`)
+3. `read` from the returned fd into memory (syscall `0`), using a comfortably large count
+4. `write` to stdout exactly the number of bytes `read` returned (syscall `1`)
 5. `exit` with code `42` (syscall `60`)
 
 ----
