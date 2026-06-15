@@ -44,6 +44,12 @@ STATUS_TEXT_LIMIT = 160
 AGENT_MESSAGE_TEXT_LIMIT = 700
 COMMAND_OUTPUT_TEXT_LIMIT = 260
 DEFAULT_PR_WATCH_INTERVAL_SECONDS = 60
+DEFAULT_FALLBACK_HOURS = 24
+MERGED_PR_SCAN_PAGE_CAP = 10
+# A batch scrapes Discord when it starts, then spends a while implementing fixes before the
+# PR is opened. Resuming from the PR's open time would skip messages that landed during that
+# window; back up by an assumed implementation duration so we re-cover them instead.
+IMPLEMENTATION_BUFFER_HOURS = 1
 CI_FAILURE_CONCLUSIONS = {
     "action_required",
     "cancelled",
@@ -259,7 +265,7 @@ def utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
 
-def parse_discord_time(value: str) -> datetime.datetime:
+def parse_iso8601(value: str) -> datetime.datetime:
     return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
@@ -373,7 +379,7 @@ def fetch_public_archived_threads(
             )
             if not archive_timestamp:
                 continue
-            archived_at = parse_discord_time(archive_timestamp)
+            archived_at = parse_iso8601(archive_timestamp)
             oldest_archive = (
                 archived_at
                 if oldest_archive is None
@@ -417,7 +423,7 @@ def fetch_messages_since(
         oldest_id: Optional[int] = None
         oldest_time: Optional[datetime.datetime] = None
         for message in page:
-            message_time = parse_discord_time(message["timestamp"])
+            message_time = parse_iso8601(message["timestamp"])
             message_id = int(message["id"])
             oldest_id = message_id if oldest_id is None else min(oldest_id, message_id)
             oldest_time = (
@@ -524,7 +530,7 @@ def write_transcript(
         if message["channel"] != last_channel:
             lines.extend(["", f"## #{message['channel']}", ""])
             last_channel = message["channel"]
-        timestamp = parse_discord_time(message["timestamp"]).strftime(
+        timestamp = parse_iso8601(message["timestamp"]).strftime(
             "%Y-%m-%d %H:%M:%S UTC"
         )
         content = message["content"].replace("\n", "\n  ")
@@ -1869,6 +1875,103 @@ def fetch_recent_pull_requests(
     return recent
 
 
+def is_bot_pull(pull: dict[str, Any]) -> bool:
+    """True when this PR was opened by the feedback bot itself.
+
+    The bot pushes ``feedback/<run-id>`` branches and prefixes every PR body with the
+    automation notice, so either signal marks one of our own PRs.
+    """
+    head_ref = (pull.get("head") or {}).get("ref") or ""
+    if head_ref.startswith("feedback/"):
+        return True
+    return (pull.get("body") or "").lstrip().startswith(AUTOMATED_MESSAGE_NOTICE)
+
+
+def find_last_merged_bot_pr(
+    api: GitHubAPI,
+    owner: str,
+    repo_name: str,
+    *,
+    page_cap: int = MERGED_PR_SCAN_PAGE_CAP,
+) -> Optional[dict[str, Any]]:
+    """The most recently merged PR opened by the feedback bot, or None.
+
+    Scans closed PRs newest-updated first. A PR's ``updated_at`` is always >= its
+    ``merged_at``, so once a page's oldest ``updated_at`` falls at/under the best
+    ``merged_at`` seen so far no later page can beat it and we stop -- ``page_cap`` is only
+    a backstop against an unbounded crawl.
+    """
+    path = f"/repos/{owner}/{repo_name}/pulls"
+    best: Optional[dict[str, Any]] = None
+    for page in range(1, page_cap + 1):
+        pulls = api.request(
+            path,
+            params={
+                "state": "closed",
+                "sort": "updated",
+                "direction": "desc",
+                "per_page": 100,
+                "page": page,
+            },
+        )
+        if not isinstance(pulls, list) or not pulls:
+            break
+        for pull in pulls:
+            merged_at = pull.get("merged_at")
+            if merged_at and is_bot_pull(pull):
+                if best is None or merged_at > best["merged_at"]:
+                    best = pull
+        page_oldest_updated = pulls[-1].get("updated_at") or ""
+        if best is not None and page_oldest_updated <= best["merged_at"]:
+            break
+        if len(pulls) < 100:
+            break
+    return best
+
+
+def resolve_scrape_since(
+    repo: pathlib.Path,
+    until: datetime.datetime,
+    hours: Optional[int],
+    fallback_hours: int,
+) -> datetime.datetime:
+    """Pick where the Discord scrape should start.
+
+    With an explicit ``--hours`` the caller forces a fixed lookback window. Otherwise we
+    resume from the last merged feedback PR -- specifically from when that PR was opened,
+    minus ``IMPLEMENTATION_BUFFER_HOURS`` so messages that arrived while that batch was still
+    being implemented are re-covered rather than skipped. Falls back to ``fallback_hours``
+    when no such PR (or no GitHub access) is available.
+    """
+    if hours is not None:
+        return until - datetime.timedelta(hours=hours)
+
+    fallback = until - datetime.timedelta(hours=fallback_hours)
+    try:
+        api = GitHubAPI.from_environment(repo)
+        owner, repo_name = github_repo_slug(repo)
+        pull = find_last_merged_bot_pr(api, owner, repo_name)
+    except (click.ClickException, GitHubAPIError, OSError) as error:
+        click.echo(
+            f"Could not locate the last merged feedback PR ({error}); "
+            f"scraping the last {fallback_hours}h instead."
+        )
+        return fallback
+    if not pull:
+        click.echo(
+            f"No merged feedback PR found; scraping the last {fallback_hours}h instead."
+        )
+        return fallback
+    opened_at = parse_iso8601(pull["created_at"])
+    since = opened_at - datetime.timedelta(hours=IMPLEMENTATION_BUFFER_HOURS)
+    click.echo(
+        f"Resuming from merged feedback PR #{pull.get('number')} "
+        f"(opened {opened_at.isoformat()}, scraping from "
+        f"{IMPLEMENTATION_BUFFER_HOURS}h earlier to catch in-flight messages)."
+    )
+    return since
+
+
 def collect_maintainer_pr_feedback(
     api: GitHubAPI,
     owner: str,
@@ -2444,9 +2547,12 @@ def create_pull_request(
 @click.option(
     "--hours",
     type=click.IntRange(1, None),
-    default=24,
-    show_default=True,
-    help="How far back to scrape messages.",
+    default=None,
+    help=(
+        "How far back to scrape messages, in hours. "
+        "Default: since the last merged feedback PR "
+        f"(or the last {DEFAULT_FALLBACK_HOURS}h when none exists)."
+    ),
 )
 @click.option(
     "--pr-feedback/--no-pr-feedback",
@@ -2604,7 +2710,7 @@ def feedback_command(
     env_channel_ids = os.environ.get("PWN_FEEDBACK_DISCORD_CHANNEL_IDS")
     selected_channel_ids = parse_channel_ids(channel_ids, env_channel_ids)
     until = utc_now()
-    since = until - datetime.timedelta(hours=hours)
+    since = resolve_scrape_since(repo, until, hours, DEFAULT_FALLBACK_HOURS)
 
     api = DiscordAPI(token)
     click.echo(f"Scraping Discord messages since {since.isoformat()} into {artifact_dir}")
