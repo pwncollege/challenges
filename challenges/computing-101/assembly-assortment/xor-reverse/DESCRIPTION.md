@@ -11,6 +11,7 @@ For example:
   01001011  (0x4b, 75)
 ```
 
+In diagrams and expressions such as `0x4b ^ 0x2a`, `^` means XOR; in assembly, the instruction is `xor`.
 The syntax is the same as `add` and `sub`: `xor rax, 42`.
 
 A key property of XOR is that it's **its own inverse**: `xor`ing a value with the same value twice gives back the original value.
