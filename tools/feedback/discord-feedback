@@ -39,6 +39,7 @@ TEXT_CHANNEL_TYPES = {0, 5}
 PUBLIC_THREAD_TYPES = {10, 11}
 THREAD_PARENT_TYPES = {0, 5, 15, 16}
 MAX_DISCORD_PAGE_SIZE = 100
+MAX_DISCORD_SERVER_ERROR_RETRIES = 5
 STATUS_HEARTBEAT_SECONDS = 30
 STATUS_TEXT_LIMIT = 160
 AGENT_MESSAGE_TEXT_LIMIT = 700
@@ -71,6 +72,10 @@ class DiscordPermissionError(RuntimeError):
     pass
 
 
+class DiscordServerError(RuntimeError):
+    pass
+
+
 class GitHubAPIError(RuntimeError):
     pass
 
@@ -93,6 +98,7 @@ class DiscordAPI:
         }
         request = urllib.request.Request(url, headers=headers)
 
+        server_error_attempts = 0
         while True:
             try:
                 with urllib.request.urlopen(request, timeout=30) as response:
@@ -110,9 +116,51 @@ class DiscordAPI:
                     continue
                 if error.code in {403, 404}:
                     raise DiscordPermissionError(f"{error.code} for {path}") from error
+                # Discord 5xx responses are usually transient; back off and retry a
+                # bounded number of times before giving up on this request.
+                if error.code >= 500:
+                    server_error_attempts += 1
+                    if server_error_attempts > MAX_DISCORD_SERVER_ERROR_RETRIES:
+                        raise DiscordServerError(
+                            f"Discord API request failed after "
+                            f"{MAX_DISCORD_SERVER_ERROR_RETRIES} retries: "
+                            f"{error.code} {path}: {body}"
+                        ) from error
+                    backoff = min(2**server_error_attempts, 60)
+                    logger.warning(
+                        "Discord server error %d for %s; retrying in %ds (%d/%d)",
+                        error.code,
+                        path,
+                        backoff,
+                        server_error_attempts,
+                        MAX_DISCORD_SERVER_ERROR_RETRIES,
+                    )
+                    time.sleep(backoff)
+                    continue
                 raise RuntimeError(
                     f"Discord API request failed: {error.code} {path}: {body}"
                 ) from error
+            except urllib.error.URLError as error:
+                # Connection resets and read timeouts are transient too; retry under the
+                # same bounded budget so a single network blip can't abort a long scrape.
+                server_error_attempts += 1
+                if server_error_attempts > MAX_DISCORD_SERVER_ERROR_RETRIES:
+                    raise DiscordServerError(
+                        f"Discord API request failed after "
+                        f"{MAX_DISCORD_SERVER_ERROR_RETRIES} retries: "
+                        f"{path}: {error.reason}"
+                    ) from error
+                backoff = min(2**server_error_attempts, 60)
+                logger.warning(
+                    "Discord request error for %s (%s); retrying in %ds (%d/%d)",
+                    path,
+                    error.reason,
+                    backoff,
+                    server_error_attempts,
+                    MAX_DISCORD_SERVER_ERROR_RETRIES,
+                )
+                time.sleep(backoff)
+                continue
 
     @staticmethod
     def _retry_after(headers: Any, body: str) -> float:
@@ -321,9 +369,15 @@ def discover_channels(
     ]
 
     if include_threads:
-        active_threads = api.request(f"/guilds/{guild_id}/threads/active").get(
-            "threads", []
-        )
+        # Active-thread enrichment is best-effort, mirroring the archived-thread scan
+        # below; a transient guild-level error here must not abort the whole scrape.
+        try:
+            active_threads = api.request(f"/guilds/{guild_id}/threads/active").get(
+                "threads", []
+            )
+        except (DiscordPermissionError, DiscordServerError) as error:
+            logger.warning("skipping active threads for guild %s: %s", guild_id, error)
+            active_threads = []
         public_active_threads = [
             thread
             for thread in active_threads
@@ -409,7 +463,7 @@ def fetch_messages_since(
     while len(messages) < max_messages:
         try:
             page = api.request(f"/channels/{channel['id']}/messages", params)
-        except DiscordPermissionError as error:
+        except (DiscordPermissionError, DiscordServerError) as error:
             logger.warning(
                 "skipping messages for %s: %s",
                 channel.get("name", channel["id"]),
