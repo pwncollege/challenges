@@ -10,7 +10,7 @@ This pattern is called a **switch**, and it's a fundamental building block in pr
 In the disassembly, you'll see something like:
 
 ```asm
-xor    eax, eax                  ; zero out rax
+mov    rax, 0                    ; zero out rax
 mov    al, BYTE PTR [rcx]        ; load the character into the low byte of rax
 mov    rax, [rax*8+0x1234000]    ; load a stored address from the jump table at 0x1234000
 jmp    rax                       ; jump to it
@@ -18,7 +18,7 @@ jmp    rax                       ; jump to it
 
 You've seen `dil` (the low byte of `rdi`) before, and `al` is the same idea for `rax`.
 Writing to `al` only changes the lowest 8 bits, leaving the rest of `rax` intact.
-That's why the code first zeros `rax` with `xor eax, eax`: it ensures the upper bytes are `0`, so after `mov al, [rcx]`, `rax` holds just the character's value (0--255).
+That's why the code first zeros `rax`: it ensures the upper bytes are `0`, so after `mov al, [rcx]`, `rax` holds just the character's value (0--255).
 
 The character's value directly indexes a table of 256 entries (one per possible byte value).
 Each entry is an **8 byte** address pointing to code for that case.
