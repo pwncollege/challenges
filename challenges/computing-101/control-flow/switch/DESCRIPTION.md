@@ -60,7 +60,7 @@ You can also print the whole jump table at the same time.
 The output will be long, but it starts like this:
 
 ```gdb
-(gdb) x/256ag 0x1337000
+(gdb) x/256a 0x1337000
 0x1337000:  0x400100  0x400100
 0x1337010:  0x400100  0x400100
 ...
