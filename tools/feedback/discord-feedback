@@ -40,6 +40,11 @@ PUBLIC_THREAD_TYPES = {10, 11}
 THREAD_PARENT_TYPES = {0, 5, 15, 16}
 MAX_DISCORD_PAGE_SIZE = 100
 MAX_DISCORD_SERVER_ERROR_RETRIES = 5
+# Image attachments are downloaded so the analysis agent can view screenshots that carry
+# the feedback. The size cap is a backstop against a pathological upload; real screenshots
+# are far smaller, and Discord's own `size` field is the authoritative guard.
+IMAGE_ATTACHMENT_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+MAX_IMAGE_ATTACHMENT_BYTES = 25 * 1024 * 1024
 STATUS_HEARTBEAT_SECONDS = 30
 STATUS_TEXT_LIMIT = 160
 AGENT_MESSAGE_TEXT_LIMIT = 700
@@ -507,11 +512,57 @@ def sanitize_content(content: str, channels_by_id: dict[str, dict[str, Any]]) ->
     return content.strip()
 
 
+def is_image_attachment(attachment: dict[str, Any]) -> bool:
+    content_type = (attachment.get("content_type") or "").lower()
+    if content_type.startswith("image/"):
+        return True
+    filename = (attachment.get("filename") or "").lower()
+    return filename.endswith(IMAGE_ATTACHMENT_EXTENSIONS)
+
+
+def attachment_local_name(attachment: dict[str, Any]) -> str:
+    base = pathlib.Path(attachment.get("filename") or "image").name
+    base = re.sub(r"[^A-Za-z0-9_.-]+", "-", base).strip("-.") or "image"
+    return f"{attachment.get('id', 'attachment')}-{base}"
+
+
+def download_image_attachment(
+    url: str, dest: pathlib.Path, expected_size: Optional[int] = None
+) -> Optional[pathlib.Path]:
+    """Download a Discord image attachment to ``dest``; return the path, or None on failure.
+
+    Best-effort: an oversize file or any network error is logged and skipped so one bad
+    attachment can't abort the scrape. Discord CDN URLs are pre-signed, so we send no auth
+    header (the bot token belongs to discord.com, not the cdn host).
+    """
+    if expected_size and expected_size > MAX_IMAGE_ATTACHMENT_BYTES:
+        logger.warning(
+            "skipping oversize image attachment %s (%d bytes)", dest.name, expected_size
+        )
+        return None
+    request = urllib.request.Request(url, headers={"User-Agent": "pwnshop-feedback"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = response.read(MAX_IMAGE_ATTACHMENT_BYTES + 1)
+    except (urllib.error.URLError, TimeoutError) as error:
+        logger.warning("could not download image attachment %s: %s", dest.name, error)
+        return None
+    if len(data) > MAX_IMAGE_ATTACHMENT_BYTES:
+        logger.warning(
+            "skipping oversize image attachment %s (streamed past cap)", dest.name
+        )
+        return None
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return dest
+
+
 def sanitize_messages(
     messages_by_channel: list[tuple[dict[str, Any], list[dict[str, Any]]]],
     channels_by_id: dict[str, dict[str, Any]],
     guild_id: str,
     include_authors: bool,
+    attachment_dir: Optional[pathlib.Path] = None,
 ) -> list[dict[str, Any]]:
     author_labels: dict[str, str] = {}
     sanitized: list[dict[str, Any]] = []
@@ -521,22 +572,39 @@ def sanitize_messages(
             author_id = author.get("id", "unknown")
             if author_id not in author_labels:
                 author_labels[author_id] = f"user-{len(author_labels) + 1:04d}"
-            attachments = [
-                {
+            attachments = []
+            image_refs = []
+            for attachment in message.get("attachments", []):
+                record = {
                     "filename": attachment.get("filename"),
                     "content_type": attachment.get("content_type"),
                     "size": attachment.get("size"),
                 }
-                for attachment in message.get("attachments", [])
-            ]
-            content = sanitize_content(message.get("content", ""), channels_by_id)
-            if not content and attachments:
-                content = " ".join(
-                    f"[attachment: {attachment['filename']}]"
-                    for attachment in attachments
+                url = attachment.get("url")
+                if attachment_dir and url and is_image_attachment(attachment):
+                    path = download_image_attachment(
+                        url,
+                        attachment_dir / attachment_local_name(attachment),
+                        attachment.get("size"),
+                    )
+                    if path:
+                        record["path"] = str(path)
+                        image_refs.append(f"[image: {path}]")
+                attachments.append(record)
+
+            text = sanitize_content(message.get("content", ""), channels_by_id)
+            # Reference each downloaded screenshot inline so the analysis agent reads it.
+            parts = [part for part in [text, *image_refs] if part]
+            if not parts and attachments:
+                parts.append(
+                    " ".join(
+                        f"[attachment: {attachment['filename']}]"
+                        for attachment in attachments
+                    )
                 )
-            if not content and message.get("embeds"):
-                content = "[embed]"
+            if not parts and message.get("embeds"):
+                parts.append("[embed]")
+            content = " ".join(parts).strip()
 
             item = {
                 "id": message["id"],
@@ -577,8 +645,17 @@ def write_transcript(
         f"Messages: {len(messages)}",
         "",
         "Author labels are per-run pseudonyms. User mentions and raw snowflake IDs are redacted.",
-        "",
     ]
+    if any(
+        attachment.get("path")
+        for message in messages
+        for attachment in message["attachments"]
+    ):
+        lines.append(
+            "Image attachments are saved locally and referenced inline as `[image: PATH]`; "
+            "open those files to view the screenshots."
+        )
+    lines.append("")
     last_channel = None
     for message in messages:
         if message["channel"] != last_channel:
@@ -1105,6 +1182,7 @@ Rules:
 - Do not edit files in this phase.
 - Read AGENTS.md and .claude/skills/authoring-challenges/SKILL.md before making recommendations.
 - Treat Discord messages as private working evidence even though the channels are public. Do not include usernames.
+- Some messages include screenshots saved locally and referenced inline as `[image: <path>]`. Open or read those image files when the screenshot carries the feedback (error text, terminal output, or challenge UI).
 - Identify issues such as inadequate challenge descriptions, missing bridge challenges, concepts not covered, repeated confusing mechanics, misleading output, brittle tests, or docs gaps.
 - Filter out isolated support requests unless they reveal a repo-level problem.
 - Ground every recommendation in message links and repository paths when possible.
@@ -2793,8 +2871,23 @@ def feedback_command(
             )
 
     messages = sanitize_messages(
-        messages_by_channel, channels_by_id, guild_id, include_authors
+        messages_by_channel,
+        channels_by_id,
+        guild_id,
+        include_authors,
+        attachment_dir=artifact_dir / "attachments",
     )
+    image_count = sum(
+        1
+        for message in messages
+        for attachment in message["attachments"]
+        if attachment.get("path")
+    )
+    if image_count:
+        click.echo(
+            f"Downloaded {image_count} image attachment(s) into "
+            f"{artifact_dir / 'attachments'}"
+        )
     jsonl_path, transcript_path = write_transcript(artifact_dir, messages, since, until)
 
     pr_feedback_path: Optional[pathlib.Path] = None
@@ -2835,6 +2928,7 @@ def feedback_command(
                 "since": since.isoformat(),
                 "until": until.isoformat(),
                 "messages": len(messages),
+                "image_attachments": image_count,
                 "channels": len(channels),
                 "include_threads": include_threads,
                 "include_authors": include_authors,
