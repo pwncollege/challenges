@@ -1,6 +1,7 @@
 FROM ubuntu:24.04
 
-RUN apt-get update && apt-get install --no-install-recommends -yqq \
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && apt-get install --no-install-recommends -yqq \
     binutils \
     bsdextrautils \
     bzip2 \
@@ -11,6 +12,8 @@ RUN apt-get update && apt-get install --no-install-recommends -yqq \
     genisoimage \
     less \
     make \
+    man-db \
+    manpages \
     nano \
     openssh-client \
     python-is-python3 \
@@ -22,6 +25,7 @@ RUN apt-get update && apt-get install --no-install-recommends -yqq \
     whiptail \
     xxd \
     zip && \
+    yes | unminimize && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN usermod -md /home/hacker -l hacker ubuntu && \

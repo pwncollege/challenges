@@ -56,12 +56,18 @@ In the example above, the unusual entry is at `0x1337310`, so `0x1337310 - 0x133
 That means the input byte has value `98`, which ASCII represents as `'b'`.
 
 **HINT:**
-You can also print out *several* jump table entries at the same time:
+You can also print the whole jump table at the same time.
+The output will be long, but it starts like this:
 
 ```gdb
-(gdb) x/3a 0x1337000
-0x1337000:  0x400100
-0x1337008:  0x400100
-0x1337010:  0x400100
+(gdb) x/256a 0x1337000
+0x1337000:  0x400100  0x400100
+0x1337010:  0x400100  0x400100
+...
 (gdb)
 ```
+
+The number after `x/` is how many entries gdb should print.
+Since the input byte chooses one of 256 entries, and each entry is one 8-byte code address, this lets you scan the table for the one address that differs.
+If gdb prints multiple entries on one line, the address on the left is the first entry on that line; the next entry is 8 bytes later.
+As in the previous challenge, use gdb to understand the binary, then run `/challenge/reverse-me` directly with the recovered byte to get the flag.
