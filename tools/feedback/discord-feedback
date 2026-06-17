@@ -89,7 +89,9 @@ class DiscordServerError(RuntimeError):
 
 
 class GitHubAPIError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class GitHubNotFound(GitHubAPIError):
@@ -195,6 +197,7 @@ class DiscordAPI:
 class GitHubAPI:
     def __init__(self, token: str):
         self.token = token
+        self._login: Optional[str] = None
 
     @classmethod
     def from_environment(cls, repo: pathlib.Path) -> "GitHubAPI":
@@ -234,6 +237,26 @@ class GitHubAPI:
             path, accept=accept, method="POST", json_body=payload
         )
         return response
+
+    def delete(
+        self,
+        path: str,
+        *,
+        accept: str = "application/vnd.github+json",
+    ) -> Any:
+        response, _headers = self._request(path, accept=accept, method="DELETE")
+        return response
+
+    def authenticated_login(self) -> Optional[str]:
+        """Login of the token's user, cached. None if it can't be determined."""
+        if self._login is None:
+            try:
+                user = self.request("/user")
+                self._login = (user or {}).get("login") or ""
+            except GitHubAPIError as error:
+                logger.warning("could not determine authenticated GitHub user: %s", error)
+                self._login = ""
+        return self._login or None
 
     def request_all(
         self,
@@ -303,9 +326,10 @@ class GitHubAPI:
         except urllib.error.HTTPError as error:
             body = error.read().decode(errors="replace")
             if error.code == 404:
-                raise GitHubNotFound(f"404 for {url}") from error
+                raise GitHubNotFound(f"404 for {url}", status=404) from error
             raise GitHubAPIError(
-                f"GitHub API request failed: {error.code} {url}: {body}"
+                f"GitHub API request failed: {error.code} {url}: {body}",
+                status=error.code,
             ) from error
 
 
@@ -1894,6 +1918,49 @@ def post_issue_comment(
     )
 
 
+def clear_pending_review(
+    api: GitHubAPI, owner: str, repo_name: str, pull_number: int
+) -> bool:
+    """Delete the token user's leftover PENDING (draft) review on the PR.
+
+    GitHub rejects a review-comment reply with 422 "user_id can only have one pending
+    review per pull request" when the authenticated user has a stale draft review (left
+    behind by an interrupted run). Deleting that draft unblocks replies. Only the
+    authenticated user's own pending review is listed/deletable here, and only drafts
+    (state == "PENDING") are touched -- never a submitted review.
+    """
+    me = api.authenticated_login()
+    if not me:
+        return False
+    try:
+        reviews = api.request_all(
+            f"/repos/{owner}/{repo_name}/pulls/{pull_number}/reviews"
+        )
+    except GitHubAPIError as error:
+        logger.warning("could not list reviews on PR #%s: %s", pull_number, error)
+        return False
+    cleared = False
+    for review in reviews:
+        if review.get("state") != "PENDING":
+            continue
+        if (review.get("user") or {}).get("login") != me:
+            continue
+        try:
+            api.delete(
+                f"/repos/{owner}/{repo_name}/pulls/{pull_number}/reviews/{review['id']}"
+            )
+            cleared = True
+            click.echo(f"Cleared a stale pending review on PR #{pull_number}")
+        except GitHubAPIError as error:
+            logger.warning(
+                "could not delete pending review %s on PR #%s: %s",
+                review.get("id"),
+                pull_number,
+                error,
+            )
+    return cleared
+
+
 def post_review_comment_reply(
     api: GitHubAPI,
     owner: str,
@@ -1902,10 +1969,18 @@ def post_review_comment_reply(
     comment_id: int,
     body: str,
 ) -> None:
-    api.post(
-        f"/repos/{owner}/{repo_name}/pulls/{pull_number}/comments/{comment_id}/replies",
-        {"body": with_automation_notice(body)},
-    )
+    path = f"/repos/{owner}/{repo_name}/pulls/{pull_number}/comments/{comment_id}/replies"
+    payload = {"body": with_automation_notice(body)}
+    try:
+        api.post(path, payload)
+    except GitHubAPIError as error:
+        # A stale draft review blocks replies with 422; clear it and retry once.
+        if error.status == 422 and clear_pending_review(
+            api, owner, repo_name, pull_number
+        ):
+            api.post(path, payload)
+        else:
+            raise
 
 
 def event_time(item: dict[str, Any]) -> str:
@@ -2527,11 +2602,20 @@ def post_pending_pr_feedback_replies(
             response.get("commit"),
             bool(response.get("pushed")),
         )
-        post_pr_event_reply(api, owner, repo_name, pr_number, event, body)
+        try:
+            post_pr_event_reply(api, owner, repo_name, pr_number, event, body)
+        except GitHubAPIError as error:
+            # Posting a reply must never crash the watcher. The deterministic causes
+            # (stale draft review -> 422, deleted comment -> 404) won't succeed on retry,
+            # so record the key as handled and move on instead of looping or aborting.
+            click.echo(
+                f"Could not post automated GitHub reply for {key}: {error}; skipping it"
+            )
+            logger.warning("failed to post PR reply for %s: %s", key, error)
         replied.add(key)
         state["replied_events"] = sorted(replied)
         save_watch_state(state_path, state)
-        click.echo(f"Posted automated GitHub reply for {key}")
+        click.echo(f"Recorded automated GitHub reply state for {key}")
 
 
 def next_watch_batch(state: dict[str, Any]) -> int:
