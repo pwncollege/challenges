@@ -1,22 +1,24 @@
-In the last level you reached *up* the stack into the caller's frame.
+In the last levels, you reached rightward into the caller's frame and leftward into stale data from an old callee.
 Now you'll carve out a frame of your own.
 
 So far, your functions have kept their temporary values in registers.
 But a function can need more scratch space than registers can hold.
-On 64-bit x86, a function makes stack scratch space by moving `rsp` to a lower address: `sub rsp, 256` reserves 256 bytes below the current stack pointer.
+On 64-bit x86, a function makes stack scratch space by modifying the stack pointer (`rsp`) to point to a lower address: `sub rsp, 256` reserves 256 bytes to the right of the new stack pointer.
 Those bytes are then addressable as `[rsp]` through `[rsp+255]`.
+The stuff already on the stack is of course still there, but because `rsp` moved left, it now needs different offsets from `rsp`.
 
 This does not give you freshly-zeroed bytes.
-The region below `rsp` is ordinary stack memory, and it may contain bytes left behind by earlier code.
+The bytes you just moved `rsp` across are ordinary stack memory, and they may contain bytes left behind by earlier code.
 If you use those bytes as a table or a set of counters, stale values look exactly like values your function wrote.
+In fact, failure to initialize stack data, and the subsequent use of resulting garbage by the program, is a common source of vulnerabilities in software!
 That is why a stack frame that will hold scratch data normally starts with initialization: reserve the space, write known values into it, use it, then put `rsp` back before returning.
 
-In full, the shape is:
+Initialization happens between allocation and deallocation of the stack frame:
 
 ```asm
-sub rsp, 256       # reserve 256 bytes of scratch below the stack pointer
+sub rsp, 256       # allocate a 256-byte frame
     ...            # initialize and use [rsp] through [rsp+255]
-add rsp, 256       # give the space back
+add rsp, 256       # deallocate the frame
 ret
 ```
 
