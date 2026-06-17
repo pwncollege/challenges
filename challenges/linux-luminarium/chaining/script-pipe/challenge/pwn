@@ -1,8 +1,20 @@
 #!/usr/bin/exec-suid -- /bin/bash -p
 
-READY_FILE="/tmp/.pwn-script-pipe-ready.$PPID"
+function check_script_parent {
+	local parent_exe
+	parent_exe="$(readlink -f "/proc/$PPID/exe")" || return 1
 
-if [ ! -r "$READY_FILE" ] || ! cmp -s /tmp/.pwn-secret "$READY_FILE"
+	if [ "${parent_exe##*/}" != "bash" ]
+	then
+		return 1
+	fi
+
+	local -a parent_cmdline
+	mapfile -d '' -t parent_cmdline < "/proc/$PPID/cmdline" || return 1
+	[ "${#parent_cmdline[@]}" -eq 2 ] && [[ "${parent_cmdline[1]}" == *.sh ]]
+}
+
+if ! check_script_parent
 then
 	fold -s >&2 <<< "It looks like /challenge/pwn is not running from a script launched with bash and piped to /challenge/solve."
 	exit 1

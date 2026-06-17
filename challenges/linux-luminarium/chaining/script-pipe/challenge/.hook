@@ -13,5 +13,3 @@ then
 	fold -s <<< "The challenge secret was not initialized. Run your script from the challenge shell with bash, then pipe it to /challenge/solve." > /dev/tty
 	exit 1
 fi
-
-cp /tmp/.pwn-secret "/tmp/.pwn-script-pipe-ready.$$"
