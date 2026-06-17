@@ -1,6 +1,7 @@
 import __main__ as checker
 import random
 import subprocess
+import sys
 
 # Shared-library challenge: the learner submits `solve` inside a .so. The flag is
 # dispensed by this (root) checker only after it independently verifies the
@@ -57,6 +58,7 @@ def check_runtime(so_path):
     cases = [0x0, 0x1, 0x3, 0xFF, 0x1234]
     cases += [random.randrange(0, 1 << 56) for _ in range(5)]
     for i, x in enumerate(cases):
+        sys.stdout.flush()
         got = run_one(so_path, x, quiet=(i != 0))
         want = (x << SHIFT) & MASK64
         assert got == want, (

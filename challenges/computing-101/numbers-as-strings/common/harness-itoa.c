@@ -50,7 +50,13 @@ int main(int argc, char **argv) {
     memset(outbuf, 0, sizeof outbuf);
     LOG("calling itoa(%ld, buf) --- your code writes the digits to buf and returns the count", value);
     long len = call_fn2(itoa, value, outbuf);
-    LOG("itoa returned %ld; buf = \"%.*s\"", len, (len > 0 && len < BUFCAP) ? (int)len : 0, outbuf);
+    LOG("itoa returned %ld; buf = \"%.*s\"", len, (len > 0 && len <= BUFCAP) ? (int)len : 0, outbuf);
+
+    if (len < 0 || len > BUFCAP) {
+        LOG("invalid return count: itoa returned %ld, but it must return between 0 and %d.", len, BUFCAP);
+        LOG("return the number of characters written in rax.");
+        return 1;
+    }
 
     static const uint64_t cc_expected[5] = {
         0x1111111111111111ULL, 0x1212121212121212ULL, 0x1313131313131313ULL,
@@ -66,8 +72,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (len < 0) len = 0;
-    if (len > BUFCAP) len = BUFCAP;
     if (write(1, outbuf, (size_t)len) != (ssize_t)len) {
         LOG("failed to report result to checker");
         return 2;
