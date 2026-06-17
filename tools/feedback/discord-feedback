@@ -16,6 +16,7 @@ import queue
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -46,6 +47,12 @@ MAX_DISCORD_SERVER_ERROR_RETRIES = 5
 IMAGE_ATTACHMENT_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
 MAX_IMAGE_ATTACHMENT_BYTES = 25 * 1024 * 1024
 STATUS_HEARTBEAT_SECONDS = 30
+# A noninteractive cast should finish in seconds. Cap it so a hang-prone playtest command
+# (e.g. one that pipes from a long-lived or SUID-root process it cannot kill) is aborted
+# quickly by `pwnshop run --timeout`, which tears the container down to stop it for real.
+# The outer stream_command watchdog is a slightly longer backstop for a wedged pwnshop.
+CAST_TIMEOUT_SECONDS = 120
+CAST_WATCHDOG_SECONDS = CAST_TIMEOUT_SECONDS + 60
 STATUS_TEXT_LIMIT = 160
 AGENT_MESSAGE_TEXT_LIMIT = 700
 COMMAND_OUTPUT_TEXT_LIMIT = 260
@@ -771,6 +778,35 @@ def insert_before_stdin_prompt(args: list[str], additions: list[str]) -> list[st
     return [*args, *additions]
 
 
+def terminate_process_tree(
+    process: "subprocess.Popen[Any]", *, grace_seconds: float = 5.0
+) -> None:
+    """Best-effort teardown of a child and everything it spawned.
+
+    stream_command starts children with start_new_session=True, so the process and its
+    descendants share a process group. Signalling the group (rather than the lone leader)
+    reaps the grandchildren -- here `nix -> pwnshop -> asciinema -> docker exec` -- that a
+    bare process.kill() would orphan. SIGINT first so pwnshop's own cleanup (tearing down
+    the challenge container) can run; escalate to SIGKILL only if it ignores us.
+    """
+    if process.poll() is not None:
+        return
+    try:
+        pgid = os.getpgid(process.pid)
+    except ProcessLookupError:
+        return
+    for sig in (signal.SIGINT, signal.SIGKILL):
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            return
+        try:
+            process.wait(timeout=grace_seconds)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
 def stream_command(
     command: list[str],
     *,
@@ -786,6 +822,7 @@ def stream_command(
     last_heartbeat = started
     timed_out = False
     input_file = None
+    process = None
 
     if input_text is not None:
         input_file = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
@@ -805,6 +842,7 @@ def stream_command(
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                start_new_session=True,
             )
             output_queue = queue.Queue()
 
@@ -822,7 +860,7 @@ def stream_command(
             while True:
                 if timeout and time.monotonic() - started > timeout:
                     timed_out = True
-                    process.kill()
+                    terminate_process_tree(process)
                     click.echo(
                         f"{heartbeat_label or 'Command'} timed out after {timeout}s"
                     )
@@ -858,6 +896,11 @@ def stream_command(
             return_code = process.wait()
             reader.join(timeout=1)
     finally:
+        # Covers Ctrl-C and any unexpected error: tear down the child tree (and the
+        # challenge container it spawned) instead of orphaning it. No-op on the normal and
+        # timeout paths, where the process has already exited.
+        if process is not None:
+            terminate_process_tree(process)
         if input_file:
             input_file.close()
 
@@ -1269,6 +1312,12 @@ Return ONLY a JSON array. Each object must have:
 - "command": array of command arguments to run inside `pwnshop run`; it must exit without human input
 - "title": short filesystem-safe title
 - "purpose": what UX path this cast validates
+
+The command runs noninteractively as an unprivileged user and must terminate on its own within a few seconds. Hard constraints:
+- Never block on a long-lived or backgrounded process. Do not pipe (`|`, `tee`) the output of a process that keeps running (a server, a `sleep`, a daemon) into another command -- the pipe never closes and the cast hangs.
+- The challenge's own processes are often SUID-root; a command running as the unprivileged user CANNOT signal or `kill`/`timeout` them. Do not rely on `timeout`, `kill`, or Ctrl-C to stop a privileged process.
+- To capture output from a process that lingers, background it to a file and read the file (e.g. `proc > /tmp/out & sleep 1; grep ... /tmp/out`), or use `grep -m1`/`head` on a process that exits on its own. Leave any lingering process running; the container is torn down afterward.
+- Mirror the challenge's real solve (see its tests_private solve) rather than inventing a new technique.
 
 Prefer learner-realistic commands that exercise the revised description and solve path. If a challenge cannot be usefully cast noninteractively, omit it and explain why in {artifact_dir}/playtest-omissions.md.
 Do not include secrets or Discord transcript content.
@@ -1731,11 +1780,18 @@ def run_casts(
         json.dumps(plan, indent=2, sort_keys=True) + "\n"
     )
 
+    # Casts are a UX-review aid, not a gate: one bad playtest command (a hang, a nonzero
+    # exit) must not abort the whole feedback run. Record every failure and keep going so
+    # the cast-review agent still sees the casts that did record.
+    failures: list[str] = []
     for index, item in enumerate(plan, start=1):
         challenge = item.get("challenge")
         command = item.get("command")
         if not challenge or not isinstance(command, list):
-            raise click.ClickException(f"Invalid playtest item #{index}: {item!r}")
+            message = f"playtest item #{index} is malformed: {item!r}"
+            click.echo(f"Skipping {message}")
+            failures.append(message)
+            continue
         title = safe_title(item.get("title") or pathlib.Path(challenge).name)
         cast_path = cast_dir / f"{index:02d}-{title}.cast"
         log_path = cast_dir / f"{index:02d}-{title}.log"
@@ -1744,19 +1800,44 @@ def run_casts(
             "run",
             "--cast-to",
             str(cast_path),
+            "--timeout",
+            str(CAST_TIMEOUT_SECONDS),
             challenge,
             *[str(part) for part in command],
         ]
-        rc = run_logged(
-            pwnshop_invocation(repo, pwnshop_args),
-            cwd=repo,
-            log_path=log_path,
-            timeout=600,
-        )
-        if rc != 0:
-            raise click.ClickException(
-                f"playtest cast failed for {challenge}; see {log_path}"
+        try:
+            rc = run_logged(
+                pwnshop_invocation(repo, pwnshop_args),
+                cwd=repo,
+                log_path=log_path,
+                timeout=CAST_WATCHDOG_SECONDS,
             )
+        except subprocess.TimeoutExpired:
+            message = (
+                f"cast {index} for {challenge} ({title}) wedged past "
+                f"{CAST_WATCHDOG_SECONDS}s and was killed; see {log_path}"
+            )
+        else:
+            message = (
+                f"cast {index} for {challenge} ({title}) exited {rc}; see {log_path}"
+                if rc != 0
+                else ""
+            )
+        if message:
+            click.echo(message)
+            failures.append(message)
+
+    if failures:
+        summary_path = cast_dir / "cast-failures.md"
+        summary_path.write_text(
+            "# Playtest casts that did not record cleanly\n\n"
+            + "\n".join(f"- {line}" for line in failures)
+            + "\n"
+        )
+        click.echo(
+            f"{len(failures)}/{len(plan)} playtest cast(s) failed; "
+            f"continuing with the rest (details in {summary_path})"
+        )
     return cast_dir
 
 
