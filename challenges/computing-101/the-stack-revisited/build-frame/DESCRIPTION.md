@@ -40,6 +40,6 @@ hacker@dojo:~$ /challenge/check solve.so
 
 ----
 **HINT:**
-You'll need _two_ loops in this level, one after the other: one to mark each value you see, and another one to count them afterwards.
+You'll need three loops in this level, one after the other: one to clear the scratch table, one to mark each value you see, and one to count the marked slots afterwards.
 
 For debugging a submitted function inside a shared library, refer back to [Writing From a Shared Library](/computing-101/control-flow/callee-write).
