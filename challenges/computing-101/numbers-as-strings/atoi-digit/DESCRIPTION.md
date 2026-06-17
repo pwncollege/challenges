@@ -24,4 +24,6 @@ hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
 hacker@dojo:~$ /challenge/check your-solve.so
 ```
 
+If you need to debug a shared-library submission, refer back to [Writing From a Shared Library](/computing-101/control-flow/callee-write).
+
 Decode the digit, return its value, and grab the flag.

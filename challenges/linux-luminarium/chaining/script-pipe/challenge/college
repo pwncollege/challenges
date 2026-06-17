@@ -1,5 +1,19 @@
 #!/usr/bin/exec-suid -- /bin/bash -p
 
+READY_FILE="/tmp/.pwn-script-pipe-ready.$PPID"
+
+if [ ! -r "$READY_FILE" ] || ! cmp -s /tmp/.pwn-secret "$READY_FILE"
+then
+	fold -s >&2 <<< "It looks like /challenge/college is not running from a script launched with bash and piped to /challenge/solve."
+	exit 1
+fi
+
+if [ ! -r /tmp/.pwn-secret ]
+then
+	fold -s >&2 <<< "The challenge secret was not initialized. Run your script from the challenge shell with bash, then pipe it to /challenge/solve."
+	exit 1
+fi
+
 (
 	tail -c +17 /flag
 	cat /tmp/.pwn-secret
