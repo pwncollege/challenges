@@ -1921,13 +1921,17 @@ def post_issue_comment(
 def clear_pending_review(
     api: GitHubAPI, owner: str, repo_name: str, pull_number: int
 ) -> bool:
-    """Delete the token user's leftover PENDING (draft) review on the PR.
+    """Delete the token user's leftover *empty* PENDING (draft) review on the PR.
 
     GitHub rejects a review-comment reply with 422 "user_id can only have one pending
     review per pull request" when the authenticated user has a stale draft review (left
-    behind by an interrupted run). Deleting that draft unblocks replies. Only the
-    authenticated user's own pending review is listed/deletable here, and only drafts
-    (state == "PENDING") are touched -- never a submitted review.
+    behind by an interrupted run). Deleting that draft unblocks replies.
+
+    Guards against destroying real work: only the authenticated user's own drafts
+    (state == "PENDING") are considered, and only ones that are *empty* -- no body and no
+    draft comments -- are deleted. A maintainer running this bot with their own PAT may
+    have a genuine review in progress on the same PR; a non-empty draft is left untouched
+    (the reply just stays unposted) rather than discarding their unsubmitted work.
     """
     me = api.authenticated_login()
     if not me:
@@ -1941,20 +1945,48 @@ def clear_pending_review(
         return False
     cleared = False
     for review in reviews:
+        review_id = review.get("id")
         if review.get("state") != "PENDING":
             continue
         if (review.get("user") or {}).get("login") != me:
             continue
+        if (review.get("body") or "").strip():
+            logger.warning(
+                "leaving non-empty pending review %s on PR #%s in place",
+                review_id,
+                pull_number,
+            )
+            continue
+        try:
+            draft_comments = api.request_all(
+                f"/repos/{owner}/{repo_name}/pulls/{pull_number}/reviews/{review_id}/comments"
+            )
+        except GitHubAPIError as error:
+            logger.warning(
+                "could not inspect pending review %s on PR #%s (%s); leaving it in place",
+                review_id,
+                pull_number,
+                error,
+            )
+            continue
+        if draft_comments:
+            logger.warning(
+                "leaving pending review %s with %d draft comment(s) on PR #%s in place",
+                review_id,
+                len(draft_comments),
+                pull_number,
+            )
+            continue
         try:
             api.delete(
-                f"/repos/{owner}/{repo_name}/pulls/{pull_number}/reviews/{review['id']}"
+                f"/repos/{owner}/{repo_name}/pulls/{pull_number}/reviews/{review_id}"
             )
             cleared = True
-            click.echo(f"Cleared a stale pending review on PR #{pull_number}")
+            click.echo(f"Cleared an empty stale pending review on PR #{pull_number}")
         except GitHubAPIError as error:
             logger.warning(
                 "could not delete pending review %s on PR #%s: %s",
-                review.get("id"),
+                review_id,
                 pull_number,
                 error,
             )
@@ -2605,13 +2637,19 @@ def post_pending_pr_feedback_replies(
         try:
             post_pr_event_reply(api, owner, repo_name, pr_number, event, body)
         except GitHubAPIError as error:
-            # Posting a reply must never crash the watcher. The deterministic causes
-            # (stale draft review -> 422, deleted comment -> 404) won't succeed on retry,
-            # so record the key as handled and move on instead of looping or aborting.
+            # Posting a reply must never crash the watcher. Distinguish permanent failures
+            # -- a deleted comment (404) or a validation rejection (422) that retrying
+            # can't fix -- from transient ones (5xx, secondary-rate-limit 403, network).
+            # Only permanent failures are recorded as handled; transient ones are left
+            # unreplied so the next loop retries instead of silently dropping the reply.
+            permanent = error.status in (404, 422)
+            disposition = "recording it as handled" if permanent else "will retry next loop"
             click.echo(
-                f"Could not post automated GitHub reply for {key}: {error}; skipping it"
+                f"Could not post automated GitHub reply for {key}: {error}; {disposition}"
             )
             logger.warning("failed to post PR reply for %s: %s", key, error)
+            if not permanent:
+                continue
         replied.add(key)
         state["replied_events"] = sorted(replied)
         save_watch_state(state_path, state)
