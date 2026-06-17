@@ -16,7 +16,9 @@ The instruction takes the value and a shift amount:
 shl rax, 2
 ```
 
-Write a function called `solve` that takes a value in `rdi` and returns it shifted left by 4 bits --- the original value times 16 --- in `rax`.
+Write a function called `solve`.
+It takes one input in `rdi`.
+Compute `input << 4` (the original value times 16), and return the result in `rax`.
 
 Build it into a shared library and hand it to the grader:
 
