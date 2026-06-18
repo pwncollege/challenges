@@ -5,14 +5,14 @@ Wherever the mask has a `1`, the result bit is forced to `1`; wherever it has a 
 
 ```
   0100 0001   ('A', 0x41)
-| 0010 0000   (turn on bit 5)
+| 0010 0000   (turn on 0x20)
 ---------
   0110 0001   ('a', 0x61)
 ```
 
 That example is a real trick.
-In ASCII, an uppercase letter and its lowercase partner differ only in bit 5.
-The lowercase value is the uppercase value with bit 5 set:
+In ASCII, an uppercase letter and its lowercase partner differ only in the `0x20` case bit (zero-indexed bit 5, the sixth bit from the right).
+The lowercase value is the uppercase value with the case bit set:
 
 | Uppercase    | Lowercase    |
 |--------------|--------------|
@@ -22,7 +22,7 @@ The lowercase value is the uppercase value with bit 5 set:
 | `Z` = `0x5A` | `z` = `0x7A` |
 
 `or` takes its operands the same way `and` does --- the value to modify, then the mask.
-Set bit 5 with `or`, and any uppercase letter becomes its lowercase form.
+Set the case bit with `or`, and any uppercase letter becomes its lowercase form.
 
 Write a function that takes an uppercase ASCII letter in `rdi` and returns its lowercase form in `rax`.
 Call it `chr_lower` --- name your functions for what they do, and your code stays readable as it grows.

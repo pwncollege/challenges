@@ -53,12 +53,12 @@ int main(int argc, char **argv) {
         errx(2, "missing `solve` symbol --- did you `.global solve` in your assembly?");
     }
 
-    LOG("reading %d bytes of flag into the harness ...", FLAG_LEN);
+    LOG("reading a %d-byte padded flag buffer into the harness ...", FLAG_LEN);
     read_exact_flag();
     close(0);
 
     LOG("calling solve(read_flag) --- your code receives the read_flag function pointer in rdi");
-    LOG("read_flag returns 0, but leaves %d stale flag bytes at [rsp-0x88] from solve's view", FLAG_LEN);
+    LOG("read_flag returns 0, but leaves a %d-byte stale flag buffer at [rsp-0x88] from solve's view", FLAG_LEN);
     LOG("call read_flag, then write those stale bytes to stdout:");
 
     solve(read_flag);

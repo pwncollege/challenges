@@ -6,10 +6,9 @@
 
 /*
  * Harness for callee-return. Loads the student's shared library, calls
- * solve(secret), and prints the flag if `solve` returns the secret back
- * unchanged. The secret is a random 64-bit value passed as argv[2] (so a
- * hardcoded `mov rax, N; ret` only "wins" with negligible probability),
- * and the flag is passed as argv[3].
+ * solve(secret), and returns success only if `solve` returns the secret
+ * back unchanged. The secret is a random 64-bit value passed as argv[2],
+ * so a hardcoded `mov rax, N; ret` only "wins" with negligible probability.
  */
 
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
@@ -21,13 +20,12 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
-    if (argc != 4) {
-        fprintf(stderr, "usage: %s lib.so secret flag\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s lib.so secret\n", argv[0]);
         return 2;
     }
 
     uint64_t secret = strtoull(argv[2], NULL, 0);
-    const char *flag = argv[3];
 
     LOG("loading shared library %s ...", argv[1]);
     void *h = dlopen(argv[1], RTLD_NOW);
@@ -48,8 +46,7 @@ int main(int argc, char **argv) {
 
     LOG("solve() returned 0x%lx", got);
     if (got == secret) {
-        LOG("match! return value == secret. here is the flag:");
-        printf("%s\n", flag);
+        LOG("match! return value == secret.");
         return 0;
     }
     LOG("mismatch: you returned 0x%lx (%lu), but we sent in 0x%lx (%lu).",

@@ -31,13 +31,13 @@ def run_one(so_path, x, *, quiet):
         )
     except subprocess.TimeoutExpired:
         raise AssertionError(
-            f"solve({hex(x)}) never returned --- it ran too long and was killed. "
+            f"chr_lower({hex(x)}) never returned --- it ran too long and was killed. "
             "A function has to reach a `ret`."
         )
     if p.returncode != 0:
-        raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on solve({hex(x)}).")
+        raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on chr_lower({hex(x)}).")
     if len(p.stdout) < 8:
-        raise AssertionError("The harness never reported a result --- did your solve crash?")
+        raise AssertionError("The harness never reported a result --- did your chr_lower crash?")
     return int.from_bytes(p.stdout[-8:], "little")
 
 
@@ -57,9 +57,9 @@ def check_runtime(so_path):
         got = run_one(so_path, x, quiet=(i != 0))
         want = x | SET
         assert got == want, (
-            f"solve({chr(x)!r} == {hex(x)}) should be {hex(want)} ({chr(want)!r}), "
-            f"but your solve returned {hex(got)}." + diagnose(x, got)
+            f"chr_lower({chr(x)!r} == {hex(x)}) should be {hex(want)} ({chr(want)!r}), "
+            f"but your chr_lower returned {hex(got)}." + diagnose(x, got)
         )
         if i != 0:
-            print(f"  ok: solve({chr(x)!r}) = {hex(got)} ({chr(want)!r})")
+            print(f"  ok: chr_lower({chr(x)!r}) = {hex(got)} ({chr(want)!r})")
     return True
