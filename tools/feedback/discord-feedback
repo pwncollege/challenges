@@ -1781,6 +1781,27 @@ def changed_challenges_since(repo: pathlib.Path, base_ref: str) -> list[str]:
     return sorted(challenges)
 
 
+def failed_challenges_from_logs(
+    repo: pathlib.Path, log_dir: pathlib.Path
+) -> list[str]:
+    """Map per-challenge failure logs under log_dir back to repo challenge paths.
+
+    `pwnshop test --log-failures` writes a log only for failures, under a tree mirroring
+    the repo (``challenges/<...>/<challenge>/{tests_*/<t>.log,_build_error.log}``). Walk up
+    from each log to the directory that is a real challenge (has a ``challenge/`` subdir).
+    """
+    found: set[str] = set()
+    for log_file in log_dir.rglob("*.log"):
+        candidate = log_file.parent
+        while candidate != log_dir:
+            rel = candidate.relative_to(log_dir)
+            if (repo / rel / "challenge").is_dir():
+                found.add(rel.as_posix())
+                break
+            candidate = candidate.parent
+    return sorted(found)
+
+
 def run_tests(
     repo: pathlib.Path, artifact_dir: pathlib.Path, base_ref: str, attempt: int
 ) -> pathlib.Path:
@@ -1802,10 +1823,52 @@ def run_tests(
         ],
     )
     rc = run_logged(command, cwd=repo, log_path=test_log)
-    if rc != 0:
+    if rc == 0:
+        return test_log
+
+    # The full validation runs every affected challenge in parallel across all cores. A
+    # change to a module's common/ files fans out to the entire module, and timing-sensitive
+    # challenges (e.g. the strace/alarm web-server sandbox) flake under that load even though
+    # they pass reliably on their own. Before failing the run, re-check just the failed
+    # challenges serially (-j1, low load) with extra attempts: a genuinely broken challenge
+    # still fails, but a load-induced flake passes and the feedback run continues.
+    failed = failed_challenges_from_logs(repo, log_dir)
+    if not failed:
         raise click.ClickException(
             f"pwnshop tests failed; see {test_log} and {log_dir}"
         )
+    click.echo(
+        f"{len(failed)} challenge(s) failed the parallel run; re-checking serially to rule "
+        f"out load-induced flakiness: {', '.join(failed)}"
+    )
+    retry_log_dir = artifact_dir / f"test-logs-attempt-{attempt}-serial"
+    retry_log_dir.mkdir(parents=True, exist_ok=True)
+    retry_log = artifact_dir / f"pwnshop-test-attempt-{attempt}-serial.log"
+    retry_command = pwnshop_invocation(
+        repo,
+        [
+            "test",
+            "--require-solved",
+            "--attempts",
+            "3",
+            "--jobs",
+            "1",
+            "--log-failures",
+            str(retry_log_dir),
+            *failed,
+        ],
+    )
+    retry_rc = run_logged(retry_command, cwd=repo, log_path=retry_log)
+    if retry_rc != 0:
+        still_failing = failed_challenges_from_logs(repo, retry_log_dir) or failed
+        raise click.ClickException(
+            "pwnshop tests failed (confirmed on serial re-run): "
+            f"{', '.join(still_failing)}; see {retry_log} and {retry_log_dir}"
+        )
+    click.echo(
+        "Serial re-run of the failed challenge(s) passed; treating the parallel failure(s) "
+        "as load-induced flakiness and continuing."
+    )
     return test_log
 
 
