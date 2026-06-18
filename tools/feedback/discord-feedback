@@ -58,6 +58,12 @@ AGENT_MESSAGE_TEXT_LIMIT = 700
 COMMAND_OUTPUT_TEXT_LIMIT = 260
 DEFAULT_PR_WATCH_INTERVAL_SECONDS = 60
 DEFAULT_FALLBACK_HOURS = 24
+# GitHub serves transient 5xx / rate-limit / connection errors during normal operation.
+# Retry them at the HTTP layer with capped exponential backoff so a single blip never
+# bubbles up as a fatal GitHubAPIError.
+GITHUB_RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+GITHUB_MAX_REQUEST_RETRIES = 4
+GITHUB_MAX_RETRY_DELAY_SECONDS = 30.0
 MERGED_PR_SCAN_PAGE_CAP = 10
 # A batch scrapes Discord when it starts, then spends a while implementing fixes before the
 # PR is opened. Resuming from the PR's open time would skip messages that landed during that
@@ -317,20 +323,65 @@ class GitHubAPI:
             headers=headers,
             method=method,
         )
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                body = response.read().decode()
-                if response.status == 204 or not body:
-                    return None, response.headers
-                return json.loads(body), response.headers
-        except urllib.error.HTTPError as error:
-            body = error.read().decode(errors="replace")
-            if error.code == 404:
-                raise GitHubNotFound(f"404 for {url}", status=404) from error
-            raise GitHubAPIError(
-                f"GitHub API request failed: {error.code} {url}: {body}",
-                status=error.code,
-            ) from error
+        for attempt in range(GITHUB_MAX_REQUEST_RETRIES + 1):
+            last = attempt == GITHUB_MAX_REQUEST_RETRIES
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    body = response.read().decode()
+                    if response.status == 204 or not body:
+                        return None, response.headers
+                    return json.loads(body), response.headers
+            except urllib.error.HTTPError as error:
+                # HTTPError is a subclass of URLError, so it must be handled first.
+                if error.code == 404:
+                    raise GitHubNotFound(f"404 for {url}", status=404) from error
+                detail = error.read().decode(errors="replace")
+                retryable = error.code in GITHUB_RETRYABLE_STATUSES or (
+                    error.code == 403 and "rate limit" in detail.lower()
+                )
+                if last or not retryable:
+                    raise GitHubAPIError(
+                        f"GitHub API request failed: {error.code} {url}: {detail}",
+                        status=error.code,
+                    ) from error
+                delay = self._retry_delay(error.headers, attempt)
+                logger.warning(
+                    "transient GitHub %s on %s (attempt %d/%d); retrying in %.1fs",
+                    error.code,
+                    url,
+                    attempt + 1,
+                    GITHUB_MAX_REQUEST_RETRIES,
+                    delay,
+                )
+            except (urllib.error.URLError, TimeoutError) as error:
+                # Connection refused/reset, DNS, or socket timeout: always transient.
+                if last:
+                    reason = getattr(error, "reason", error)
+                    raise GitHubAPIError(
+                        f"GitHub API request failed: {url}: {reason}", status=None
+                    ) from error
+                delay = self._retry_delay(None, attempt)
+                logger.warning(
+                    "transient connection error on %s (attempt %d/%d); retrying in %.1fs: %s",
+                    url,
+                    attempt + 1,
+                    GITHUB_MAX_REQUEST_RETRIES,
+                    delay,
+                    error,
+                )
+            time.sleep(delay)
+        # Unreachable: the final attempt always returns or raises above.
+        raise GitHubAPIError(f"GitHub API request failed: {url}", status=None)
+
+    @staticmethod
+    def _retry_delay(headers: Any, attempt: int) -> float:
+        retry_after = headers.get("Retry-After") if headers else None
+        if retry_after:
+            try:
+                return min(GITHUB_MAX_RETRY_DELAY_SECONDS, float(retry_after))
+            except ValueError:
+                pass
+        return min(GITHUB_MAX_RETRY_DELAY_SECONDS, 2.0**attempt)
 
 
 def next_link(link_header: Optional[str]) -> Optional[str]:
@@ -2682,17 +2733,21 @@ def watch_pull_request(
         f"Watching PR #{pr_number} for pwncollege/Codex feedback and failing CI "
         f"until it is merged"
     )
-    while True:
+    def run_watch_iteration() -> bool:
+        """One polling pass. Returns True when the watcher should stop (PR merged/closed).
+
+        Closes over the watch_pull_request locals; mutates state/membership_cache in place.
+        """
         pr = get_pull_request(api, owner, repo_name, pr_number)
         if pr.get("merged_at"):
             click.echo(f"PR #{pr_number} is merged; stopping watcher")
             state["merged_at"] = pr.get("merged_at")
             save_watch_state(state_path, state)
-            return
+            return True
         if pr.get("state") != "open":
             click.echo(f"PR #{pr_number} is {pr.get('state')}; stopping watcher")
             save_watch_state(state_path, state)
-            return
+            return True
 
         accepted_events, ignored_events = collect_pr_feedback_events(
             api, owner, repo_name, pr_number, membership_cache
@@ -2765,7 +2820,7 @@ def watch_pull_request(
             save_watch_state(state_path, state)
             if pushed:
                 time.sleep(min(10, watch_interval))
-            continue
+            return False
 
         head = pr.get("head") or {}
         sha = head.get("sha")
@@ -2812,13 +2867,30 @@ def watch_pull_request(
                 else:
                     click.echo("CI fix agent produced no repository changes")
                 save_watch_state(state_path, state)
-                continue
+                return False
 
         save_watch_state(state_path, state)
         click.echo(
             f"No eligible PR feedback or failing CI right now; sleeping {watch_interval}s"
         )
         time.sleep(watch_interval)
+        return False
+
+    while True:
+        try:
+            if run_watch_iteration():
+                return
+        except (GitHubAPIError, OSError) as error:
+            # The watcher must outlive any GitHub/network failure. _request already retries
+            # transient HTTP/connection errors; if one still escapes (sustained outage,
+            # unexpected status), skip this poll and try again next interval rather than
+            # crashing the whole bot.
+            click.echo(
+                f"Transient error during PR #{pr_number} watch; "
+                f"retrying in {watch_interval}s: {error}"
+            )
+            logger.warning("PR #%s watch iteration failed: %s", pr_number, error)
+            time.sleep(watch_interval)
 
 
 def create_pull_request(
