@@ -10,11 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-
-    - name: Install git-crypt
-      run: sudo apt-get install -y git-crypt
+    - uses: ./.github/actions/setup-nix
 
     - name: Ensure tests_private files are encrypted
+      shell: 'nix shell nixpkgs#git nixpkgs#git-crypt --command bash --noprofile --norc -euo pipefail {0}'
       run: |
         unencrypted=$(git crypt status | grep tests_private | grep "^not" || true)
         if [ -n "$unencrypted" ]; then
