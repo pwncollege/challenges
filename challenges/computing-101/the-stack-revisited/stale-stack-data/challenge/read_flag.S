@@ -1,9 +1,9 @@
 /*
  * read_flag is deliberately hand-written so the stale stack layout is exact.
  *
- * From solve's point of view after `call rdi` returns, the copied flag starts
- * at [rsp-0x88]: 8 bytes for the callback return address plus this 128-byte
- * frame.
+ * From solve's point of view after `call rdi` returns, the padded flag buffer
+ * starts at [rsp-0x88]: 8 bytes for the callback return address plus this
+ * 128-byte frame.
  */
 .intel_syntax noprefix
 .text

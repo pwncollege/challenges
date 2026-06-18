@@ -26,7 +26,7 @@ def check_runtime(so_path):
     flag = checker.read_flag().rstrip(b"\n")
     pad_count = FLAG_BUF_LEN - len(flag)
     assert pad_count >= 0, f"flag too long ({len(flag)} bytes) for FLAG_BUF_LEN={FLAG_BUF_LEN}"
-    flag_buf = flag + b"=" * pad_count
+    flag_buf = flag + (b"\n" + b"\0" * (pad_count - 1) if pad_count else b"")
 
     print("")
     checker.print_prompt()
