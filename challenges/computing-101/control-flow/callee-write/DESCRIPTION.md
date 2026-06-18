@@ -99,7 +99,7 @@ hacker@dojo:~$ gdb ./debug
 Execution stops at your `int3`; step through with the techniques from [Software Introspection](/computing-101/introspecting), watching the registers and the buffer.
 If your `solve` is correct, this prints `AAAA` --- and the same logic will print your real flag when you submit the `.so` to the grader.
 
-To watch the grader-shaped call without writing your own wrapper, debug the native harness directly with stand-in bytes.
+You can also debug the native harness directly with stand-in bytes instead of the flag.
 `/challenge/check` is the Python checker script, so do not load it as the executable in `gdb`.
 The native program that loads your `.so` is `/challenge/harness`, and it takes your library path plus the bytes that stand in for the flag:
 

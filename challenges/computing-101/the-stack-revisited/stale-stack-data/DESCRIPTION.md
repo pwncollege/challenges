@@ -14,7 +14,7 @@ It puts the flag in its own stack frame and returns.
 After it returns, that old frame is to the left of your current `rsp`, and the **flag bytes are still there** until something overwrites them!
 
 Write a function called `solve` that calls the function pointer in `rdi`, then writes the stale flag bytes from the old callee frame to stdout.
-The checker prints the concrete stale-byte location when it runs; use that runtime output.
+From `solve`'s perspective, those stale bytes sit at a negative offset from `rsp`; find the exact offset in `gdb` or read it from the checker output.
 Build it into a shared library and hand it to the grader:
 
 ```console

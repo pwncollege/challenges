@@ -11,7 +11,7 @@ Wherever the mask has a `1`, the result bit is forced to `1`; wherever it has a 
 ```
 
 That example is a real trick.
-In ASCII, an uppercase letter and its lowercase partner differ only in the `0x20` case bit (zero-indexed bit 5, the sixth bit from the right).
+In ASCII, an uppercase letter and its lowercase partner differ only in the `0x20` case bit.
 The lowercase value is the uppercase value with the case bit set:
 
 | Uppercase    | Lowercase    |
