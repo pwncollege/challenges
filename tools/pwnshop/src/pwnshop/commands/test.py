@@ -5,8 +5,10 @@ import os
 import pathlib
 import shutil
 import subprocess
+from typing import Optional, Sequence
 
 import click
+import requests
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -20,6 +22,37 @@ from .. import lib
 from ..console import console
 
 logger = logging.getLogger(__name__)
+
+
+def run_workspace_command(
+    workspace_url: str,
+    argv: Sequence[str],
+    *,
+    timeout: Optional[int] = None,
+) -> subprocess.CompletedProcess:
+    payload = {"argv": list(argv)}
+    request_timeout = None
+    if timeout is not None:
+        payload["timeout"] = timeout
+        request_timeout = timeout + 10
+    try:
+        response = requests.post(f"{workspace_url}exec/", json=payload, timeout=request_timeout)
+        response.raise_for_status()
+        result = response.json()
+    except requests.Timeout as error:
+        raise subprocess.TimeoutExpired(argv, timeout) from error
+    except requests.RequestException as error:
+        raise RuntimeError(f"workspace exec failed: {error}") from error
+
+    completed = subprocess.CompletedProcess(
+        argv,
+        int(result["exit_code"]),
+        stdout=result.get("stdout", ""),
+        stderr=result.get("stderr", ""),
+    )
+    if timeout is not None and completed.returncode == 124:
+        raise subprocess.TimeoutExpired(argv, timeout, output=completed.stdout, stderr=completed.stderr)
+    return completed
 
 
 @click.command("test")
@@ -94,15 +127,13 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_solve
                 failed_attempt_outputs = []
                 for attempt in range(1, attempts + 1):
                     logger.debug("running test %s in %s (attempt %d/%d)", test_name, challenge_path, attempt, attempts)
-                    with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (container, flag):
+                    with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (
+                        _container,
+                        workspace_url,
+                        flag,
+                    ):
                         try:
-                            run = subprocess.run(
-                                ["docker", "exec", "--user=1000:1000", container, f"{test}"],
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT,
-                                text=True,
-                                timeout=timeout,
-                            )
+                            run = run_workspace_command(workspace_url, [f"{test}"], timeout=timeout)
                         except subprocess.TimeoutExpired as e:
                             logger.warning(
                                 "test %s timed out after %ds in %s (attempt %d/%d)",
@@ -113,10 +144,12 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_solve
                                 attempts,
                             )
                             last_output = f"TIMEOUT after {timeout}s\n{e.stdout or ''}"
+                            if e.stderr:
+                                last_output += e.stderr
                             passed = False
                         else:
                             passed = run.returncode == 0
-                            last_output = run.stdout or ""
+                            last_output = (run.stdout or "") + (run.stderr or "")
                             logger.debug(
                                 "test %s %s (rc=%d, attempt %d/%d)",
                                 test_name,

@@ -1,7 +1,0 @@
-#!/bin/sh
-set -eu
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-UV_PROJECT="$SCRIPT_DIR/tools/pwnshop"
-
-exec uv run --project "$UV_PROJECT" --with-editable "$UV_PROJECT" pwnshop "$@"

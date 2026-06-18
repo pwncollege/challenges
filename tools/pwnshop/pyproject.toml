@@ -9,8 +9,13 @@ dependencies = [
   "click",
   "jinja2",
   "pyyaml",
+  "requests",
   "rich",
 ]
 
 [project.scripts]
 pwnshop = "pwnshop:cli"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

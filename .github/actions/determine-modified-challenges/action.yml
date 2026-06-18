@@ -48,12 +48,12 @@ runs:
 
     - name: List modified challenges
       id: list-challenges
-      shell: 'nix shell nixpkgs#uv nixpkgs#git --command bash --noprofile --norc -euo pipefail {0}'
+      shell: 'nix shell .#pwnshop --command bash --noprofile --norc -euo pipefail {0}'
       env:
         MODIFIED_SINCE: ${{ steps.resolve-ref.outputs.ref }}
       run: |
         challenges_file="$RUNNER_TEMP/modified-challenges.txt"
-        ./pwnshop list ./challenges --modified-since="$MODIFIED_SINCE" > "$challenges_file"
+        pwnshop list ./challenges --modified-since="$MODIFIED_SINCE" > "$challenges_file"
         echo "challenges_file=$challenges_file" >> "$GITHUB_OUTPUT"
 
     - uses: actions/github-script@v8

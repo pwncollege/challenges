@@ -1680,8 +1680,8 @@ def build_fallback_pr_body(
 
 def pwnshop_invocation(repo: pathlib.Path, args: list[str]) -> list[str]:
     if os.environ.get("IN_NIX_SHELL"):
-        return ["./pwnshop", *args]
-    return ["nix", "develop", "--command", "./pwnshop", *args]
+        return ["pwnshop", *args]
+    return ["nix", "develop", "--command", "pwnshop", *args]
 
 
 def run_logged(

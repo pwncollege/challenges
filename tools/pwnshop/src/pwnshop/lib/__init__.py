@@ -9,10 +9,12 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from typing import Iterable, Iterator, List, Optional, Sequence
 
 import black
 import jinja2
+import requests
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -89,8 +91,11 @@ def run_challenge(
     challenge_image: str,
     *,
     volumes: Optional[Sequence[pathlib.Path]] = None,
-) -> Iterator[tuple[str, str]]:
+) -> Iterator[tuple[str, str, str]]:
     flag = "pwn.college{" + base64.b64encode(os.urandom(32)).decode() + "}"
+    if not (workspace := os.environ.get("PWN_WORKSPACE")):
+        raise RuntimeError("PWN_WORKSPACE is not set; run pwnshop from the Nix dev shell")
+    workspace = pathlib.Path(workspace)
     privileged = (
         yaml.safe_load(challenge_yml.read_text()).get("privileged")
         if (challenge_yml := challenge_path / "challenge.yml").is_file()
@@ -110,69 +115,81 @@ def run_challenge(
     logger.debug("container runtime options for %s: %s", challenge_path, runtime_options)
     if volumes:
         logger.debug("mounting volumes: %s", volumes)
-    container = (
-        subprocess.check_output(
+    container = None
+    try:
+        container = subprocess.check_output(
             [
                 "docker",
                 "run",
-                "--rm",
-                "--interactive",
                 "--detach",
-                "--init",
                 "--user=0:0",
-                "--env=PATH=/challenge/bin:/run/workspace/bin:/run/dojo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                f"--env=PWN_FLAG={flag}",
+                "--env=PWN_USER=hacker",
+                f"--env=PWN_WORKSPACE={workspace}",
+                f"--env=PATH={workspace}/bin:/challenge/bin:/run/workspace/bin:/run/dojo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "--volume=/nix:/nix:ro",
                 *runtime_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
                 challenge_image,
-                "/bin/sh",
-                "-c",
-                "read forever",
-            ]
-        )
-        .decode()
-        .strip()
-    )
-    logger.debug("container started: %s", container[:12])
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            "--interactive",
-            "--user=0:0",
-            container,
-            "/bin/sh",
-            "-c",
-            "cat >/flag && chown 0:0 /flag && chmod 0400 /flag",
-        ],
-        input=f"{flag}\n",
-        text=True,
-        check=True,
-    )
-    logger.debug("flag written to /flag")
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            "--user=0:0",
-            container,
-            "/bin/sh",
-            "-c",
-            "[ ! -e /challenge/.init ] || /challenge/.init",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=True,
-    )
-    logger.debug(".init completed (if present)")
-    try:
-        yield container, flag
+                f"{workspace}/bin/workspace-entrypoint",
+            ],
+            text=True,
+        ).strip()
+        logger.debug("container started: %s", container[:12])
+        address = subprocess.check_output(
+            [
+                "docker",
+                "inspect",
+                "--format={{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+                container,
+            ],
+            text=True,
+        ).strip()
+        if not address:
+            raise RuntimeError(f"container {container[:12]} does not have a workspace address")
+        workspace_url = f"http://{address}:8000/"
+
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            try:
+                response = requests.get(workspace_url + "ready", timeout=1)
+                if response.ok:
+                    logger.debug("workspace ready in container %s", container[:12])
+                    break
+            except requests.RequestException:
+                pass
+
+            status = subprocess.check_output(
+                ["docker", "inspect", "--format={{.State.Status}}", container],
+                text=True,
+            ).strip()
+            if status in {"dead", "exited"}:
+                logs = subprocess.run(
+                    ["docker", "logs", container],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                ).stdout
+                raise RuntimeError(f"workspace exited before becoming ready:\n{logs}")
+            time.sleep(0.25)
+        else:
+            logs = subprocess.run(
+                ["docker", "logs", container],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            ).stdout
+            raise RuntimeError(f"workspace did not become ready in time:\n{logs}")
+
+        yield container, workspace_url, flag
     finally:
-        logger.debug("killing container %s", container[:12])
-        subprocess.run(
-            ["docker", "kill", container],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        if container:
+            logger.debug("removing container %s", container[:12])
+            subprocess.run(
+                ["docker", "rm", "--force", container],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
 
 def build_challenge(challenge_path: pathlib.Path) -> str:

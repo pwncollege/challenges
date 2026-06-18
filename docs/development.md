@@ -30,8 +30,8 @@ On shell entry, the dev shell will start the challenge runtime (using sudo). Thi
 Then use `pwnshop` for all workflows:
 
 ```bash
-./pwnshop list
-./pwnshop test web-security/path-traversal-1
+pwnshop list
+pwnshop test web-security/path-traversal-1
 ```
 
 ## Troubleshooting
@@ -52,15 +52,15 @@ Then use `pwnshop` for all workflows:
 - Check unit status/logs:
 
 ```bash
-systemctl status pwn-challenge-runtime.service
-journalctl -u pwn-challenge-runtime.service -b --no-pager
+systemctl status pwn-platform-runtime-docker.service
+journalctl -u pwn-platform-runtime-docker.service -b --no-pager
 ```
 
 ## Non-Nix Setup (Not Recommended)
 
 You can run `pwnshop` without Nix, but you must supply:
 
-- `uv` (the `./pwnshop` wrapper uses `uv run`)
+- Python dependencies for `tools/pwnshop` (or use `uv run --project tools/pwnshop --with-editable tools/pwnshop pwnshop ...`)
 - a working Docker environment (daemon + client)
 
 Private tests/solutions are encrypted with `git-crypt`; you will need access to the relevant module key(s) to unlock them.

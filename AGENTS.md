@@ -77,7 +77,7 @@ per archetype (templated web/service, interpreted checker, compiled SUID binary,
 
 ### Dev Environment (Nix)
 
-`nix develop` is required for `pwnshop`. Always enter the dev shell before invoking `pwnshop` (or `./pwnshop`) -- if anything fails unexpectedly, your first check should be whether you are inside the dev shell.
+`nix develop` is required for `pwnshop`. Always enter the dev shell before invoking `pwnshop` -- if anything fails unexpectedly, your first check should be whether you are inside the dev shell.
 
 ```bash
 nix develop
