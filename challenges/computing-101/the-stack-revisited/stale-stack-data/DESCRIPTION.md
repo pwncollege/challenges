@@ -15,6 +15,12 @@ After it returns, that old frame is to the left of your current `rsp`, and the *
 
 Write a function called `solve` that calls the function pointer in `rdi`, then writes the stale flag bytes from the old callee frame to stdout.
 From `solve`'s perspective, those stale bytes sit at a negative offset from `rsp`; find the exact offset in `gdb` or read it from the checker output.
+For example, if the checker says the stale bytes start at `[rsp-0x88]`, an 8-byte read from that old frame would look like this:
+
+```asm
+mov rax, qword ptr [rsp-0x88]
+```
+
 Build it into a shared library and hand it to the grader:
 
 ```console
