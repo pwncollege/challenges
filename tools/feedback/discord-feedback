@@ -1872,6 +1872,52 @@ def run_tests(
     return test_log
 
 
+def validate_with_fixes(
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    base_ref: str,
+    *,
+    agent: str,
+    analysis_path: pathlib.Path,
+    directions: list[str],
+    pr_feedback_path: Optional[pathlib.Path],
+    first_attempt: int,
+    fix_attempts: int,
+) -> pathlib.Path:
+    """Validate; on a genuine (non-flaky) failure, run the fix agent and retry.
+
+    run_tests already absorbs load-induced flakiness via a serial re-check, so a failure
+    that reaches here is a real breakage -- and fixing those agentically is the whole point
+    of the bot, not a reason to abort. Each failed attempt feeds the fix agent and re-tests.
+    Raises ClickException only if the challenge is still broken after `fix_attempts` fixes.
+    """
+    for index in range(fix_attempts + 1):
+        attempt = first_attempt + index
+        click.echo(f"Running pwnshop validation attempt {attempt}")
+        try:
+            return run_tests(repo, artifact_dir, base_ref, attempt)
+        except click.ClickException:
+            if index >= fix_attempts:
+                raise
+            click.echo(f"Validation attempt {attempt} failed; starting fix agent")
+            failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
+            run_agent(
+                agent,
+                build_fix_prompt(
+                    analysis_path,
+                    failure_dir,
+                    attempt,
+                    directions,
+                    pr_feedback_path,
+                ),
+                repo=repo,
+                artifact_dir=artifact_dir,
+                output_name=f"fix-agent-attempt-{attempt}.log",
+                apply=True,
+            )
+    raise AssertionError("unreachable")  # the final attempt returns or raises above
+
+
 def extract_json_array(text: str) -> list[dict[str, Any]]:
     start = text.find("[")
     end = text.rfind("]")
@@ -3321,30 +3367,17 @@ def feedback_command(
     if skip_tests:
         test_log.write_text("Tests skipped by --skip-tests.\n")
     else:
-        for attempt in range(1, max_fix_attempts + 2):
-            click.echo(f"Running pwnshop validation attempt {attempt}")
-            try:
-                test_log = run_tests(repo, artifact_dir, base_ref, attempt)
-                break
-            except click.ClickException:
-                if attempt > max_fix_attempts:
-                    raise
-                click.echo(f"Validation attempt {attempt} failed; starting fix agent")
-                failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
-                run_agent(
-                    agent,
-                    build_fix_prompt(
-                        analysis_path,
-                        failure_dir,
-                        attempt,
-                        directions,
-                        pr_feedback_path,
-                    ),
-                    repo=repo,
-                    artifact_dir=artifact_dir,
-                    output_name=f"fix-agent-attempt-{attempt}.log",
-                    apply=True,
-                )
+        test_log = validate_with_fixes(
+            repo,
+            artifact_dir,
+            base_ref,
+            agent=agent,
+            analysis_path=analysis_path,
+            directions=directions,
+            pr_feedback_path=pr_feedback_path,
+            first_attempt=1,
+            fix_attempts=max_fix_attempts,
+        )
 
     changed_challenges = changed_challenges_since(repo, base_ref)
     ux_review = artifact_dir / "ux-review.md"
@@ -3374,7 +3407,19 @@ def feedback_command(
             )
         if not skip_tests:
             click.echo("Running final pwnshop validation after UX review")
-            test_log = run_tests(repo, artifact_dir, base_ref, max_fix_attempts + 2)
+            # The UX-review agent edits challenges/descriptions, so this can surface a real
+            # break. Fix it agentically too -- same as the main loop -- instead of aborting.
+            test_log = validate_with_fixes(
+                repo,
+                artifact_dir,
+                base_ref,
+                agent=agent,
+                analysis_path=analysis_path,
+                directions=directions,
+                pr_feedback_path=pr_feedback_path,
+                first_attempt=max_fix_attempts + 2,
+                fix_attempts=max_fix_attempts,
+            )
 
     pr_body = artifact_dir / "pr-body.md"
     pr_body_agent_output = run_agent(
