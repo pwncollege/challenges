@@ -1,13 +1,6 @@
 In the last level, you loaded one stale 8-byte value from an old callee frame.
 Now you'll use the same stale-stack idea on a byte buffer.
 
-When your code calls a function, that callee can move `rsp` left and use stack memory of its own.
-When it returns, it moves `rsp` back right, but the bytes it wrote are not automatically erased.
-They become stale stack data: ordinary memory left behind by code that already finished.
-Software could erase those bytes before returning, but erasing data means running more instructions and writing more memory, which has a performance cost.
-When the leftover data is sensitive, skipping that erasure can become a vulnerability.
-That vulnerable case is what this level explores.
-
 This challenge passes your `solve` a pointer to a function named `read_flag`.
 Call that function first.
 It puts the flag in its own stack frame and returns.

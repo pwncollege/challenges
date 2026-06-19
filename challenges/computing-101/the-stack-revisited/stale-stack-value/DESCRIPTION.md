@@ -4,6 +4,9 @@ Now you'll look leftward, at bytes left behind by a function that already return
 When your code calls a function, that callee can move `rsp` left and use stack memory of its own.
 When it returns, it moves `rsp` back right, but the bytes it wrote are not automatically erased.
 They become stale stack data: ordinary memory left behind by code that already finished.
+Software could erase those bytes before returning, but erasing data means running more instructions and writing more memory.
+When the leftover data is sensitive, skipping that erasure can become a vulnerability.
+This level starts with the smallest version of that issue: one stale 8-byte value.
 
 This challenge passes your `solve` a function pointer named `load_secret`.
 Call it first.

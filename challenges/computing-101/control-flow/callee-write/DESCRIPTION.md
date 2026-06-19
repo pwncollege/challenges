@@ -104,9 +104,9 @@ You can also debug the native harness directly with stand-in bytes instead of th
 The native program that loads your `.so` is `/challenge/harness`, and it reads the stand-in bytes from stdin:
 
 ```console
-hacker@dojo:~$ printf AAAA > /tmp/standin-flag
 hacker@dojo:~$ gdb --args /challenge/harness your-solve.so
-(gdb) run < /tmp/standin-flag
+(gdb) run
+type-a-placeholder-flag-here
 ```
 
 The checker will run that same harness shape with the real flag when you submit your `.so`.
