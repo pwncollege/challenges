@@ -9,7 +9,7 @@ Once you have JavaScript execution within the page, you can freely `fetch()` oth
 Use this, read the page with the flag, and win!
 
 ----
-**DEBUGGING:**
+**DEBUGGING TIPS:**
 Break the chain into pieces.
 First, load the reflected XSS URL directly and confirm that the JavaScript runs inside `challenge.localhost`.
 Then serve your attacker page and confirm that it sends the victim to that exact URL with the encoding intact.

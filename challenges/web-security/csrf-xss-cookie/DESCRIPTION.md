@@ -7,6 +7,8 @@ We suggest testing the latter first, by manually triggering the page with that i
 Furthermore, as this code might be complex, be VERY careful about URL encoding.
 For example, `+` will _not_ be encoded to `%2b` by most URL encoders, but _it is a special character in a URL_ and gets decoded to a space (` `).
 Needless to say, if you use `+` in your JavaScript, this can lead to complete havoc.
+
+**DEBUGGING TIPS:**
 Once the reflected XSS works by itself, test your attacker-hosted page separately.
 Confirm that it sends the victim to that same URL with the encoding intact.
 Finally, use Firefox's Network tab or your listener logs to confirm the outbound cookie-leak request before trying to reuse the cookie.
