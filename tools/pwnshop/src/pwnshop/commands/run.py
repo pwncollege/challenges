@@ -66,7 +66,9 @@ def run_command(challenge_path, user, volumes, cast_to, timeout, command):
                     subprocess.run(docker_command, timeout=timeout)
                 else:
                     if not shutil.which("asciinema"):
-                        raise click.ClickException("--cast-to requires `asciinema` on PATH (it's in the nix dev shell).")
+                        raise click.ClickException(
+                            "--cast-to requires `asciinema` on PATH (it's in the nix dev shell)."
+                        )
                     cols, rows = shutil.get_terminal_size((100, 30))
                     logger.info("recording session to %s", cast_to)
                     subprocess.run(
