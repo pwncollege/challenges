@@ -174,6 +174,7 @@ def run_challenge(
             stderr=subprocess.DEVNULL,
         )
         if init_result.returncode:
+
             def read_init_output(path: str) -> str:
                 output = subprocess.check_output(
                     [
