@@ -1,6 +1,6 @@
 { pkgs, lib }:
 let
-  name = "pwn-challenge-runtime";
+  name = "pwn-platform-runtime";
 
   dataDir = "/var/lib/pwn.college";
   runDir = "/run/pwn.college";
@@ -12,6 +12,8 @@ let
   containerdDataDir = "${dataDir}/containerd";
   containerdRunDir = "${runDir}/containerd";
   containerdSockPath = "${containerdRunDir}/containerd.sock";
+
+  docker = pkgs.docker;
 
   jsonFormat = pkgs.formats.json { };
 
@@ -46,10 +48,13 @@ let
         substitute ${pkgs.kata-runtime}/share/defaults/kata-containers/configuration.toml "$out" \
           --replace-fail \
             "$kernel_line" \
-            'kernel = "${kataKernel}/share/kata-containers/vmlinux.container"' \
+            'kernel = "${kataKernel}/share/kata-containers/vmlinux.container"'
+
+        annotations_line="$(awk '$1 == "enable_annotations" { print; exit }' "$out")"
+        substituteInPlace "$out" \
           --replace-fail \
-            'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params"]' \
-            'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "default_memory"]'
+            "$annotations_line" \
+            'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "kernel_verity_params", "default_memory"]'
       '';
 
   dockerDaemonJson = jsonFormat.generate "${name}-docker-daemon.json" {
@@ -62,6 +67,7 @@ let
 
     "features" = {
       "containerd-snapshotter" = true;
+      "time-namespaces" = false;
     };
 
     "runtimes" = {
@@ -101,7 +107,7 @@ let
         ];
       };
       Service = {
-        ExecStart = "${pkgs.docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
+        ExecStart = "${docker}/bin/dockerd --config-file=${dockerDaemonJson} -H fd://";
       };
     }
   );
@@ -145,6 +151,10 @@ pkgs.writeShellApplication {
 
     docker_host="unix://${dockerSockPath}"
 
+    emit_environment() {
+      printf 'export DOCKER_HOST=%q\n' "$docker_host"
+    }
+
     docker_socket_unit="${name}-docker.socket"
     docker_service_unit="${name}-docker.service"
     containerd_service_unit="${name}-containerd.service"
@@ -153,7 +163,7 @@ pkgs.writeShellApplication {
 
     if [[ "$current_service_link" == "${dockerSystemdServiceUnit}" ]] \
       && DOCKER_HOST="$docker_host" docker info >/dev/null 2>&1; then
-      echo "$docker_host"
+      emit_environment
       exit 0
     fi
 
@@ -189,6 +199,6 @@ pkgs.writeShellApplication {
       exit 1
     fi
 
-    echo "$docker_host"
+    emit_environment
   '';
 }

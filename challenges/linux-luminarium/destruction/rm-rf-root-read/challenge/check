@@ -3,10 +3,16 @@
 import time
 import os
 
+def entry_count(path):
+    try:
+        return len(os.listdir(path))
+    except FileNotFoundError:
+        return 0
+
 flag = open("/flag").read()
 
 while True:
-    if len(os.listdir("/")) > 10 or len(os.listdir("/usr")) > 3 or len(os.listdir("/etc")) > 5 or os.path.exists("/flag"):
+    if entry_count("/") > 10 or entry_count("/usr") > 3 or entry_count("/etc") > 5 or os.path.exists("/flag"):
         print("Looks like you haven't wiped the system! We'll check again in 5 seconds...")
     else:
         print("YES! You did it again! Go read the flag!")

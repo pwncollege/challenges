@@ -32,7 +32,7 @@ git crypt unlock
 
 # Challenge CLI
 
-All developer workflows now run through the `./pwnshop` command. The legacy `./build` helper has been removed, so every rendered, build, run, or test action should use the new CLI instead.
+All developer workflows now run through the `pwnshop` command provided by `nix develop`. The legacy `./build` helper and root `./pwnshop` wrapper have been removed, so every rendered, build, run, or test action should use the packaged CLI instead.
 
 The CLI is implemented with Click and Rich (`tools/pwnshop/src/pwnshop/commands/*.py`) on top of the core helper library in `tools/pwnshop/src/pwnshop/lib/__init__.py`. Keeping formatting/terminal logic in the commands and reusable challenge logic in `tools/pwnshop/src/pwnshop/lib` makes it easy to add or modify commands without duplicating functionality.
 
@@ -40,13 +40,13 @@ All CLI subcommands accept either a direct filesystem path or a challenge slug. 
 
 Primary entry points:
 
-- `./pwnshop list` — enumerate challenges, optionally filtered via `--modified-since`.
-- `./pwnshop render` — materialize a challenge directory or individual template (`--output` defaults to stdout and Rich labels each file when multiple outputs are rendered).
-- `./pwnshop build` — render and build a challenge, returning the Docker image ID.
-- `./pwnshop test` — render, build, and run all `test*/test_*` files inside the challenge.
-- `./pwnshop run` — render, build, and drop into an interactive shell inside the challenge container (use `--user=<uid>` to control the interactive user, default `1000`, `--volume <path>` to mount host paths read-only, or append a command after the challenge to run it instead of `/bin/bash`).
+- `pwnshop list` — enumerate challenges, optionally filtered via `--modified-since`.
+- `pwnshop render` — materialize a challenge directory or individual template (`--output` defaults to stdout and Rich labels each file when multiple outputs are rendered).
+- `pwnshop build` — render and build a challenge, returning the Docker image ID.
+- `pwnshop test` — render, build, and run all `test*/test_*` files inside the challenge.
+- `pwnshop run` — render, build, and drop into an interactive shell inside the challenge container (use `--user=<uid>` to control the interactive user, default `1000`, `--volume <path>` to mount host paths read-only, or append a command after the challenge to run it instead of `/bin/bash`).
 
-Any future automation that renders, builds, runs, or tests challenges should shell out to `./pwnshop ...` rather than reimplementing those pieces of the workflow.
+Any future automation that renders, builds, runs, or tests challenges should shell out to `pwnshop ...` rather than reimplementing those pieces of the workflow.
 
 The standalone `discord-feedback` helper is available in `nix develop` for Discord-derived curriculum feedback automation.
 
@@ -122,7 +122,7 @@ nix develop
 More details: `docs/development.md`.
 
 If you are not using Nix, you will need a working Docker setup and the Python tooling for `pwnshop`.
-At minimum, install `uv` and then use `./pwnshop ...` (it will manage Python deps from `tools/pwnshop/uv.lock`).
+At minimum, install the Python dependencies for `tools/pwnshop` or run it with `uv run --project tools/pwnshop --with-editable tools/pwnshop pwnshop ...`.
 
 For legacy/manual environments, you can still install a basic set of Python packages in a virtual environment:
 
@@ -134,19 +134,19 @@ pip install black click jinja2 pyastyle pwntools rich
 
 ```bash
 # run the full test suite for a challenge
-./pwnshop test web-security/path-traversal-1
+pwnshop test web-security/path-traversal-1
 
 # build the Docker image without testing
-./pwnshop build web-security/path-traversal-1
+pwnshop build web-security/path-traversal-1
 
 # render the challenge into a directory for inspection
-./pwnshop render web-security/path-traversal-1 --output /tmp/output
+pwnshop render web-security/path-traversal-1 --output /tmp/output
 
 # render a single template file to stdout (or write to a file)
-./pwnshop render web-security/path-traversal-1/tests_public/test_normal.py.j2 --output /tmp/output-file
+pwnshop render web-security/path-traversal-1/tests_public/test_normal.py.j2 --output /tmp/output-file
 
 # list challenges, optionally filtered by git history
-./pwnshop list --modified-since origin/main
+pwnshop list --modified-since origin/main
 ```
 
 ## Important Notes / Common Gotchas
@@ -181,7 +181,7 @@ The process of porting is:
 6. If using templates, use `{% extends %}` and `{% block setup %}` for customization
 7. Ensure all executable files are marked as such: `chmod +x ./$MODULE_ID/$CHALLENGE_ID/**/*.j2`. Rendered files inherit permissions from the template.
 8. Port verification logic to `./$MODULE_ID/$CHALLENGE_ID/tests_public` (functionality) and `./$MODULE_ID/$CHALLENGE_ID/tests_private` (exploitation)
-9. Test thoroughly: `./pwnshop test $MODULE_ID/$CHALLENGE_ID`
+9. Test thoroughly: `pwnshop test $MODULE_ID/$CHALLENGE_ID`
 10. Once testcases pass, double-check the template (both rendered and at rest) against the legacy challenge to ensure that the challenge has been ported without any functionality change.
 
 # Adding a new key

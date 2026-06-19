@@ -9,11 +9,14 @@
   };
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+    }:
     let
       lib = nixpkgs.lib;
       systems = [ "x86_64-linux" ];
@@ -39,55 +42,57 @@
         }
       );
 
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+
+          pwn-workspace-runtime = import ./runtime/workspace { inherit pkgs; };
+          pwn-platform-runtime = import ./runtime/platform { inherit pkgs lib; };
+
+          pwnshop = import ./tools/pwnshop { inherit pkgs pwn-workspace-runtime; };
+          discord-feedback = import ./tools/feedback { inherit pkgs; };
+        in
+        {
+          default = pwnshop;
+          inherit
+            discord-feedback
+            pwn-platform-runtime
+            pwn-workspace-runtime
+            pwnshop
+            ;
+        }
+      );
+
       devShells = forAllSystems (
         system:
         let
           pkgs = import nixpkgs { inherit system; };
 
-          pwn-challenge-runtime = import ./runtime { inherit pkgs lib; };
+          pwn-workspace-runtime = import ./runtime/workspace { inherit pkgs; };
+          pwn-platform-runtime = import ./runtime/platform { inherit pkgs lib; };
 
-          pwnshop = pkgs.writeShellApplication {
-            name = "pwnshop";
-            runtimeInputs = with pkgs; [
-              git
-              uv
-            ];
-            text = ''
-              set -euo pipefail
-              root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-              exec "$root/pwnshop" "$@"
-            '';
-          };
-
-          discord-feedback = pkgs.writeShellApplication {
-            name = "discord-feedback";
-            runtimeInputs = with pkgs; [
-              git
-              uv
-            ];
-            text = ''
-              set -euo pipefail
-              root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-              exec "$root/tools/feedback/discord-feedback" "$@"
-            '';
-          };
+          pwnshop = import ./tools/pwnshop { inherit pkgs pwn-workspace-runtime; };
+          discord-feedback = import ./tools/feedback { inherit pkgs; };
         in
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
               asciinema
-              clang-tools
+              discord-feedback
               docker
               git
               git-crypt
               jq
-              discord-feedback
-              pwn-challenge-runtime
+              pwn-platform-runtime
+              pwn-workspace-runtime
               pwnshop
               tomlq
               uv
             ];
             shellHook = ''
+              export PWN_WORKSPACE="${pwn-workspace-runtime}"
+
               # Install the secret-test encryption pre-commit hook (idempotent,
               # non-destructive). Resolve the path Git actually runs the hook from
               # -- honoring core.hooksPath and the shared hooks dir of a linked
@@ -107,14 +112,21 @@
                 fi
               fi
 
-              if [ "$(id -u)" -eq 0 ]; then
-                export DOCKER_HOST="$(${lib.getExe pwn-challenge-runtime})"
-              elif command -v sudo >/dev/null 2>&1; then
-                export DOCKER_HOST="$(sudo ${lib.getExe pwn-challenge-runtime})"
-              else
-                echo "error: cannot start the challenge runtime without root privileges" >&2
+              sudo=
+              if [ "$(id -u)" -ne 0 ]; then
+                if command -v sudo >/dev/null 2>&1; then
+                  sudo=sudo
+                else
+                  echo "error: cannot start the challenge runtime without root privileges" >&2
+                  return 1
+                fi
+              fi
+
+              if ! runtime_environment="$($sudo ${lib.getExe pwn-platform-runtime})"; then
+                echo "error: failed to start the challenge runtime" >&2
                 return 1
               fi
+              eval "$runtime_environment"
             '';
           };
         }

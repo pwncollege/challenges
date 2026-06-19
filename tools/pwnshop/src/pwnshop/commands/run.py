@@ -49,16 +49,21 @@ logger = logging.getLogger(__name__)
         "SUID-root processes inside it (which an in-container `timeout` cannot signal)."
     ),
 )
-@click.argument("command", nargs=-1, default=("/bin/bash",))
+@click.argument("command", nargs=-1)
 def run_command(challenge_path, user, volumes, cast_to, timeout, command):
     """Run interactive shell for a challenge."""
+    default_command = not command
+    if not command:
+        command = ("/bin/bash",)
     try:
         image_id = lib.build_challenge(challenge_path)
     except RuntimeError as error:
         raise click.ClickException(str(error)) from error
     resolved_volumes = [path.resolve() for path in volumes]
     logger.info("running %s as uid=%d, command=%s", challenge_path, user, list(command))
-    with lib.run_challenge(challenge_path, image_id, volumes=resolved_volumes) as (container, flag):
+    with lib.run_challenge(challenge_path, image_id, volumes=resolved_volumes) as (container, workspace_url, flag):
+        if default_command:
+            click.echo(f"Workspace: {workspace_url}", err=True)
         docker_command = ["docker", "exec", f"--user={user}", "-it", container, *command]
         try:
             if cast_to is None:

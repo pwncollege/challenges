@@ -3,7 +3,7 @@ description: Install Nix and configure binary caches for this repo.
 runs:
   using: composite
   steps:
-    - uses: DeterminateSystems/determinate-nix-action@v3.17.1
+    - uses: DeterminateSystems/determinate-nix-action@v3.21.1
       with:
         summarize: false
         extra-conf: |
