@@ -15,42 +15,5 @@ resources:
   id: xor-reverse
   name: "Dealing with Bitwise Operations"
 - type: challenge
-  id: is-even
-  name: "Even or Odd"
-- type: challenge
-  id: bit-and
-  name: "Masking Bits"
-- type: challenge
-  id: bit-or
-  name: "Lowercase a String"
-- type: challenge
-  id: case-upper
-  name: "Uppercase a String"
-- type: challenge
-  id: case-swap
-  name: "Swap Case"
-- type: challenge
-  id: shift-left
-  name: "Shifting Left"
-- type: challenge
-  id: shift-right
-  name: "Shifting Right"
-- type: markdown
-  name: "Reading Stored Data in GDB"
-  content: |
-    Back in [Opening the Flag, with RIP](/computing-101/hello-hackers/open-read-write-rip-relative), you used a label and `lea` to pass the address of stored bytes to `open`.
-    In [Examining Memory with GDB](/computing-101/introspecting/gdb-examine-argv1), you used `x/s` to display the string at an address.
-
-    The next challenge combines those ideas in a binary you are reversing.
-    The binary has already done the `lea`-style work for you: one of its registers will hold the runtime address of a stored string.
-    Instead of looking for every secret byte as an immediate inside a `cmp`, step through the code until a register points at the stored string, then examine that address as a string:
-
-    ```gdb
-    (gdb) x/s $rsi
-    ```
-
-    Here, `$rsi` is just an example register.
-    Use the register that the binary loads with the stored string's address, then run `/challenge/reverse-me` directly with the string you found.
-- type: challenge
   id: strcmp-stored
   name: "Loops on Data"

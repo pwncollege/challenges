@@ -5,6 +5,7 @@ resources:
   video: TdTOH1GfrWg
   playlist: PL-ymxv0nOtqox6nF4HXtXHnTQFGkRQU_2
   slides: 1sBB34ZUVjT3MDjYvGiZU3z6CTLGvO1hHEdHliPUJ0iw
+challenges:
 - type: challenge
   id: atoi-digit
   name: "A Single Digit"
@@ -41,78 +42,3 @@ resources:
 - type: challenge
   id: memory-sum
   name: "Sum Them All"
-- type: header
-  content: "The Calculator"
-- type: markdown
-  expandable: False
-  name: "The Calculator"
-  content: |
-    You can turn text into a number with your `atoi`, and a number back into text with your `itoa`.
-    Now you'll use both at once to build a small command-line calculator.
-    It reads an expression from `argv` --- a left operand, an operator, and a right operand --- as in `prog 6 + 7`.
-    The operands are strings you already know how to handle: `atoi` each one.
-    The operator is the new piece: a single character you branch on to decide what to compute, quitting on any operator you don't support.
-    Then `itoa` the result and `write` it to standard output, exactly as your summing program did.
-    We'll add one operator group at a time --- addition, then subtraction, then multiplication, then the bitwise operators, and finally the unary operators --- each reusing the `atoi` and `itoa` you've already written.
-- type: challenge
-  id: calc-1-add
-  name: "Addition"
-- type: challenge
-  id: calc-2-sub
-  name: "Subtraction"
-- type: challenge
-  id: calc-3-mul
-  name: "Multiplication"
-- type: challenge
-  id: calc-4-bitwise-binops
-  name: "Bitwise Operators"
-- type: challenge
-  id: calc-5-unop
-  name: "Unary Operators"
-- type: header
-  content: "printf"
-- type: markdown
-  expandable: False
-  name: "printf"
-  content: |
-    Programs rarely print just one fixed string.
-    They print messages assembled from fixed words and changing values: `answer: 13`, `hello, hacker`, `opened 3 files`, and so on.
-    You could write each message by hand, but then every new message shape needs its own copy loops, number conversions, and `write` calls.
-    A **format string** is a compact recipe for building those messages.
-    Ordinary characters in the recipe are printed as-is, while special markers say where the next value should go.
-    The code that follows such a recipe is called a **formatter**.
-    `printf` is the traditional name for a formatter that prints its result.
-
-    This mini-module will have you build `printf`.
-    Your version will be special: it's yours!
-    Many other versions of `printf` exist as well.
-    For example, the "standard C library", which includes useful functions to use when writing applications in the C programming language, includes an implementation, and your commandline has it too:
-
-    ```console
-    hacker@dojo:~$ printf Hello
-    Hello
-    hacker@dojo:~$
-    ```
-
-    We'll build up that idea in small steps: literal text, the ASCII newline byte, escaped syntax characters, decimal numbers, repeated values, strings, and finally arbitrary bytes.
-- type: challenge
-  id: printf-literal
-  name: "Literal Output"
-- type: challenge
-  id: printf-newline
-  name: "Newline Escapes"
-- type: challenge
-  id: printf-escapes
-  name: "Escaped Syntax"
-- type: challenge
-  id: printf-number
-  name: "Decimal Markers"
-- type: challenge
-  id: printf-numbers
-  name: "Multiple Decimal Markers"
-- type: challenge
-  id: printf-string
-  name: "String Markers"
-- type: challenge
-  id: printf-hex
-  name: "Hex Byte Escapes"

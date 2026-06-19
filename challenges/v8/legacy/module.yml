@@ -1,0 +1,304 @@
+name: V8 Legacy
+visibility:
+  start: "2024-08-01T17:00:00-07:00"
+resources:
+  - type: header
+    content: Legacy V8 CVEs
+  - id: cve-2020-16040
+    name: cve-2020-16040
+    type: challenge
+  - id: cve-2020-16040-baby
+    name: cve-2020-16040-baby
+    type: challenge
+  - id: cve-2020-6418
+    name: cve-2020-6418
+    type: challenge
+  - id: cve-2020-6418-baby
+    name: cve-2020-6418-baby
+    type: challenge
+  - id: cve-2021-21220
+    name: cve-2021-21220
+    type: challenge
+  - id: cve-2021-21225
+    name: cve-2021-21225
+    type: challenge
+  - id: cve-2021-21225-baby
+    name: cve-2021-21225-baby
+    type: challenge
+  - id: cve-2021-30632
+    name: cve-2021-30632
+    type: challenge
+  - id: cve-2021-37975
+    name: cve-2021-37975
+    type: challenge
+  - id: cve-2021-38003
+    name: cve-2021-38003
+    type: challenge
+  - id: cve-2023-2033
+    name: cve-2023-2033
+    type: challenge
+  - id: cve-2023-2033-baby
+    name: cve-2023-2033-baby
+    type: challenge
+  - id: cve-2023-3079
+    name: cve-2023-3079
+    type: challenge
+  - id: cve-2023-4069
+    name: cve-2023-4069
+    type: challenge
+  - id: cve-2024-0517-baby
+    name: cve-2024-0517-baby
+    type: challenge
+  - id: cve-2024-0517
+    name: cve-2024-0517
+    type: challenge
+  - id: cve-2024-2887-baby
+    name: cve-2024-2887-baby
+    type: challenge
+  - id: cve-2024-2887
+    name: cve-2024-2887
+    type: challenge
+  - id: cve-2024-4947
+    name: cve-2024-4947
+    type: challenge
+  - type: header
+    content: Pre-Turboshaft Practice Levels
+  - id: level-1
+    name: level-1
+    type: challenge
+  - id: level-1a
+    name: level-1a
+    type: challenge
+  - id: level-1b
+    name: level-1b
+    type: challenge
+  - id: level-1c
+    name: level-1c
+    type: challenge
+  - id: level-2
+    name: level-2
+    type: challenge
+  - id: level-2b
+    name: level-2b
+    type: challenge
+  - id: level-3
+    name: level-3
+    type: challenge
+  - id: level-3b
+    name: level-3b
+    type: challenge
+  - id: level-4
+    name: level-4
+    type: challenge
+  - id: level-5
+    name: level-5
+    type: challenge
+  - id: level-6
+    name: level-6
+    type: challenge
+  - id: level-6-warmup
+    name: level-6-warmup
+    type: challenge
+  - id: level-6a
+    name: level-6a
+    type: challenge
+  - id: level-6b
+    name: level-6b
+    type: challenge
+  - id: level-6c
+    name: level-6c
+    type: challenge
+  - id: level-6d
+    name: level-6d
+    type: challenge
+  - id: level-6e
+    name: level-6e
+    type: challenge
+  - id: level-6f-async
+    name: level-6f-async
+    type: challenge
+  - id: level-6f-warmup
+    name: level-6f-warmup
+    type: challenge
+  - id: level-6i
+    name: level-6i
+    type: challenge
+  - id: level-6j
+    name: level-6j
+    type: challenge
+  - id: level-7
+    name: level-7
+    type: challenge
+  - id: level-7e
+    name: level-7e
+    type: challenge
+  - id: level-8-warmup
+    name: level-8-warmup
+    type: challenge
+  - id: level-8a
+    name: level-8a
+    type: challenge
+  - id: level-8b
+    name: level-8b
+    type: challenge
+  - id: level-8c
+    name: level-8c
+    type: challenge
+  - id: level-9
+    name: level-9
+    type: challenge
+  - id: level-9a
+    name: level-9a
+    type: challenge
+  - id: level-9b
+    name: level-9b
+    type: challenge
+  - id: level-9c
+    name: level-9c
+    type: challenge
+  - id: level-9d
+    name: level-9d
+    type: challenge
+  - id: maglev-warmup
+    name: maglev-warmup
+    type: challenge
+  - id: maglev-1
+    name: maglev-1
+    type: challenge
+  - id: maglev-2
+    name: maglev-2
+    type: challenge
+  - id: maglev-3
+    name: maglev-3
+    type: challenge
+  - id: typer-warmup
+    name: typer-warmup
+    type: challenge
+  - id: typer-oob-cage
+    name: typer-oob-cage
+    type: challenge
+  - id: typer-mismatch-cage
+    name: typer-mismatch-cage
+    type: challenge
+  - type: header
+    content: 2024 Heap-Sandbox Chains
+  - id: chain-cve-2024-0517-344963941
+    name: chain-cve-2024-0517-344963941
+    type: challenge
+  - id: chain-cve-2024-4947-344963941
+    name: chain-cve-2024-4947-344963941
+    type: challenge
+  - id: chain-cve-2024-6100-344963941
+    name: chain-cve-2024-6100-344963941
+    type: challenge
+  - id: chain-cve-2024-6100-7024
+    name: chain-cve-2024-6100-7024
+    type: challenge
+  - id: chain-cve-2024-12381-350292240
+    name: chain-cve-2024-12381-350292240
+    type: challenge
+  - id: chain-cve-2024-12692-350292240
+    name: chain-cve-2024-12692-350292240
+    type: challenge
+  - id: chain-issue-380397544-350292240
+    name: chain-issue-380397544-350292240
+    type: challenge
+  - type: header
+    content: Retired 2024 Learning Ramps
+  - id: ramp-arraybuffer-backing-store
+    name: ramp-arraybuffer-backing-store
+    type: challenge
+  - id: ramp-derived-new-target
+    name: ramp-derived-new-target
+    type: challenge
+  - id: ramp-irregexp-capture-registers
+    name: ramp-irregexp-capture-registers
+    type: challenge
+  - id: ramp-maglev-tiering-state
+    name: ramp-maglev-tiering-state
+    type: challenge
+  - id: ramp-wasm-exported-function-data
+    name: ramp-wasm-exported-function-data
+    type: challenge
+  - type: header
+    content: Retired 2025 Descriptor and Dispatch Ramps
+  - id: ramp-custom-descriptor-types
+    name: ramp-custom-descriptor-types
+    type: challenge
+  - id: ramp-exact-ref-types
+    name: ramp-exact-ref-types
+    type: challenge
+  - id: ramp-ref-get-desc
+    name: ramp-ref-get-desc
+    type: challenge
+  - id: ramp-ref-get-desc-exactness
+    name: ramp-ref-get-desc-exactness
+    type: challenge
+  - id: ramp-boundary-primitive
+    name: ramp-boundary-primitive
+    type: challenge
+  - id: ramp-boundary-exactness
+    name: ramp-boundary-exactness
+    type: challenge
+  - id: ramp-desc-confusion-effect
+    name: ramp-desc-confusion-effect
+    type: challenge
+  - id: ramp-desc-confusion-leak
+    name: ramp-desc-confusion-leak
+    type: challenge
+  - id: ramp-desc-confusion-caged-rw
+    name: ramp-desc-confusion-caged-rw
+    type: challenge
+  - id: ramp-first-stage-recalibration
+    name: ramp-first-stage-recalibration
+    type: challenge
+  - id: ramp-sandbox-handle-tables
+    name: ramp-sandbox-handle-tables
+    type: challenge
+  - id: ramp-imported-wasm-wrapper
+    name: ramp-imported-wasm-wrapper
+    type: challenge
+  - id: ramp-wrapper-signatures
+    name: ramp-wrapper-signatures
+    type: challenge
+  - id: ramp-import-dispatch-table
+    name: ramp-import-dispatch-table
+    type: challenge
+  - id: ramp-table-grow-dispatch
+    name: ramp-table-grow-dispatch
+    type: challenge
+  - id: ramp-dispatch-handle-transplant
+    name: ramp-dispatch-handle-transplant
+    type: challenge
+  - id: ramp-dispatch-absolute-rw
+    name: ramp-dispatch-absolute-rw
+    type: challenge
+  - id: ramp-import-wrapper-cpt-dispatch
+    name: ramp-import-wrapper-cpt-dispatch
+    type: challenge
+  - id: ramp-import-wrapper-absolute-rw
+    name: ramp-import-wrapper-absolute-rw
+    type: challenge
+  - id: ramp-wasm-table-dispatch-state
+    name: ramp-wasm-table-dispatch-state
+    type: challenge
+  - id: ramp-d8-base-discovery
+    name: ramp-d8-base-discovery
+    type: challenge
+  - id: ramp-catflag-invocation
+    name: ramp-catflag-invocation
+    type: challenge
+  - type: header
+    content: 2025 Descriptor and Dispatch Chains
+  - id: chain-cve-2025-13226-446113730
+    name: chain-cve-2025-13226-446113730
+    type: challenge
+  - id: chain-cve-2025-13228-446113730
+    name: chain-cve-2025-13228-446113730
+    type: challenge
+  - id: chain-cve-2025-13228-452605803
+    name: chain-cve-2025-13228-452605803
+    type: challenge
+  - id: chain-cve-2025-13230-452605803
+    name: chain-cve-2025-13230-452605803
+    type: challenge

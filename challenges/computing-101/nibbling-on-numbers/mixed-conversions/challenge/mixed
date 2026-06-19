@@ -9,7 +9,6 @@ with open("/flag") as f:
 
 ENCS = ["sdec", "udec", "hex", "bin"]
 NAME = {"sdec": "signed decimal", "udec": "unsigned decimal", "hex": "hex", "bin": "binary"}
-MAX_ATTEMPTS = 3
 ASK = {
     "sdec": "a signed (two's-complement) decimal number",
     "udec": "an unsigned decimal number",
@@ -39,41 +38,6 @@ def parse(answer, enc):
     return int(d, 2), len(d)
 
 
-def explain_wrong_value(b, src, dst, got):
-    signed = b - 256
-    if dst == "sdec" and got == b:
-        return f"That's the unsigned reading. The top bit is set, so it's negative --- subtract 256 to get {signed}."
-    if dst == "udec" and got == signed:
-        return f"That's the signed reading. An unsigned byte is 0-255, never negative --- add 256 to get {b}."
-    return f"{render(b, src)} ({NAME[src]}) is {render(b, dst)} in {NAME[dst]}."
-
-
-def ask_conversion(b, src, dst):
-    expected = b - 256 if dst == "sdec" else b
-    want_digits = 2 if dst == "hex" else 8 if dst == "bin" else None
-    prompt = f"  CONVERT THE SOURCE VALUE TO {NAME[dst].upper()} ({ASK[dst]}) > "
-
-    for attempt in range(MAX_ATTEMPTS):
-        try:
-            got, dlen = parse(input(prompt), dst)
-        except (EOFError, ValueError):
-            print(f"  That doesn't parse as {NAME[dst]}.")
-        else:
-            if got != expected:
-                print(f"  Not quite. {explain_wrong_value(b, src, dst, got)}")
-            elif want_digits and dlen != want_digits:
-                print(f"  Right value, but write all {want_digits} digits, leading zeros and all: {render(b, dst)}.")
-            else:
-                print("  Correct!")
-                return
-
-        if attempt < MAX_ATTEMPTS - 1:
-            print("  Try this conversion again.")
-
-    print("  Run me again when you're ready.")
-    sys.exit(1)
-
-
 # One value shown in each form; for each, you write it in all three of the other forms.
 # That sweeps every ordered pairing, including the signed <-> unsigned decimal flip.
 sources = ENCS[:]
@@ -85,15 +49,35 @@ print("  - a SIGNED decimal number, -128 to 127 (two's complement)")
 print("  - two HEX digits")
 print("  - eight BINARY bits")
 print(f"I'll show you {len(sources)} bytes. For each, write it in all three of the other forms.")
-print("Work through every conversion, and the flag is yours.\n")
+print("Get every conversion right in a row, and the flag is yours.\n")
 
 for i, src in enumerate(sources, 1):
     b = random.randint(128, 255)  # high bit set, so the signed and unsigned readings differ
-    print(f"SOURCE Value {i} of {len(sources)}:  {render(b, src)}    [{NAME[src]}]")
+    signed = b - 256
+    print(f"Value {i} of {len(sources)}:  {render(b, src)}    [{NAME[src]}]")
     dests = [e for e in ENCS if e != src]
     random.shuffle(dests)
     for dst in dests:
-        ask_conversion(b, src, dst)
+        expected = signed if dst == "sdec" else b
+        want_digits = 2 if dst == "hex" else 8 if dst == "bin" else None
+        try:
+            got, dlen = parse(input(f"  write it as {ASK[dst]} > "), dst)
+        except (EOFError, ValueError):
+            print(f"  That doesn't parse as {NAME[dst]}. Run me again!")
+            sys.exit(1)
+        if got != expected:
+            if dst == "sdec" and got == b:
+                why = f"That's the unsigned reading. The top bit is set, so it's negative --- subtract 256 to get {signed}."
+            elif dst == "udec" and got == signed:
+                why = f"That's the signed reading. An unsigned byte is 0-255, never negative --- add 256 to get {b}."
+            else:
+                why = f"{render(b, src)} ({NAME[src]}) is {render(b, dst)} in {NAME[dst]}."
+            print(f"  Not quite. {why}")
+            sys.exit(1)
+        if want_digits and dlen != want_digits:
+            print(f"  Right value, but write all {want_digits} digits, leading zeros and all: {render(b, dst)}.")
+            sys.exit(1)
+        print("  Correct!")
     print()
 
 print("All correct --- you can move a byte between any of its forms! Here is your flag:")

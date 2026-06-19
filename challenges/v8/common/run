@@ -1,0 +1,63 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/bash
+{% set pwn_d8_flags = pwn_d8_flags | default([]) -%}
+{% set pwn_run_clean_env = pwn_run_clean_env | default(false) -%}
+{% set pwn_run_copy_input = pwn_run_copy_input | default(true) -%}
+{% set pwn_run_disable_aslr = pwn_run_disable_aslr | default(false) -%}
+
+export PATH=/usr/bin:/bin
+
+if [ "$#" -ne 1 ]; then
+    echo "Error: No filename specified."
+    exit 1
+fi
+
+filename="$1"
+if [ ! -r "$filename" ]; then
+    echo "Error: File does not exist or is not readable."
+    exit 1
+fi
+
+run_challenge() {
+    local filename="$1"
+    local input="$filename"
+{% if pwn_run_copy_input %}
+    tempfile=$(mktemp)
+    if [ ! -e "$tempfile" ]; then
+        echo "Error: Failed to create temporary file."
+        exit 1
+    fi
+
+    cp "$filename" "$tempfile"
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to copy the file to the temporary file."
+        exit 1
+    fi
+
+    chmod 644 "$tempfile"
+    input="$tempfile"
+{% endif %}
+    local d8_flags=(
+{% for flag in pwn_d8_flags %}
+        {{ flag | tojson }}
+{% endfor %}
+    )
+{% if pwn_run_clean_env %}
+{% if pwn_run_disable_aslr %}
+    env -i PATH=/usr/bin:/bin HOME=/tmp setarch "$(uname -m)" -R /challenge/d8 "${d8_flags[@]}" "$input"
+{% else %}
+    env -i PATH=/usr/bin:/bin HOME=/tmp /challenge/d8 "${d8_flags[@]}" "$input"
+{% endif %}
+{% else %}
+{% if pwn_run_disable_aslr %}
+    setarch "$(uname -m)" -R /challenge/d8 "${d8_flags[@]}" "$input"
+{% else %}
+    /challenge/d8 "${d8_flags[@]}" "$input"
+{% endif %}
+{% endif %}
+{% if pwn_run_copy_input %}
+    rm "$tempfile"
+{% endif %}
+}
+
+printf -v quoted_filename "%q" "$filename"
+su -s /bin/bash -c "$(declare -f run_challenge); run_challenge $quoted_filename" nobody

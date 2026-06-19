@@ -14,7 +14,7 @@ check_runtime_success = "Neat! Your program correctly exits with the first byte 
 check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
-    mov_operands = checker.mov_operands(disas)
+    mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
 
     has_argv1_deref = any(
         "[rsp + 0x10]" in src

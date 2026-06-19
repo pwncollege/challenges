@@ -1,0 +1,32 @@
+--- a/src/compiler/turboshaft/machine-lowering-reducer-inl.h
++++ b/src/compiler/turboshaft/machine-lowering-reducer-inl.h
+@@ -2740,7 +2740,7 @@ class MachineLoweringReducer : public Next {
+                             const ZoneRefSet<Map>& maps, CheckMapsFlags flags,
+                             const FeedbackSource& feedback) {
+     if (maps.is_empty()) {
+-      __ Deoptimize(frame_state, DeoptimizeReason::kWrongMap, feedback);
++      //__ Deoptimize(frame_state, DeoptimizeReason::kWrongMap, feedback);
+       return {};
+     }
+ 
+@@ -2749,14 +2749,14 @@ class MachineLoweringReducer : public Next {
+       IF_NOT (LIKELY(CompareMapAgainstMultipleMaps(heap_object_map, maps))) {
+         // Reloading the map slightly reduces register pressure, and we are on a
+         // slow path here anyway.
+-        MigrateInstanceOrDeopt(heap_object, __ LoadMapField(heap_object),
+-                               frame_state, feedback);
+-        __ DeoptimizeIfNot(__ CompareMaps(heap_object, maps), frame_state,
+-                           DeoptimizeReason::kWrongMap, feedback);
++        //MigrateInstanceOrDeopt(heap_object, __ LoadMapField(heap_object),
++        //                       frame_state, feedback);
++        //__ DeoptimizeIfNot(__ CompareMaps(heap_object, maps), frame_state,
++        //                   DeoptimizeReason::kWrongMap, feedback);
+       }
+     } else {
+-      __ DeoptimizeIfNot(__ CompareMaps(heap_object, maps), frame_state,
+-                         DeoptimizeReason::kWrongMap, feedback);
++      //__ DeoptimizeIfNot(__ CompareMaps(heap_object, maps), frame_state,
++      //                   DeoptimizeReason::kWrongMap, feedback);
+     }
+     // Inserting a AssumeMap so that subsequent optimizations know the map of
+     // this object.

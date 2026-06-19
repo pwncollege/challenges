@@ -1,0 +1,118 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+function makeToken(mask) {
+    return ((((Math.random() * 0x3fffffff) >>> 0) << 1) | mask) >>> 0;
+}
+
+function makeScratchField(requireAligned) {
+    for (let i = 0; i < 256; i++) {
+        const object = requireAligned ? Object.freeze({ pad: 0, scratch: 0 }) : Object.freeze({ scratch: 0 });
+        const objectOffset = guardTools.realSandbox.getAddressOf(object);
+        const fieldOffset = objectOffset + guardTools.realSandbox.getSizeOf(object) - 4;
+        if (!requireAligned || fieldOffset % 8 === 0) {
+            return Object.freeze({ object, fieldOffset });
+        }
+    }
+
+    guardTools.fail("Harness error: could not allocate an aligned scratch field.");
+}
+
+const tokenA = makeToken(0x1000);
+const tokenB = makeToken(0x2000);
+const scratchA = makeScratchField(false);
+const scratchB = makeScratchField(true);
+let wroteA = false;
+let wroteB = false;
+let readA = false;
+let readB = false;
+
+function requireOffset(actual, expected, label) {
+    const offset = guardTools.normalizeNumber(actual, `${label} offset`);
+    if (offset !== expected) {
+        guardTools.fail(`${label} must target its provided cage byte offset.`);
+    }
+    return offset;
+}
+
+const primitiveA = Object.freeze({
+    load(offset) {
+        readA = true;
+        return guardTools.readUint32(requireOffset(offset, scratchA.fieldOffset, "primitiveA.load"));
+    },
+    store(offset, value) {
+        wroteA = true;
+        guardTools.writeUint32(requireOffset(offset, scratchA.fieldOffset, "primitiveA.store"), value >>> 0);
+    },
+});
+
+const primitiveB = Object.freeze({
+    get(index) {
+        const slotIndex = guardTools.normalizeNumber(index, "primitiveB slot index");
+        readB = true;
+        return guardTools.readUint32(requireOffset(slotIndex * 8, scratchB.fieldOffset, "primitiveB.get"));
+    },
+    put(index, value) {
+        const slotIndex = guardTools.normalizeNumber(index, "primitiveB slot index");
+        wroteB = true;
+        guardTools.writeUint32(requireOffset(slotIndex * 8, scratchB.fieldOffset, "primitiveB.put"), value >>> 0);
+    },
+});
+
+const api = Object.freeze({
+    primitiveA,
+    primitiveB,
+    targetAOffset: scratchA.fieldOffset,
+    targetBOffset: scratchB.fieldOffset,
+});
+
+const sandboxRules = Object.freeze({
+    disabledMessages: {
+        "Sandbox.MemoryView": "Use api.primitiveA and api.primitiveB; this ramp is about normalizing first-stage primitive shapes.",
+        "Sandbox.getAddressOf": "The target cage offsets are provided through api.targetAOffset and api.targetBOffset.",
+        "Sandbox.getSizeOf": "The target cage offsets are provided through api.targetAOffset and api.targetBOffset.",
+    },
+});
+{% endblock %}
+
+{% block validate %}
+if (typeof solve !== "function") {
+    guardTools.fail("define solve(api)");
+}
+
+const rw = solve(api);
+if (rw === null || typeof rw !== "object") {
+    guardTools.fail("solve(api) must return an object with read32 and write32 helpers.");
+}
+if (typeof rw.read32 !== "function") {
+    guardTools.fail("return a read32(which, offset) helper.");
+}
+if (typeof rw.write32 !== "function") {
+    guardTools.fail("return a write32(which, offset, value) helper.");
+}
+
+rw.write32("a", api.targetAOffset, tokenA);
+rw.write32("b", api.targetBOffset, tokenB);
+const actualA = rw.read32("a", api.targetAOffset);
+const actualB = rw.read32("b", api.targetBOffset);
+
+if (!wroteA || !readA) {
+    guardTools.fail("Use api.primitiveA for the 'a' primitive.");
+}
+if (!wroteB || !readB) {
+    guardTools.fail("Use api.primitiveB for the 'b' primitive.");
+}
+if ((actualA >>> 0) !== tokenA) {
+    guardTools.fail("read32('a', api.targetAOffset) did not return the value written through primitiveA.");
+}
+if ((actualB >>> 0) !== tokenB) {
+    guardTools.fail("read32('b', api.targetBOffset) did not return the value written through primitiveB. primitiveB takes an 8-byte slot index, so convert the byte offset with offset / 8.");
+}
+if (guardTools.readUint32(scratchA.fieldOffset) !== tokenA) {
+    guardTools.fail("primitiveA did not write the real heap scratch field.");
+}
+if (guardTools.readUint32(scratchB.fieldOffset) !== tokenB) {
+    guardTools.fail("primitiveB did not write the real heap scratch field.");
+}
+return true;
+{% endblock %}

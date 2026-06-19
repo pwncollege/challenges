@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: pwnshop
+Version: 0.0.0
+Summary: CLI tooling for pwn.college challenges
+Author: pwn.college
+Requires-Python: >=3.9
+Requires-Dist: black
+Requires-Dist: click
+Requires-Dist: jinja2
+Requires-Dist: pyastyle
+Requires-Dist: rich

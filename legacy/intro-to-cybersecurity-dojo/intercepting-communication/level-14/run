@@ -1,0 +1,85 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/python -I
+
+import multiprocessing
+import os
+import socket
+import time
+
+import psutil
+from dojjail import Host, Network
+
+flag = open("/flag").read()
+parent_process = psutil.Process(os.getppid())
+
+class AuthenticatedClientHost(Host):
+    def entrypoint(self):
+        while True:
+            try:
+                client_socket = socket.socket()
+                client_socket.connect(("10.0.0.3", 31337))
+
+                assert client_socket.recv(1024) == b"secret: "
+                secret = bytes(server_host.secret)  # Get the secret out-of-band
+                time.sleep(1)
+                client_socket.sendall(secret.hex().encode())
+
+                assert client_socket.recv(1024) == b"command: "
+                time.sleep(1)
+                client_socket.sendall(b"echo")
+                time.sleep(1)
+                client_socket.sendall(b"Hello, World!")
+                assert client_socket.recv(1024) == b"Hello, World!"
+
+                client_socket.close()
+                time.sleep(1)
+
+            except (OSError, ConnectionError, TimeoutError, AssertionError):
+                continue
+
+class AuthenticatedServerHost(Host):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.secret = multiprocessing.Array("B", 32)
+
+    def entrypoint(self):
+        server_socket = socket.socket()
+        server_socket.bind(("0.0.0.0", 31337))
+        server_socket.listen()
+        while True:
+            try:
+                connection, _ = server_socket.accept()
+
+                self.secret[:] = os.urandom(32)
+                time.sleep(1)
+                connection.sendall(b"secret: ")
+                secret = bytes.fromhex(connection.recv(1024).decode())
+                if secret != bytes(self.secret):
+                    connection.close()
+                    continue
+
+                time.sleep(1)
+                connection.sendall(b"command: ")
+                command = connection.recv(1024).decode().strip()
+
+                if command == "echo":
+                    data = connection.recv(1024)
+                    time.sleep(1)
+                    connection.sendall(data)
+                elif command == "flag":
+                    time.sleep(1)
+                    connection.sendall(flag.encode())
+
+                connection.close()
+            except ConnectionError:
+                continue
+
+user_host = Host("ip-10-0-0-1", privileged_uid=parent_process.uids().effective)
+client_host = AuthenticatedClientHost("ip-10-0-0-2")
+server_host = AuthenticatedServerHost("ip-10-0-0-3")
+network = Network(hosts={user_host: "10.0.0.1",
+                         client_host: "10.0.0.2",
+                         server_host: "10.0.0.3"},
+                  subnet="10.0.0.0/24")
+network.run()
+
+user_host.interactive(environ=parent_process.environ())

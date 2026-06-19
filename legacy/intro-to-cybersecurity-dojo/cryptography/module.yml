@@ -1,0 +1,162 @@
+name: Cryptography
+description: |
+  Solve various cryptography challenges, starting from the fundamentals and diving toward advanced concepts!
+  This module assumes that you know how to deal with [data encodings](/fundamentals/data-dealings).
+
+resources:
+- name: "Cryptography: Introduction"
+  type: lecture
+  video: YBdzIxeseuE
+  playlist: PL-ymxv0nOtqpBYQKnbivatYlfQ3Ygf63_
+  slides: 16lg_XvODz-gebGMTsUDF4u2ueQwwGM6r6-hDfz1lW_E
+
+- type: header
+  content: Symmetric Cryptography
+- name: "Cryptography: Symmetric Encryption"
+  type: lecture
+  video: CJrCzOR2qhk
+  playlist: PL-ymxv0nOtqpBYQKnbivatYlfQ3Ygf63_
+  slides: 1RzVGK4JXM4Iia5IA8N_Hu0Rshd1VedOvo-0a54qkceU
+- id: xor
+  name: XOR
+  type: challenge
+- id: hex
+  name: XORing Hex
+  type: challenge
+- id: ascii
+  name: XORing ASCII
+  type: challenge
+- id: strxor
+  name: XORing ASCII Strings
+  type: challenge
+- id: level-2
+  name: One-time Pad
+  type: challenge
+- id: otp-tamper
+  name: "One-time Pad Tampering"
+  type: challenge
+- id: level-3
+  name: Many-time Pad
+  type: challenge
+- id: level-4
+  name: AES
+  type: challenge
+- name: "Useful Resource"
+  type: markdown
+  content: |
+    - [Byte by byte EBC mode decryption](https://node-security.com/posts/cryptography-byte-by-byte-ecb-decryption/) (albeit in a slightly different context than we explore)
+- id: cpa
+  name: AES-ECB-CPA
+  type: challenge
+- id: cpa-http-hex
+  name: AES-ECB-CPA-HTTP
+  type: challenge
+- id: cpa-http
+  name: AES-ECB-CPA-HTTP (base64)
+  type: challenge
+- id: cpa-suffix
+  name: AES-ECB-CPA-Suffix
+  type: challenge
+- id: cpa-prefix
+  name: AES-ECB-CPA-Prefix
+  type: challenge
+- id: cpa-prefix-pad
+  name: AES-ECB-CPA-Prefix-2
+  type: challenge
+- id: level-5
+  name: AES-ECB-CPA-Prefix-Miniboss
+  type: challenge
+- id: cpa-http-boss
+  name: AES-ECB-CPA-Prefix-Boss
+  type: challenge
+- id: aes-cbc
+  name: AES-CBC
+  type: challenge
+- id: aes-cbc-corrupt
+  name: AES-CBC Tampering
+  type: challenge
+- id: aes-cbc-corrupt-resize
+  name: AES-CBC Resizing
+  type: challenge
+- name: "Useful Resources"
+  type: markdown
+  content: |
+    - [A deep dive into Padding Oracle Attacks](https://www.nccgroup.com/us/research-blog/cryptopals-exploiting-cbc-padding-oracles/)
+    - [Some POA practice](https://paddingoracle.github.io/)
+- id: aes-cbc-poa-singleblock
+  name: "AES-CBC-POA-Partial-Block"
+  type: challenge
+- id: aes-cbc-poa-fullblock
+  name: "AES-CBC-POA-Full-Block"
+  type: challenge
+- id: aes-cbc-poa
+  name: "AES-CBC-POA-Multi-Block"
+  type: challenge
+- id: aes-cbc-poa-enc
+  name: "AES-CBC-POA-Encrypt"
+  type: challenge
+- id: aes-cbc-poa-enc-nodispatch
+  name: "AES-CBC-POA-Encrypt-2"
+  type: challenge
+
+- type: header
+  content: Asymmetric Cryptography
+- name: "Cryptography: Key Exchange"
+  type: lecture
+  video: YSipKal5SKM
+  playlist: PL-ymxv0nOtqpBYQKnbivatYlfQ3Ygf63_
+  slides: 1BSCUh-Y8FyMthjngBTrMCBdvfwkkn8KfxgYun2328kI
+- name: "Cryptography: Asymmetric Encryption"
+  type: lecture
+  video: 661MFqOp0WA
+  playlist: PL-ymxv0nOtqpBYQKnbivatYlfQ3Ygf63_
+  slides: 1oOF6fWzLX-g4CpMQ2VpPOD4k3TYtAxVvVuY8BPZF2oI
+- id: level-6
+  name: DHKE
+  type: challenge
+- id: dhke-aes
+  name: "DHKE-to-AES"
+  type: challenge
+- id: level-7
+  name: RSA 1
+  type: challenge
+- id: level-8
+  name: RSA 2
+  type: challenge
+- id: level-11
+  name: RSA 3
+  type: challenge
+- id: level-12
+  name: RSA 4
+  type: challenge
+- id: rsa-sig
+  name: RSA Signatures
+  type: challenge
+
+- type: header
+  content: Cryptographic Hashes
+- name: "Cryptography: Hashing"
+  type: lecture
+  video: BY5qBsmWEa8
+  playlist: PL-ymxv0nOtqpBYQKnbivatYlfQ3Ygf63_
+  slides: 1_DJHHllHplxalW8DCgR-BPF9D_PJxoozxbLzrVYCe18
+- id: level-9
+  name: SHA 1
+  type: challenge
+- id: level-10
+  name: SHA 2
+  type: challenge
+
+- type: header
+  content: Trust
+- name: "Cryptography: Trust"
+  type: lecture
+  video: -QLq_8ZbUzw
+  playlist: PL-ymxv0nOtqpBYQKnbivatYlfQ3Ygf63_
+  slides: 1OER4qdFD4JjxaAhMr9axcIUk4-oNskl7LwRC7LXtqnU
+- id: level-13
+  name: TLS 1
+  type: challenge
+- id: level-14
+  name: TLS 2
+  type: challenge

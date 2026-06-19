@@ -43,6 +43,11 @@ jobs:
     - uses: ./.github/actions/setup-nix
     - uses: ./.github/actions/setup-challenge-runtime
 
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        cache-dependency-glob: tools/dojo/**
+
     - name: Test challenges
       uses: ./.github/actions/test-challenges
       with:
@@ -50,14 +55,23 @@ jobs:
         modified_since_ref: ""
         gpg_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
 
+    - name: Install rclone
+      run: sudo apt-get update && sudo apt-get install -y rclone
+
     - uses: ./.github/actions/read-registry-config
       id: registry-config
 
-    - name: Prepare challenge registry artifacts
-      id: prepare-registry-artifacts
+    - name: Publish challenges
       shell: 'nix develop -c bash -euo pipefail {0}'
       env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+        R2_BUCKET_NAME: ${{ steps.registry-config.outputs.bucket_name }}
         REGISTRY_SECRET: ${{ secrets.REGISTRY_SECRET }}
+        RCLONE_CONFIG_R2_TYPE: s3
+        RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+        RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+        RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
       run: |
         containerd_blobs_dir="/mnt/pwn.college/containerd/io.containerd.content.v1.content/blobs"
         publish_blobs_dir="/mnt/publish/blobs"
@@ -87,35 +101,16 @@ jobs:
           docker image ls --filter "label=pwncollege.challenge" --no-trunc --quiet \
             | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
         )
-        {
-          echo "publish_blobs_dir=$publish_blobs_dir"
-          echo "publish_manifests_dir=$publish_manifests_dir"
-        } >> "$GITHUB_OUTPUT"
-
-    - name: Publish challenge registry artifacts
-      shell: 'nix shell nixpkgs#rclone --command bash --noprofile --norc -euo pipefail {0}'
-      env:
-        R2_BUCKET_NAME: ${{ steps.registry-config.outputs.bucket_name }}
-        RCLONE_CONFIG_R2_TYPE: s3
-        RCLONE_CONFIG_R2_PROVIDER: Cloudflare
-        RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-        RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
-        RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
-      run: |
-        publish_blobs_dir="${{ steps.prepare-registry-artifacts.outputs.publish_blobs_dir }}"
-        publish_manifests_dir="${{ steps.prepare-registry-artifacts.outputs.publish_manifests_dir }}"
 
         echo "::group::rclone blobs"
         rclone copy "$publish_blobs_dir" "r2:${R2_BUCKET_NAME}/blobs" --ignore-existing --config /dev/null --stats-one-line --stats-log-level NOTICE
         echo "::endgroup::"
-
         echo "::group::rclone manifests"
         rclone copy "$publish_manifests_dir" "r2:${R2_BUCKET_NAME}/manifests" --config /dev/null --stats-one-line --stats-log-level NOTICE
         echo "::endgroup::"
 
     - name: Update dojo
       if: ${{ vars.DOJO_URL != '' && hashFiles(format('challenges/{0}/dojo.yml', matrix.challenges)) != '' }}
-      shell: 'nix shell nixpkgs#uv --command bash --noprofile --norc -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
         DOJO_URL: ${{ vars.DOJO_URL }}

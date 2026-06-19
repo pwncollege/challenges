@@ -1,0 +1,6 @@
+{%- set pwn_d8_flags = [
+    '--allow-natives-syntax',
+    '--turbofan',
+    '--no-maglev',
+] -%}
+{% include "../../../common/run" %}

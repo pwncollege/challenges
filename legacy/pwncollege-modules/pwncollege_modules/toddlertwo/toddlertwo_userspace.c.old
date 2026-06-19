@@ -1,0 +1,118 @@
+{% extends "base/base.c" %}
+
+{% block includes %}
+  {% if challenge.syscalls_allowed %}
+    #include <seccomp.h>
+  {% endif %}
+{% endblock %}
+
+{% block globals %}
+  struct ypu {
+    int fd;
+    void *code;
+  };
+
+  struct ypu ypus[16];
+  {% if challenge.atomic_ypu %}
+    sem_t ypu_mutexes[16];
+  {% endif %}
+
+  unsigned char *programs[16];
+  int allocated[16];
+{% endblock %}
+
+{% block initialize_server %}
+  for (int i = 0; i < 16; i++) {
+    {% if challenge.atomic_ypu %}
+      sem_init(&ypu_mutexes[i], 0, 1);
+    {% endif %}
+
+    int fd = open("/proc/ypu", O_RDWR);
+    ypus[i].fd = fd;
+    ypus[i].code = mmap(0, 0x1000, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  }
+
+  {% include "babyjail/seccomp_init.c" %}
+
+  assert(seccomp_load(ctx) == 0);
+{% endblock %}
+
+{% block challenge_function %}
+  printf("Welcome to the YPU (yan85 processing unit) server!\n");
+  printf("This server will allow you to schedule yan85 computing tasks onto dedicated YPUs.\n");
+  printf("Commands: create_program/load_program/output_program/delete_program/init_ypu/run_ypu/quit.\n");
+
+  char input[256];
+  unsigned int program_index;
+  unsigned int ypu_index;
+
+  while (true) {
+    scanf("%255s", input);
+
+    if (!strcmp(input, "create_program")) {
+      scanf("%d", &program_index);
+      assert(program_index < 16);
+      if (!allocated[program_index])
+        programs[program_index] = malloc(256);
+      allocated[program_index] = 1;
+    }
+
+    else if (!strcmp(input, "load_program")) {
+      scanf("%d", &program_index);
+      assert(program_index < 16);
+      read(fileno(thread_stdin),
+           allocated[program_index] ? programs[program_index] : input,
+           256);
+    }
+
+    else if (!strcmp(input, "output_program")) {
+      scanf("%d", &program_index);
+      assert(program_index < 16);
+      if (allocated[program_index])
+          write(fileno(thread_stdout), programs[program_index], 256);
+    }
+
+    else if (!strcmp(input, "delete_program")) {
+      scanf("%d", &program_index);
+      assert(program_index < 16);
+      if (allocated[program_index])
+        free(programs[program_index]);
+      allocated[program_index] = 0;
+    }
+
+    else if (!strcmp(input, "init_ypu")) {
+      scanf("%d", &ypu_index);
+      assert(ypu_index < 16);
+      scanf("%d", &program_index);
+      assert(program_index < 16);
+      {% if challenge.atomic_ypu %}
+        sem_wait(&ypu_mutexes[ypu_index]);
+      {% endif %}
+      if (allocated[program_index])
+        memcpy(ypus[ypu_index].code, programs[program_index], 256);
+      {% if challenge.atomic_ypu %}
+        sem_post(&ypu_mutexes[ypu_index]);
+      {% endif %}
+    }
+
+    else if (!strcmp(input, "run_ypu")) {
+      scanf("%d", &ypu_index);
+      assert(ypu_index < 16);
+      {% if challenge.atomic_ypu %}
+        sem_wait(&ypu_mutexes[ypu_index]);
+      {% endif %}
+      ioctl(ypus[ypu_index].fd, 1337, NULL);
+      {% if challenge.atomic_ypu %}
+        sem_post(&ypu_mutexes[ypu_index]);
+      {% endif %}
+    }
+
+    else if (!strcmp(input, "quit")) {
+      break;
+    }
+
+    else {
+      printf("Unrecognized choice!\n");
+    }
+  }
+{% endblock %}

@@ -1,0 +1,46 @@
+#!/opt/pwn.college/python
+
+import os
+import sys
+from collections import namedtuple
+
+Pixel = namedtuple("Pixel", ["ascii"])
+
+
+def main():
+    if len(sys.argv) >= 2:
+        path = sys.argv[1]
+        assert path.endswith(".cimg"), "ERROR: file has incorrect extension"
+        file = open(path, "rb")
+    else:
+        file = sys.stdin.buffer
+
+    header = file.read1(20)
+    assert len(header) == 20, "ERROR: Failed to read header!"
+
+    assert header[:4] == b"CmgE", "ERROR: Invalid magic number!"
+
+    assert int.from_bytes(header[4:12], "little") == 1, "ERROR: Invalid version!"
+
+    width = int.from_bytes(header[12:16], "little")
+    assert width == 59, "ERROR: Incorrect width!"
+
+    height = int.from_bytes(header[16:20], "little")
+    assert height == 21, "ERROR: Incorrect height!"
+
+    data = file.read1(width * height)
+    assert len(data) == width * height, "ERROR: Failed to read data!"
+
+    pixels = [Pixel(character) for character in data]
+
+    with open("/flag", "r") as f:
+        flag = f.read()
+        print(flag)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except AssertionError as e:
+        print(e, file=sys.stderr)
+        sys.exit(-1)

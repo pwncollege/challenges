@@ -1,0 +1,3 @@
+Sometimes, developers try very hard to filter out potentially dangerous characters.
+The success in this challenge is almost perfect, but not quite...
+You'll be stumped for a while, but will laugh at its familiarity when you figure out the solution!

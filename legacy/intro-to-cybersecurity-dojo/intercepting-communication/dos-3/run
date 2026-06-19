@@ -1,0 +1,48 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/python -I
+
+import os
+import socket
+import socketserver
+import time
+
+import psutil
+from dojjail import Host, Network
+from dojjail.capabilities import limit_capabilities
+
+flag = open("/flag").read()
+parent_process = psutil.Process(os.getppid())
+
+class ServerHost(Host):
+    def entrypoint(self):
+        class ForkingTCPHandler(socketserver.BaseRequestHandler):
+            def handle(self):
+                self.request.settimeout(1)
+                try:
+                    self.request.recv(1024)
+                except (TimeoutError, socket.timeout):
+                    return
+
+        with socketserver.ForkingTCPServer(("0.0.0.0", 31337), ForkingTCPHandler) as server:
+            server.serve_forever()
+
+class ClientHost(Host):
+    def entrypoint(self):
+        while True:
+            try:
+                with socket.create_connection(("10.0.0.2", 31337), timeout=60) as client_socket:
+                    client_socket.sendall(b"Hello, World!\n")
+                time.sleep(1)
+            except (TimeoutError, socket.timeout) as e:
+                print(flag, flush=True)
+                break
+            except (OSError, ConnectionError):
+                continue
+
+user_host = Host("ip-10-0-0-1", privileged_uid=parent_process.uids().effective)
+server_host = ServerHost("ip-10-0-0-2")
+client_host = ClientHost("ip-10-0-0-3")
+network = Network(hosts={user_host: "10.0.0.1", server_host: "10.0.0.2", client_host: "10.0.0.3"},
+                  subnet="10.0.0.0/24")
+network.run()
+
+user_host.interactive(preexec_fn=lambda: limit_capabilities(0), environ=parent_process.environ())

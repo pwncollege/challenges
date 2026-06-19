@@ -1,0 +1,47 @@
+#!/opt/pwn.college/python
+
+import shutil
+import psutil
+import urllib
+import atexit
+import time
+import sys
+import os
+
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
+
+os.setuid(os.geteuid())
+os.environ.clear()
+os.environ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+options = FirefoxOptions()
+options.add_argument("--headless")
+service = FirefoxService(log_path="/dev/null", executable_path=shutil.which("geckodriver"))
+browser = webdriver.Firefox(service=service, options=options)
+atexit.register(browser.quit)
+
+open_ports = {s.laddr.port for s in psutil.net_connections(kind="inet") if s.status == "LISTEN"}
+if 80 not in open_ports:
+    print("Service doesn't seem to be running?")
+    sys.exit(1)
+
+challenge_url = "http://challenge.localhost:80/~hacker/solve.html"
+
+print(f"Visiting {challenge_url}")
+browser.get(challenge_url)
+
+
+print("Retrieved the following HTML:")
+if "<html" not in browser.page_source.lower():
+    print("Doesn't look like we retrieved an HTML page...")
+    sys.exit(1)
+print(browser.page_source)
+
+time.sleep(2)
+print(" ")

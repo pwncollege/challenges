@@ -1,0 +1,175 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+let proofObject;
+let decoyObject;
+let referenceCell;
+let proofObjectOffset;
+let decoyObjectOffset;
+let referenceCellOffset;
+let referenceCellSize;
+let targetFieldOffset;
+let taggedProofReference;
+let taggedDecoyReference;
+let sizedReferenceCell = false;
+let usedReferenceCell = false;
+
+function byteSwap32(value) {
+    return (((value & 0xff) << 24) | ((value & 0xff00) << 8) | ((value >>> 8) & 0xff00) | ((value >>> 24) & 0xff)) >>> 0;
+}
+
+function findRawFieldOffset(objectOffset, objectSize, rawValue, label) {
+    const matches = [];
+    for (let offset = 0; offset <= objectSize - 4; offset += 4) {
+        if (guardTools.readUint32(objectOffset + offset) === rawValue) {
+            matches.push(offset);
+        }
+    }
+    if (matches.length !== 1) {
+        guardTools.fail(`Harness error: expected one ${label} field, found ${matches.length}.`);
+    }
+    return matches[0];
+}
+
+const referenceCellPrototype = Object.freeze({
+    prove() {
+        if (this !== referenceCell) {
+            guardTools.fail("Call prove() on the referenceCell returned by allocateReferenceCell().");
+        }
+        if (this.target !== proofObject) {
+            guardTools.fail("referenceCell.target does not point at proofObject yet.");
+        }
+        usedReferenceCell = true;
+    },
+});
+
+function allocateProofObject() {
+    if (proofObject === undefined) {
+        proofObject = Object.freeze({ proof: true });
+        proofObjectOffset = guardTools.realSandbox.getAddressOf(proofObject);
+        taggedProofReference = proofObjectOffset + 1;
+    }
+    return proofObject;
+}
+
+function allocateReferenceCell() {
+    allocateProofObject();
+    if (referenceCell === undefined) {
+        decoyObject = Object.freeze({ proof: false });
+        decoyObjectOffset = guardTools.realSandbox.getAddressOf(decoyObject);
+        taggedDecoyReference = decoyObjectOffset + 1;
+        referenceCell = { target: decoyObject };
+        Object.setPrototypeOf(referenceCell, referenceCellPrototype);
+        Object.freeze(referenceCell);
+        referenceCellOffset = guardTools.realSandbox.getAddressOf(referenceCell);
+        referenceCellSize = guardTools.realSandbox.getSizeOf(referenceCell);
+        targetFieldOffset = findRawFieldOffset(referenceCellOffset, referenceCellSize, taggedDecoyReference, "reference cell target");
+        if (targetFieldOffset !== referenceCellSize - 4) {
+            guardTools.fail("Harness error: referenceCell.target was not the final 32-bit slot.");
+        }
+    }
+    return referenceCell;
+}
+
+function requireObjects() {
+    if (proofObject === undefined || referenceCell === undefined) {
+        guardTools.fail("Call allocateProofObject() and allocateReferenceCell() before using the guarded Sandbox primitive.");
+    }
+}
+
+function isKnownObject(obj) {
+    return (proofObject !== undefined && obj === proofObject) || (referenceCell !== undefined && obj === referenceCell);
+}
+
+function targetFieldValue() {
+    return guardTools.readUint32(referenceCellOffset + targetFieldOffset);
+}
+
+function targetSlotOffset() {
+    return referenceCellOffset + targetFieldOffset;
+}
+
+function referenceCellTargetsProofObject() {
+    return targetFieldValue() === taggedProofReference;
+}
+
+function diagnoseReferenceCellTarget() {
+    const actual = targetFieldValue();
+    if (actual === taggedProofReference) {
+        return;
+    }
+    if (actual === taggedDecoyReference) {
+        guardTools.fail("referenceCell.target still points at the decoy object. Overwrite that tagged reference with the tagged proofObject reference.");
+    }
+    if (actual === proofObjectOffset) {
+        guardTools.fail("referenceCell.target contains the untagged proofObject offset. Object fields hold tagged heap references, so write proofObjectOffset + 1.");
+    }
+    if (actual === byteSwap32(taggedProofReference)) {
+        guardTools.fail("referenceCell.target contains the byte-swapped proofObject reference. DataView.setUint32 defaults to big-endian; pass true for little-endian.");
+    }
+    guardTools.fail(`referenceCell.target contains 0x${actual.toString(16)}, not the tagged proofObject reference.`);
+}
+
+function requireSolved() {
+    if (proofObject === undefined) {
+        guardTools.fail("Call allocateProofObject().");
+    }
+    if (referenceCell === undefined) {
+        guardTools.fail("Call allocateReferenceCell(), retarget it to proofObject, then call referenceCell.prove().");
+    }
+    diagnoseReferenceCellTarget();
+    if (!usedReferenceCell) {
+        guardTools.fail("Call referenceCell.prove() after retargeting referenceCell.target to proofObject.");
+    }
+    return true;
+}
+
+const sandboxRules = Object.freeze({
+    getAddressOf(obj) {
+        if (!isKnownObject(obj)) {
+            guardTools.fail("Wrong object: this ramp only allows proofObject and referenceCell after they are allocated.");
+        }
+        return guardTools.realSandbox.getAddressOf(obj);
+    },
+    getSizeOf(obj) {
+        if (referenceCell === undefined) {
+            guardTools.fail("Call allocateReferenceCell() before sizing it.");
+        }
+        if (obj !== referenceCell) {
+            guardTools.fail("Wrong object: this ramp only allows sizing referenceCell.");
+        }
+        sizedReferenceCell = true;
+        return guardTools.realSandbox.getSizeOf(obj);
+    },
+    MemoryView(offset, size) {
+        requireObjects();
+
+        const viewOffset = guardTools.normalizeNumber(offset, "MemoryView offset");
+        const viewSize = guardTools.normalizeNumber(size, "MemoryView size");
+        if (!sizedReferenceCell) {
+            guardTools.fail("First size referenceCell with Sandbox.getSizeOf(referenceCell), then write its target slot.");
+        }
+        if (viewOffset === referenceCellOffset) {
+            guardTools.fail("This starts at the referenceCell object header. Use the final 32-bit target slot.");
+        }
+        if (viewOffset === referenceCellOffset + referenceCellSize) {
+            guardTools.fail("This points just past referenceCell. The target slot is the final 32-bit slot, so subtract 4.");
+        }
+        if (viewOffset === targetSlotOffset()) {
+            guardTools.requireSameNumber(viewSize, 4, "Request exactly the 32-bit referenceCell.target slot.");
+            return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+        }
+
+        guardTools.fail("Wrong MemoryView range: this ramp only allows retargeting referenceCell.target.");
+    },
+});
+{% endblock %}
+
+{% block expose %}
+guardTools.exposeConstant("allocateProofObject", allocateProofObject);
+guardTools.exposeConstant("allocateReferenceCell", allocateReferenceCell);
+{% endblock %}
+
+{% block validate %}
+return requireSolved();
+{% endblock %}

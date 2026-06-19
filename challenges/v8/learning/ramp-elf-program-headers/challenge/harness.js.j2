@@ -1,0 +1,154 @@
+{% include "../../../common/provided-process-memory.js.j2" %}
+
+const primitive = createProvidedProcessMemory();
+
+Object.defineProperty(globalThis, "Sandbox", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+});
+
+const PROCESS_IMAGE_BASE = 0x555555554000n;
+const ELF_MAGIC_QWORD = 0x00010102464c457fn;
+const PT_LOAD = 1;
+const PT_DYNAMIC = 2;
+const PF_X = 1;
+const PF_W = 2;
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function read8(address) {
+    address = BigInt(address);
+    const aligned = address & ~7n;
+    return Number((primitive.read64(aligned) >> ((address - aligned) * 8n)) & 0xffn);
+}
+
+function read16(address) {
+    return read8(address) | (read8(BigInt(address) + 1n) << 8);
+}
+
+function read32(address) {
+    return (
+        read8(address) |
+        (read8(BigInt(address) + 1n) << 8) |
+        (read8(BigInt(address) + 2n) << 16) |
+        (read8(BigInt(address) + 3n) << 24)
+    ) >>> 0;
+}
+
+function read64(address) {
+    return primitive.read64(BigInt(address));
+}
+
+let learnerReadCalls = 0;
+
+function learnerRead16(address) {
+    learnerReadCalls++;
+    return read16(address);
+}
+
+function learnerRead32(address) {
+    learnerReadCalls++;
+    return read32(address);
+}
+
+function learnerRead64(address) {
+    learnerReadCalls++;
+    return read64(address);
+}
+
+function parseProgramHeaders() {
+    if (read64(PROCESS_IMAGE_BASE) !== ELF_MAGIC_QWORD) {
+        fail("Harness error: unexpected process-image ELF base.");
+    }
+
+    const ePhOff = read64(PROCESS_IMAGE_BASE + 0x20n);
+    const ePhEntSize = read16(PROCESS_IMAGE_BASE + 0x36n);
+    const ePhNum = read16(PROCESS_IMAGE_BASE + 0x38n);
+    const result = {
+        execStart: 0n,
+        execSize: 0n,
+        writeStart: 0n,
+        writeSize: 0n,
+        dynamicAddress: 0n,
+        dynamicSize: 0n,
+    };
+
+    for (let i = 0; i < ePhNum; i++) {
+        const ph = PROCESS_IMAGE_BASE + ePhOff + BigInt(i * ePhEntSize);
+        const type = read32(ph);
+        const flags = read32(ph + 4n);
+        const vaddr = read64(ph + 0x10n);
+        const filesz = read64(ph + 0x20n);
+        const memsz = read64(ph + 0x28n);
+
+        if (type === PT_LOAD && (flags & PF_X) !== 0) {
+            result.execStart = PROCESS_IMAGE_BASE + vaddr;
+            result.execSize = memsz;
+        }
+        if (type === PT_LOAD && (flags & PF_W) !== 0) {
+            result.writeStart = PROCESS_IMAGE_BASE + vaddr;
+            result.writeSize = memsz;
+        }
+        if (type === PT_DYNAMIC) {
+            result.dynamicAddress = PROCESS_IMAGE_BASE + vaddr;
+            result.dynamicSize = filesz;
+        }
+    }
+
+    if (result.execStart === 0n || result.writeStart === 0n || result.dynamicAddress === 0n) {
+        fail("Harness error: failed to parse d8 program headers.");
+    }
+    return Object.freeze(result);
+}
+
+function normalizeAddress(value, name) {
+    if (typeof value === "bigint") return value;
+    const asNumber = Number(value);
+    if (!Number.isSafeInteger(asNumber)) {
+        fail(`${name} must be returned as a BigInt process address.`);
+    }
+    return BigInt(asNumber);
+}
+
+function checkField(actual, expected, name) {
+    const value = normalizeAddress(actual, name);
+    if (value !== expected) {
+        fail(`${name} was 0x${value.toString(16)}; expected 0x${expected.toString(16)}.`);
+    }
+}
+
+const expected = parseProgramHeaders();
+const api = Object.freeze({
+    baseAddress: PROCESS_IMAGE_BASE,
+    PT_LOAD,
+    PT_DYNAMIC,
+    PF_X,
+    PF_W,
+    read16: learnerRead16,
+    read32: learnerRead32,
+    read64: learnerRead64,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+const result = solve(api);
+if (result === null || typeof result !== "object") {
+    fail("Return an object with execStart, execSize, writeStart, writeSize, dynamicAddress, and dynamicSize.");
+}
+
+for (const field of ["execStart", "execSize", "writeStart", "writeSize", "dynamicAddress", "dynamicSize"]) {
+    checkField(result[field], expected[field], field);
+}
+
+if (learnerReadCalls === 0) {
+    fail("Walk the provided in-memory program headers with the provided read helpers.");
+}
+
+print("__PWN_SUCCESS_MARKER__");

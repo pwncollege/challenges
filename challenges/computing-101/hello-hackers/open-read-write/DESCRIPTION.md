@@ -31,8 +31,8 @@ Your program should:
 1. Load a pointer to the filename (stored at `[rsp+16]`, the first argument) into `rdi`
 2. Specify the default of read access for the second argument (set `rsi` to `0`).
 3. `open` it (syscall `2`)
-4. `read` from the returned fd into memory. The fd `open` returned is in `rax`; move it to `rdi` for `read`'s first argument (do this _before_ you set the syscall number for write!). Read a comfortably large count --- the flag is shorter.
-5. `write` to stdout exactly the number of bytes `read` returned (`mov rdx, rax`, just like in read-exact)
+4. `read` 64 bytes from the returned fd into memory. The returned fd will be stored in `rax`; you'll need to move that to `rdi` for `read`'s first argument. Make sure to do this _before_ you set the syscall number for write!
+5. `write` those 64 bytes to stdout
 6. `exit` with code `42` (syscall `60`)
 
 ----

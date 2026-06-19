@@ -1,0 +1,174 @@
+# Strip d8 shell helpers that turn the challenge harness into a file/loader API.
+# Keep print/printErr so existing tests can report progress without adding power.
+RUN python3 - <<'PY'
+from pathlib import Path
+
+TARGET_NAMES = {
+    "version",
+    "write",
+    "writeFile",
+    "read",
+    "readbuffer",
+    "readline",
+    "load",
+    "quit",
+    "testRunner",
+    "Realm",
+    "performance",
+    "Worker",
+    "os",
+    "d8",
+    "async_hooks",
+}
+
+path = Path("src/d8/d8.cc")
+text = path.read_text()
+
+
+def code_mask(source):
+    mask = [True] * len(source)
+    i = 0
+    state = "code"
+    while i < len(source):
+        ch = source[i]
+        nxt = source[i + 1] if i + 1 < len(source) else ""
+        if state == "code":
+            if ch == "/" and nxt == "/":
+                mask[i] = mask[i + 1] = False
+                i += 2
+                state = "line-comment"
+                continue
+            if ch == "/" and nxt == "*":
+                mask[i] = mask[i + 1] = False
+                i += 2
+                state = "block-comment"
+                continue
+            if ch == '"':
+                mask[i] = False
+                i += 1
+                state = "string"
+                continue
+            if ch == "'":
+                mask[i] = False
+                i += 1
+                state = "char"
+                continue
+            i += 1
+            continue
+        if state == "line-comment":
+            mask[i] = False
+            if ch == "\n":
+                state = "code"
+            i += 1
+            continue
+        if state == "block-comment":
+            mask[i] = False
+            if ch == "*" and nxt == "/":
+                mask[i + 1] = False
+                i += 2
+                state = "code"
+            else:
+                i += 1
+            continue
+        if state == "string":
+            mask[i] = False
+            if ch == "\\":
+                if i + 1 < len(source):
+                    mask[i + 1] = False
+                i += 2
+                continue
+            if ch == '"':
+                state = "code"
+            i += 1
+            continue
+        if state == "char":
+            mask[i] = False
+            if ch == "\\":
+                if i + 1 < len(source):
+                    mask[i + 1] = False
+                i += 2
+                continue
+            if ch == "'":
+                state = "code"
+            i += 1
+    return mask
+
+
+mask = code_mask(text)
+marker = "Shell::CreateGlobalTemplate"
+start = text.find(marker)
+if start == -1:
+    raise SystemExit("Shell::CreateGlobalTemplate not found")
+
+open_brace = text.find("{", start)
+if open_brace == -1:
+    raise SystemExit("Shell::CreateGlobalTemplate body not found")
+
+depth = 0
+close_brace = None
+for pos in range(open_brace, len(text)):
+    if not mask[pos]:
+        continue
+    if text[pos] == "{":
+        depth += 1
+    elif text[pos] == "}":
+        depth -= 1
+        if depth == 0:
+            close_brace = pos
+            break
+if close_brace is None:
+    raise SystemExit("Shell::CreateGlobalTemplate body is unterminated")
+
+needle = "global_template->Set"
+replacements = []
+pos = open_brace + 1
+while True:
+    idx = text.find(needle, pos, close_brace)
+    if idx == -1:
+        break
+    if not all(mask[idx:idx + len(needle)]):
+        pos = idx + 1
+        continue
+
+    parens = 0
+    end = None
+    scan = idx
+    while scan < close_brace:
+        if mask[scan]:
+            if text[scan] == "(":
+                parens += 1
+            elif text[scan] == ")":
+                parens -= 1
+            elif text[scan] == ";" and parens == 0:
+                end = scan + 1
+                break
+        scan += 1
+    if end is None:
+        raise SystemExit("unterminated global_template->Set statement")
+
+    stmt = text[idx:end]
+    target = None
+    if "Symbol::GetToStringTag" in stmt:
+        target = "Symbol::GetToStringTag"
+    else:
+        for name in sorted(TARGET_NAMES):
+            if f'"{name}"' in stmt:
+                target = name
+                break
+
+    if target is not None:
+        line_start = text.rfind("\n", 0, idx) + 1
+        indent = text[line_start:idx]
+        replacement = f"{indent}/* pwn.college: stripped d8 shell helper {target}. */;"
+        replacements.append((idx, end, replacement))
+    pos = end
+
+for start, end, replacement in reversed(replacements):
+    text = text[:start] + replacement + text[end:]
+
+if replacements:
+    path.write_text(text)
+    print(f"stripped {len(replacements)} d8 shell helper bindings")
+else:
+    print("d8 shell helper bindings were already stripped")
+PY

@@ -20,16 +20,16 @@ Consider this subtraction:
 
 ```text
   00000001    a positive 1
-- 00000010    a positive 2 (being subtracted)
+- 00000010    a negative 2
 ```
 
 There aren't enough bits to service this subtraction, so we introduce a _borrow_ bit:
 
 ```text
   1 00000001    a positive 1 (with a borrow bit)
-- 0 00000010    a positive 2 (being subtracted)
+- 0 00000010    a negative 2
   ----------
-  0 11111111    the result of the normal *sign-agnostic* subtraction
+- 0 11111111    the result of the normal *sign-agnostic* subtraction
 ```
 
 So `11111111` *is* `-1`: add it to `1` and they cancel, with the leftover bit falling off the end of the byte and vanishing.
@@ -46,4 +46,4 @@ Interestingly, if you treat the value as _unsigned_, you can happily use it as 2
 
 Now, put this to use.
 This challenge will force you to understand twos-complement on bytes.
-Run `/challenge/decode` and get the flag!
+Do it, and get the flag!

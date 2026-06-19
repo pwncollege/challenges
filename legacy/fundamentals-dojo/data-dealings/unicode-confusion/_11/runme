@@ -1,0 +1,26 @@
+#!/usr/bin/exec-suid -- /bin/python3 -I
+
+import sys
+
+
+try:
+    entered_password = open(sys.argv[1], "rb").read()
+except FileNotFoundError:
+    print("Input file not found...")
+    sys.exit(1)
+correct_password = b"wvdrvtav"
+
+print(f"Read {len(entered_password)} bytes.")
+
+assert entered_password != correct_password
+
+entered_password = entered_password.decode("utf-16")
+entered_password = entered_password.encode("latin1")
+
+
+if entered_password == correct_password:
+    print("Congrats! Here is your flag:")
+    print(open("/flag").read().strip())
+else:
+    print("Incorrect!")
+    sys.exit(1)

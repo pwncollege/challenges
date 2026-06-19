@@ -11,9 +11,9 @@ modules:
 - id: introspecting
 - id: hello-hackers
 - id: control-flow
-- id: endian-escapades
 - id: assembly-assortment
 - id: the-stack-revisited
+- id: assembly-crash-course
 - id: numbers-as-strings
 - id: building-a-web-server
 - id: debugging-refresher

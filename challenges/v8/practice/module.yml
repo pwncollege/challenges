@@ -1,0 +1,63 @@
+name: V8 Practice
+visibility:
+  start: "2024-08-01T17:00:00-07:00"
+resources:
+  - name: "Reference Material"
+    type: markdown
+    content: |
+      - [V8 Developer Documentation](https://v8.dev)
+      - [The V8 Sandbox](https://v8.dev/blog/sandbox)
+      - [Pointer Compression in V8](https://v8.dev/blog/pointer-compression)
+      - [Turboshaft: leaving the sea of nodes](https://v8.dev/blog/leaving-the-sea-of-nodes)
+  - type: header
+    content: Post-Turboshaft Chain Candidates
+  - id: chain-cve-2025-5419-422645418
+    name: chain-cve-2025-5419-422645418
+    type: challenge
+    description: "CVE-2025-5419 plus Chromium issue 422645418: stale JIT load to cage read/write, then JSPI native-stack corruption to escape the V8 heap sandbox."
+  - id: chain-cve-2025-13226-452605803
+    name: chain-cve-2025-13226-452605803
+    type: challenge
+    description: "CVE-2025-13226 plus Chromium issue 452605803: Wasm custom-descriptor subtype-validation confusion to cage read/write, then dispatch-table corruption to escape the V8 heap sandbox."
+  - id: chain-cve-2025-13227-452605803
+    name: chain-cve-2025-13227-452605803
+    type: challenge
+    description: "CVE-2025-13227 plus Chromium issue 452605803: Wasm custom-descriptor confusion to cage read/write, then dispatch-table corruption to escape the V8 heap sandbox."
+  - id: chain-cve-2025-13227-446113730
+    name: chain-cve-2025-13227-446113730
+    type: challenge
+    description: "CVE-2025-13227 plus Chromium issue 446113730: Wasm custom-descriptor confusion to cage read/write, then stale Wasm dispatch-table growth to reclaim code-pointer-table state and escape the V8 heap sandbox."
+  - id: chain-cve-2025-13229-452605803
+    name: chain-cve-2025-13229-452605803
+    type: challenge
+    description: "CVE-2025-13229 plus Chromium issue 452605803: imported ref.func exactness confusion to cage read/write, then dispatch-table corruption to escape the V8 heap sandbox."
+  - id: chain-cve-2025-13229-446113730
+    name: chain-cve-2025-13229-446113730
+    type: challenge
+    description: "CVE-2025-13229 plus Chromium issue 446113730: imported ref.func exactness confusion to cage read/write, then stale Wasm dispatch-table growth to reclaim code-pointer-table state and escape the V8 heap sandbox."
+  - id: chain-cve-2025-13230-446113730
+    name: chain-cve-2025-13230-446113730
+    type: challenge
+    description: "CVE-2025-13230 plus Chromium issue 446113730: Wasm JS-to-Wasm exactness confusion to cage read/write, then stale Wasm dispatch-table growth to reclaim code-pointer-table state and escape the V8 heap sandbox."
+  - type: header
+    content: 2026 Chain Candidates
+  - id: chain-cve-2026-9973-514157844
+    name: chain-cve-2026-9973-514157844
+    type: challenge
+    description: "CVE-2026-9973 plus Chromium issue 514157844: Wasm load-elimination OOB to cage read/write, then pre-trusted-space WasmFX tag identity confusion to escape the V8 heap sandbox."
+  - id: chain-cve-2026-9973-505751230
+    name: chain-cve-2026-9973-505751230
+    type: challenge
+    description: "CVE-2026-9973 plus Chromium issue 505751230: Wasm load-elimination OOB to cage read/write, then WasmFX continuation signature-hash collision to escape the V8 heap sandbox."
+  - id: chain-cve-2026-7899-514157844
+    name: chain-cve-2026-7899-514157844
+    type: challenge
+    description: "CVE-2026-7899 plus Chromium issue 514157844: Wasm load-elimination OOB to cage read/write, then pre-trusted-space WasmFX tag identity confusion to escape the V8 heap sandbox."
+  - id: chain-cve-2026-7899-502229895
+    name: chain-cve-2026-7899-502229895
+    type: challenge
+    description: "CVE-2026-7899 plus Chromium issue 502229895: Wasm load-elimination OOB to cage read/write, then WasmFX continuation signature confusion to escape the V8 heap sandbox."
+  - id: chain-cve-2026-7899-505751230
+    name: chain-cve-2026-7899-505751230
+    type: challenge
+    description: "CVE-2026-7899 plus Chromium issue 505751230: Wasm load-elimination OOB to cage read/write, then WasmFX continuation signature-hash collision to escape the V8 heap sandbox."

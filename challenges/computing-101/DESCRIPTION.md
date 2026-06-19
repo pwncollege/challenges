@@ -12,6 +12,3 @@ This dojo is a work in progress *and* a community effort!
 If you are interested in contributing, please make your way over to [github](https://github.com/pwncollege/computing-101)!
 If you have questions, comments, feedback, and so on, join us on [the Discord channel](https://discord.com/channels/750635557666816031/1298046190444609666).
 
-**NOTE:**
-If you are looking for the old Assembly Crash Course, it has [been archived](https://pwn.college/archive/assembly-crash-course).
-Computing 101 is the current path through that material, with the concepts split across the modules below.

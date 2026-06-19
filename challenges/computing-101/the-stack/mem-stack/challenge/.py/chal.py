@@ -13,7 +13,7 @@ check_runtime_success = "Neat! Your program correctly exits with the argument co
 check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
-    mov_operands = checker.mov_operands(disas)
+    mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
 
     has_rsp_deref = any("[rsp]" in src for _, src in mov_operands)
     assert has_rsp_deref, (

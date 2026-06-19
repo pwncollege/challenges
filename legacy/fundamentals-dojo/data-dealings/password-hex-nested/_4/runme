@@ -1,0 +1,27 @@
+#!/usr/bin/exec-suid -- /bin/python3 -I
+
+import sys
+
+
+try:
+    entered_password = open(sys.argv[1], "rb").read()
+except FileNotFoundError:
+    print("Input file not found...")
+    sys.exit(1)
+correct_password = b"cyjljfgc"
+
+print(f"Read {len(entered_password)} bytes.")
+
+
+entered_password = bytes.fromhex(entered_password.decode("l1"))
+entered_password = bytes.fromhex(entered_password.decode("l1"))
+entered_password = bytes.fromhex(entered_password.decode("l1"))
+entered_password = bytes.fromhex(entered_password.decode("l1"))
+
+
+if entered_password == correct_password:
+    print("Congrats! Here is your flag:")
+    print(open("/flag").read().strip())
+else:
+    print("Incorrect!")
+    sys.exit(1)

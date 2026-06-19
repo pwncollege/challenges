@@ -1,0 +1,49 @@
+#!/opt/pwn.college/python
+
+import os
+import sys
+from collections import namedtuple
+
+Pixel = namedtuple("Pixel", ["ascii"])
+
+
+def main():
+    if len(sys.argv) >= 2:
+        path = sys.argv[1]
+        assert path.endswith(".cimg"), "ERROR: file has incorrect extension"
+        file = open(path, "rb")
+    else:
+        file = sys.stdin.buffer
+
+    header = file.read1(16)
+    assert len(header) == 16, "ERROR: Failed to read header!"
+
+    assert header[:4] == b"cIMG", "ERROR: Invalid magic number!"
+
+    assert int.from_bytes(header[4:6], "little") == 1, "ERROR: Invalid version!"
+
+    width = int.from_bytes(header[6:14], "little")
+    assert width == 64, "ERROR: Incorrect width!"
+
+    height = int.from_bytes(header[14:16], "little")
+    assert height == 12, "ERROR: Incorrect height!"
+
+    data = file.read1(width * height)
+    assert len(data) == width * height, "ERROR: Failed to read data!"
+
+    pixels = [Pixel(character) for character in data]
+
+    invalid_character = next((pixel.ascii for pixel in pixels if not (0x20 <= pixel.ascii <= 0x7E)), None)
+    assert invalid_character is None, f"ERROR: Invalid character {invalid_character:#04x} in data!"
+
+    with open("/flag", "r") as f:
+        flag = f.read()
+        print(flag)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except AssertionError as e:
+        print(e, file=sys.stderr)
+        sys.exit(-1)

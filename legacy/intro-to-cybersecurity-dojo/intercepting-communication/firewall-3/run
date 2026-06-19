@@ -1,0 +1,44 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/python -I
+
+import os
+import random
+import socket
+import subprocess
+
+import psutil
+from dojjail import Host, Network
+
+flag = open("/flag").read()
+parent_process = psutil.Process(os.getppid())
+
+def drop_packets(dport):
+    subprocess.run(["/usr/sbin/iptables",
+                    "-A", "OUTPUT",
+                    "-p", "tcp",
+                    "--dport", str(dport),
+                    "-j", "DROP"],
+                   stdin=subprocess.DEVNULL,
+                   capture_output=True,
+                   check=True)
+
+class ServerHost(Host):
+    def entrypoint(self):
+        server_socket = socket.socket()
+        server_socket.bind(("0.0.0.0", 31337))
+        server_socket.listen()
+        while True:
+            try:
+                connection, _ = server_socket.accept()
+                connection.sendall(flag.encode())
+                connection.close()
+            except ConnectionError:
+                continue
+
+user_host = Host("ip-10-0-0-1", privileged_uid=parent_process.uids().effective)
+server_host = ServerHost("ip-10-0-0-2")
+network = Network(hosts={user_host: "10.0.0.1", server_host: "10.0.0.2"}, subnet="10.0.0.0/24")
+network.run()
+
+user_host.exec(lambda: drop_packets(31337))
+
+user_host.interactive(environ=parent_process.environ())

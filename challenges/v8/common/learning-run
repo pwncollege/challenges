@@ -1,0 +1,82 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/bash
+{% set pwn_d8_flags = pwn_d8_flags | default([]) -%}
+{% set pwn_run_disable_aslr = pwn_run_disable_aslr | default(false) -%}
+
+export PATH=/usr/bin:/bin
+
+if [ "$#" -ne 1 ]; then
+    echo "Error: No filename specified."
+    exit 1
+fi
+
+filename="$1"
+if [ ! -r "$filename" ]; then
+    echo "Error: File does not exist or is not readable."
+    exit 1
+fi
+
+solve_tmp=$(mktemp)
+harness_tmp=$(mktemp)
+marker=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+
+cleanup() {
+    rm -f "$solve_tmp" "$harness_tmp"
+}
+trap cleanup EXIT
+
+cp "$filename" "$solve_tmp"
+sed -e "s|__PWN_SUCCESS_MARKER__|$marker|g" /challenge/harness.js |
+    awk -v solve="$solve_tmp" '
+        BEGIN {
+            found_solve_marker = 0
+            print "const __pwnHarnessValidate = (function () {"
+        }
+        $0 == "__PWN_SOLVE_SOURCE__;" {
+            found_solve_marker = 1
+            print "return () => {"
+            next
+        }
+        {
+            print
+        }
+        END {
+            if (!found_solve_marker) {
+                print "Harness error: missing __PWN_SOLVE_SOURCE__ marker." > "/dev/stderr"
+                exit 1
+            }
+            print "};"
+            print "})();"
+            while ((getline line < solve) > 0) {
+                print line
+            }
+            close(solve)
+            print "__pwnHarnessValidate();"
+        }
+    ' > "$harness_tmp"
+chmod 644 "$solve_tmp" "$harness_tmp"
+
+run_challenge() {
+    local harness="$1"
+    shift
+{% if pwn_run_disable_aslr %}
+    setarch "$(uname -m)" -R /challenge/d8 "$@" "$harness"
+{% else %}
+    /challenge/d8 "$@" "$harness"
+{% endif %}
+}
+
+output=$(su -s /bin/bash -c "$(declare -f run_challenge); run_challenge $(printf "%q" "$harness_tmp") {% for flag in pwn_d8_flags %}$(printf "%q" {{ flag | tojson }}) {% endfor %}" nobody 2>&1)
+status=$?
+
+printf "%s\n" "$output" | grep -vF "$marker"
+
+if [ "$status" -ne 0 ]; then
+    exit "$status"
+fi
+
+if printf "%s\n" "$output" | grep -qF "$marker"; then
+    /challenge/catflag
+else
+    echo "No flag: solve did not satisfy the harness."
+    exit 1
+fi

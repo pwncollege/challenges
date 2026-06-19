@@ -1,0 +1,128 @@
+const __pwnValidate = (() => {
+    const realSandbox = globalThis.Sandbox;
+    if (realSandbox === undefined) {
+        throw new Error("This challenge requires d8 with --sandbox-testing and the V8 memory corruption API enabled.");
+    }
+
+    function fail(message) {
+        throw new Error(message);
+    }
+
+    function normalizeNumber(value, name) {
+        const number = Number(value);
+        if (!Number.isInteger(number)) {
+            fail(`${name} must be an integer.`);
+        }
+        return number;
+    }
+
+    function requireSameObject(actual, expected, message) {
+        if (actual !== expected) fail(message);
+    }
+
+    function requireSameNumber(actual, expected, message) {
+        if (normalizeNumber(actual, "argument") !== expected) fail(message);
+    }
+
+    function requireSameValue(actual, expected, message) {
+        if (!Object.is(actual, expected)) fail(message);
+    }
+
+    function normalizeBitSize(value, expected, message) {
+        const bitSize = value === undefined ? 32 : normalizeNumber(value, "bit size");
+        if (bitSize !== expected) fail(message);
+        return bitSize;
+    }
+
+    function exposeConstant(name, value) {
+        Object.defineProperty(globalThis, name, {
+            value,
+            writable: false,
+            configurable: false,
+        });
+    }
+
+    function readUint32(offset) {
+        return new DataView(new realSandbox.MemoryView(offset, 4)).getUint32(0, true);
+    }
+
+    function writeUint32(offset, value) {
+        new DataView(new realSandbox.MemoryView(offset, 4)).setUint32(0, value, true);
+    }
+
+    function makeGuard(rules) {
+        function disabled(name) {
+            const messages = rules.disabledMessages || {};
+            return fail(messages[name] || `${name} is not available in this ramp.`);
+        }
+
+        function callRule(name, args) {
+            if (!Object.prototype.hasOwnProperty.call(rules, name)) {
+                return disabled(`Sandbox.${name}`);
+            }
+            return rules[name](...args);
+        }
+
+        function GuardedMemoryView(offset, size) {
+            if (!new.target) {
+                fail("Sandbox.MemoryView must be invoked with new.");
+            }
+            return callRule("MemoryView", [offset, size]);
+        }
+
+        const guarded = Object.create(null);
+        for (const name of Object.getOwnPropertyNames(realSandbox)) {
+            if (name === "MemoryView") {
+                guarded.MemoryView = GuardedMemoryView;
+                continue;
+            }
+
+            const descriptor = Object.getOwnPropertyDescriptor(realSandbox, name);
+            if (typeof descriptor.value === "function") {
+                guarded[name] = (...args) => callRule(name, args);
+                continue;
+            }
+
+            Object.defineProperty(guarded, name, {
+                get() { return callRule(name, []); },
+            });
+        }
+        return Object.freeze(guarded);
+    }
+
+    const guardTools = Object.freeze({
+        realSandbox,
+        fail,
+        makeGuard,
+        normalizeNumber,
+        requireSameObject,
+        requireSameNumber,
+        requireSameValue,
+        normalizeBitSize,
+        exposeConstant,
+        readUint32,
+        writeUint32,
+    });
+
+    {% block setup %}{% endblock %}
+
+    if (typeof sandboxRules === "undefined") {
+        fail("Harness error: sandboxRules was not configured.");
+    }
+
+    Object.defineProperty(globalThis, "Sandbox", {
+        value: makeGuard(sandboxRules),
+        writable: false,
+        configurable: false,
+    });
+
+    {% block expose %}{% endblock %}
+
+    return () => {
+        {% block validate %}{% endblock %}
+    };
+})();
+
+__PWN_SOLVE_SOURCE__;
+
+if (__pwnValidate()) print("__PWN_SUCCESS_MARKER__");

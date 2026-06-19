@@ -1,0 +1,25 @@
+#!/opt/pwn.college/python
+
+import flask
+import os
+
+app = flask.Flask(__name__)
+
+
+@app.route("/", methods=["GET"])
+def challenge_get():
+    return f"""
+        <html><body>
+        <h1>pwnmsg ephemeral message service</h1>
+        The message:
+        <form>
+            <textarea name=msg>{flask.request.args.get("msg", "Type your message here!")}</textarea>
+            <input type=submit value="Make URL!">
+        </form>
+        </body></html>
+    """
+
+
+app.secret_key = os.urandom(8)
+app.config["SERVER_NAME"] = f"challenge.localhost:80"
+app.run("challenge.localhost", 80)

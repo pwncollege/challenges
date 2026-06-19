@@ -1,0 +1,239 @@
+name: V8 Learning
+visibility:
+  start: "2024-08-01T17:00:00-07:00"
+resources:
+  - name: "Reference Material"
+    type: markdown
+    content: |
+      - [V8 Developer Documentation](https://v8.dev)
+      - [The V8 Sandbox](https://v8.dev/blog/sandbox)
+      - [Pointer Compression in V8](https://v8.dev/blog/pointer-compression)
+      - [Turboshaft: leaving the sea of nodes](https://v8.dev/blog/leaving-the-sea-of-nodes)
+  - type: header
+    content: V8 Heap Sandbox Foundations
+  - id: ramp-v8-cage-boundary
+    name: V8 Cage Boundary
+    type: challenge
+    description: "Allocate a normal JavaScript object, derive a proof-field cage offset, and mutate it with guarded Sandbox.MemoryView."
+  - id: ramp-tagged-pointers
+    name: Tagged Pointers
+    type: challenge
+    description: "Convert a tagged heap-object reference into an object start, then mutate a proof field with guarded Sandbox.MemoryView."
+  - id: ramp-type-confusion-effect
+    name: Type Confusion Effect
+    type: challenge
+    description: "Retarget a frozen object-reference slot with guarded Sandbox.MemoryView, then call the object's normal proof method."
+  - id: ramp-caged-rw-interface
+    name: Caged Read/Write Interface
+    type: challenge
+    description: "Normalize differently shaped caged primitives behind one cage-offset read32/write32 interface."
+  - type: header
+    content: Wasm Encoding and Reference Foundations
+  - id: ramp-wasm-sectioned-module
+    name: Wasm Sectioned Module
+    type: challenge
+    description: "Wrap provided Wasm section bodies into a complete module that validates and exports answer()."
+  - id: ramp-wasm-leb128-fields
+    name: Wasm LEB128 Fields
+    type: challenge
+    description: "Encode Wasm integer fields with unsigned LEB128 so a generated module validates and returns the expected value."
+  - id: ramp-wasm-gc-struct-fields
+    name: Wasm GC Struct Fields
+    type: challenge
+    description: "Encode the field list of a real Wasm GC struct type."
+  - id: ramp-wasm-gc-ref-fields
+    name: Wasm GC Reference Fields
+    type: challenge
+    description: "Encode a nullable Wasm GC struct field that references an earlier heap type by type index."
+  - id: ramp-wasm-recursive-type-groups
+    name: Wasm Recursive Type Groups
+    type: challenge
+    description: "Wrap two provided mutually referencing struct subtype definitions in a real Wasm recursive type group."
+  - id: ramp-js-to-wasm-wrapper
+    name: JS-to-Wasm Wrapper
+    type: challenge
+    description: "Pass a JavaScript object through a real Wasm externref export wrapper unchanged."
+  - id: ramp-js-values-as-wasm-refs
+    name: JS Values as Wasm Refs
+    type: challenge
+    description: "Store a JavaScript object in a real mutable Wasm externref global."
+  - id: ramp-wasm-externref-table
+    name: Wasm Externref Table
+    type: challenge
+    description: "Store a JavaScript token object in a real WebAssembly externref table slot."
+  - id: ramp-wrapper-directionality
+    name: Wrapper Directionality
+    type: challenge
+    description: "Drive a real Wasm-to-JS import-caller path that passes an externref into JavaScript."
+  - type: header
+    content: CVE-2026-7899 First-Stage Ramps
+  - id: ramp-wasm-optimized-tiering
+    name: Optimized Wasm Tiering
+    type: challenge
+    description: "Force a provided exported Wasm function onto V8's optimized Wasm tier before calling it."
+  - id: ramp-wasm-gc-arrays
+    name: Wasm GC Arrays
+    type: challenge
+    description: "Allocate real Wasm GC arrays and observe their runtime lengths."
+  - id: ramp-wasm-gc-array-elements
+    name: Wasm GC Array Elements
+    type: challenge
+    description: "Store and read typed elements in already-created Wasm GC arrays."
+  - id: ramp-wasm-gc-array-shapes
+    name: Wasm GC Array Shapes
+    type: challenge
+    description: "Retarget a holder struct from one already-created Wasm GC array reference to another."
+  - id: ramp-wasm-load-elim-effect
+    name: Wasm Load-Elimination Effect
+    type: challenge
+    description: "Retarget a real Wasm holder field with guarded Sandbox.MemoryView so a holder write lands on the stale array."
+  - id: ramp-wasm-array-oob-to-caged-rw
+    name: Wasm Array OOB to Caged Read/Write
+    type: challenge
+    description: "Corrupt a real Wasm array length with guarded Sandbox.MemoryView, then normalize OOB array.get/array.set into cage-offset read32/write32."
+  - id: ramp-cve-2026-7899-trigger
+    name: CVE-2026-7899 Trigger
+    type: challenge
+    description: "Build and trigger the real CVE-2026-7899 Wasm module so the victim array becomes an out-of-bounds surface."
+  - id: ramp-cve-2026-7899-marker
+    name: CVE-2026-7899 Marker Scan
+    type: challenge
+    description: "Scan the expanded victim array for the bridge marker and derive the neighboring object and reference field indexes."
+  - id: ramp-cve-2026-7899-addrof
+    name: CVE-2026-7899 Addrof
+    type: challenge
+    description: "Use the bridge externref field to turn ordinary JavaScript objects into tagged V8 heap references."
+  - id: ramp-cve-2026-7899-ref-rw
+    name: CVE-2026-7899 Reference RW
+    type: challenge
+    description: "Retarget the bridge typed-reference field and turn Wasm struct accessors into raw caged read32/write32 helpers."
+  - id: ramp-cve-2026-7899-caged-rw
+    name: CVE-2026-7899 Caged Write
+    type: challenge
+    description: "Compose the CVE-2026-7899 trigger, marker scan, addrof, and reference retargeting into a proof-object write."
+  - type: header
+    content: Issue 514157844 Imported-Tag Escape Ramps
+  - id: ramp-wasmfx-tag-identity-field
+    name: WasmFX Tag Identity Field
+    type: challenge
+    description: "Locate the internal identity field of real WebAssembly.Tag wrappers and copy one tag identity into another wrapper."
+  - id: ramp-wasmfx-imported-tag-handler
+    name: WasmFX Imported Tag Handler
+    type: challenge
+    description: "Instantiate a real WasmFX module whose imported tag handler catches a suspend because tag identities were made equal."
+  - id: ramp-wasmfx-tag-native-leak
+    name: WasmFX Imported Tag Native Leak
+    type: challenge
+    description: "Use imported-tag confusion to leak a tagged proof-box pointer."
+  - id: ramp-wasmfx-tag-native-read
+    name: WasmFX Imported Tag Native Read
+    type: challenge
+    description: "Use imported-tag confusion to read a 32-bit proof field after deriving the proof-field address from the leaked tagged pointer."
+  - id: ramp-wasmfx-tag-native-write
+    name: WasmFX Imported Tag Native Write
+    type: challenge
+    description: "Use imported-tag confusion to write a 32-bit proof field after deriving the proof-field address from the leaked tagged pointer."
+  - type: header
+    content: Process-Memory Escape Ramps
+  - id: ramp-native32-qword-helpers
+    name: Native32 Qword Helpers
+    type: challenge
+    description: "Combine provided fixture read32/write32 into little-endian read64/write64 qword helpers."
+  - id: ramp-absolute-read-helpers
+    name: Absolute Read Helpers
+    type: challenge
+    description: "Build unaligned little-endian unsigned read8/read16/read32 helpers on top of a provided loaded-ELF fixture read64 primitive."
+  - id: ramp-absolute-write-helpers
+    name: Absolute Write Helpers
+    type: challenge
+    description: "Pack byte arrays into little-endian qwords and write them through a provided loaded-ELF fixture write64 primitive."
+  - id: ramp-elf-program-headers
+    name: ELF Program Headers
+    type: challenge
+    description: "Parse a provided loaded-ELF fixture to find executable, writable, and dynamic segment starts and sizes."
+  - id: ramp-elf-dynamic-tables
+    name: ELF Dynamic Tables
+    type: challenge
+    description: "Walk a provided ELF dynamic table to locate string, symbol, and PLT relocation tables."
+  - id: ramp-elf-plt-imports
+    name: ELF PLT Imports
+    type: challenge
+    description: "Resolve syscall and exit from a provided PLT relocation table."
+  - id: ramp-executable-gadget-scan
+    name: Executable Gadget Scan
+    type: challenge
+    description: "Scan a provided executable segment for the ret and multi-pop 64-bit x86 gadgets used by the capstone."
+  - id: ramp-catflag-path-layout
+    name: Catflag Path Layout
+    type: challenge
+    description: "Write the /challenge/catflag path as a null-terminated C string in an absolute-write-shaped scratch region."
+  - id: ramp-catflag-argv-layout
+    name: Catflag Argv Layout
+    type: challenge
+    description: "Lay out the null-terminated argv pointer array for an existing /challenge/catflag path pointer."
+  - id: ramp-syscall-chain-layout
+    name: Syscall Chain Layout
+    type: challenge
+    description: "Write the ret-aligned qword return chain that uses the multi-pop gadget to call imported syscall(59, path, argv, NULL) and then exit(0)."
+  - id: ramp-process-memory-chain
+    name: Dynamic Native Finish
+    type: challenge
+    description: "Rebase live d8 and stack leaks under ASLR, resolve imports, and lay out the validated ret-aligned catflag chain from only native read32/write32."
+  - type: header
+    content: First Chain Capstone
+  - id: chain-cve-2026-7899-514157844
+    name: CVE-2026-7899 to Issue 514157844
+    type: challenge
+    description: "CVE-2026-7899 Wasm load-elimination OOB to caged read/write, then WasmFX imported-tag identity corruption to escape."
+  - type: header
+    content: CVE-2026-9973 First-Stage Swap
+  - id: ramp-cve-2026-9973-trigger
+    name: CVE-2026-9973 Trigger
+    type: challenge
+    description: "Build and trigger the real CVE-2026-9973 Wasm module so the victim array becomes an out-of-bounds surface."
+  - id: ramp-cve-2026-9973-marker
+    name: CVE-2026-9973 Marker Scan
+    type: challenge
+    description: "Scan the expanded victim array for the bridge marker and derive the neighboring object and reference field indexes."
+  - id: ramp-cve-2026-9973-addrof
+    name: CVE-2026-9973 Addrof
+    type: challenge
+    description: "Use the bridge externref field to turn ordinary JavaScript objects into tagged V8 heap references."
+  - id: ramp-cve-2026-9973-ref-rw
+    name: CVE-2026-9973 Reference RW
+    type: challenge
+    description: "Retarget the bridge typed-reference field and turn Wasm struct accessors into raw caged read32/write32 helpers."
+  - id: ramp-cve-2026-9973-caged-rw
+    name: CVE-2026-9973 Caged Write
+    type: challenge
+    description: "Compose the CVE-2026-9973 trigger, marker scan, addrof, and reference retargeting into a proof-object write."
+  - type: header
+    content: Second Chain Capstone
+  - id: chain-cve-2026-9973-514157844
+    name: CVE-2026-9973 to Issue 514157844
+    type: challenge
+    description: "Swap the first stage to CVE-2026-9973 while preserving the WasmFX imported-tag identity escape."
+  - type: header
+    content: Issue 505751230 Continuation Escape Swap
+  - id: ramp-wasmfx-cont-collision
+    name: WasmFX Continuation Collision
+    type: challenge
+    description: "Replace a real WasmFX static continuation reference with a colliding actual continuation reference and resume it."
+  - id: ramp-wasmfx-cont-native-leak
+    name: WasmFX Continuation Native Leak
+    type: challenge
+    description: "Apply continuation retargeting to a leak pair that returns a tagged proof-box pointer."
+  - id: ramp-wasmfx-cont-native-read
+    name: WasmFX Continuation Native Read
+    type: challenge
+    description: "Use a read continuation pair and a forged field reference to read a 32-bit proof field."
+  - id: ramp-wasmfx-cont-native-write
+    name: WasmFX Continuation Native Write
+    type: challenge
+    description: "Use a write continuation pair and a forged field reference to mutate a 32-bit proof field."
+  - type: header
+    content: Final Chain Capstone
+  - id: chain-cve-2026-9973-505751230
+    name: CVE-2026-9973 to Issue 505751230
+    type: challenge
+    description: "Keep the CVE-2026-9973 first stage and swap the escape to a WasmFX continuation signature-hash collision."

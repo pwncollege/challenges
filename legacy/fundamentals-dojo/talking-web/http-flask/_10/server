@@ -1,0 +1,26 @@
+#!/opt/pwn.college/python
+
+import flask
+import os
+
+app = flask.Flask(__name__)
+
+
+@app.route("/request", methods=["GET"])
+def challenge():
+    if "Firefox" not in flask.request.headers.get("User-Agent"):
+        flask.abort(400, "You are using an incorrect client to access this resource!")
+
+    return f"""
+        <html>
+          <head><title>Talking Web</title></head>
+        <body>
+          <h1>Great job!</h1>
+          <p>{open("/flag").read().strip()}</p>
+        </body>
+        </html>
+    """
+
+
+app.secret_key = os.urandom(8)
+app.run("challenge.localhost", 80)

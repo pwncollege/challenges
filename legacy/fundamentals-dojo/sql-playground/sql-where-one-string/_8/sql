@@ -1,0 +1,68 @@
+#!/opt/pwn.college/python
+
+import sys
+import string
+import random
+import sqlite3
+import tempfile
+
+
+# Don't panic about the TemporaryDB class. It simply implements a temporary database
+# in which this application can store data. You don't need to understand its internals,
+# just that it processes SQL queries using db.execute().
+class TemporaryDB:
+    def __init__(self):
+        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
+
+    def execute(self, sql, parameters=()):
+        connection = sqlite3.connect(self.db_file.name)
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        result = cursor.execute(sql, parameters)
+        connection.commit()
+        return result
+
+
+db = TemporaryDB()
+
+
+def random_word(length):
+    return "".join(random.sample(string.ascii_letters * 10, length))
+
+
+flag = open("/flag").read().strip()
+
+# https://www.sqlite.org/lang_createtable.html
+db.execute("""CREATE TABLE information AS SELECT 'nope' as flag_tag, ? as note""", [random_word(len(flag))])
+# https://www.sqlite.org/lang_insert.html
+for i in range(random.randrange(5, 42)):
+    db.execute("""INSERT INTO information VALUES('nope', ?)""", [random_word(len(flag))])
+db.execute("""INSERT INTO information VALUES(?, ?)""", ["yep", flag])
+
+
+for i in range(random.randrange(5, 42)):
+    db.execute("""INSERT INTO information VALUES('nope', ?)""", [random_word(len(flag))])
+
+# HINT: https://www.sqlite.org/lang_expr.html
+for _ in range(1):
+    query = input("sql> ")
+
+    try:
+        results = db.execute(query).fetchall()
+    except sqlite3.Error as e:
+        print("SQL ERROR:", e)
+        sys.exit(1)
+
+    if len(results) == 0:
+        print("No results returned!")
+        sys.exit(0)
+
+    if len(results) > 1:
+        print("You're not allowed to read this many rows!")
+        sys.exit(1)
+    if len(results[0].keys()) > 1:
+        print("You're not allowed to read this many columns!")
+        sys.exit(1)
+    print(f"Got {len(results)} rows.")
+    for row in results:
+        print(f"- { { k:row[k] for k in row.keys() } }")

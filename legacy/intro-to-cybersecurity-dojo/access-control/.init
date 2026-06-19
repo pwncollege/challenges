@@ -1,0 +1,13 @@
+#!/bin/bash
+
+NEED_SETUID="/usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/bin/su /usr/bin/gpasswd /usr/bin/newgrp"
+
+for i in $NEED_SETUID
+do
+    chmod u+s "$i"
+done
+
+if [ -e /challenge/.path ]; then
+    mkdir -p /challenge/bin
+    ln -sf "$(cat /challenge/.path)" /challenge/bin/
+fi

@@ -1,0 +1,44 @@
+name: Integrated Security
+visibility:
+  start: "2024-12-02T13:00:00-07:00"
+
+challenges:
+- id: decrypt-overflow-ecb-w
+  name: ECB-to-Win (easy)
+  description: "Concepts used: Cryptography + Binary Exploitation"
+- id: decrypt-overflow-ecb
+  name: ECB-to-Win (hard)
+  description: "Concepts used: Cryptography + Binary Exploitation"
+- id: decrypt-overflow-sc-ecb-w
+  name: ECB-to-Shellcode (easy)
+  description: "Concepts used: Cryptography + Binary Exploitation"
+- id: decrypt-overflow-sc-ecb
+  name: ECB-to-Shellcode (hard)
+  description: "Concepts used: Cryptography + Binary Exploitation"
+- id: cimg-screenshot-sc
+  name: CIMG Screenshots
+  description: "Concepts used: Reverse Engineering + Binary Exploitation"
+- id: cimg-screenshot-win
+  name: CIMG Screenshots 2
+  description: "Concepts used: Reverse Engineering + Binary Exploitation"
+- id: web-overflow
+  name: Wily Webserver
+  description: "Concepts used: Web Security + Binary Exploitation"
+- id: web-overflow-client
+  name: The Watering Hole
+  description: "Concepts used: Web Security + Binary Exploitation"
+- id: secure-chat-1
+  image: pwncollege/challenge-secure-chat-1
+  privileged: true
+- id: secure-chat-2
+  image: pwncollege/challenge-secure-chat-2
+  privileged: true
+- id: secure-chat-3
+  image: pwncollege/challenge-secure-chat-3
+  privileged: true
+- id: secure-chat-4
+  image: pwncollege/challenge-secure-chat-4
+  privileged: true
+- id: secure-chat-5
+  image: pwncollege/challenge-secure-chat-5
+  privileged: true

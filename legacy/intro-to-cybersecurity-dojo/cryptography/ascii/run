@@ -1,0 +1,29 @@
+#!/opt/pwn.college/python
+
+import random
+import string
+import sys
+
+if not sys.stdin.isatty():
+    print("You must interact with me directly. No scripting this!")
+    sys.exit(1)
+
+for n in range(1, 10):
+    print(f"Challenge number {n}...")
+    pt_chr, ct_chr = random.sample(
+        string.digits + string.ascii_letters + string.punctuation,
+        2
+    )
+    key = ord(pt_chr) ^ ord(ct_chr)
+
+    print(f"- Encrypted Character: {ct_chr}")
+    print(f"- XOR Key: {key:#04x}")
+    answer = input("- Decrypted Character? ").strip()
+    if answer != pt_chr:
+        print("Incorrect!")
+        sys.exit(1)
+
+    print("Correct! Moving on.")
+
+print("You have mastered XORing ASCII! Your flag:")
+print(open("/flag").read())

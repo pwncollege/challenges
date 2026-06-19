@@ -1,0 +1,27 @@
+#!/opt/pwn.college/python
+
+import flask
+import os
+
+app = flask.Flask(__name__)
+
+
+@app.route("/gate", methods=["GET"])
+def challenge():
+    if flask.request.args.get("unlock", None) != "pwgklefy":
+        flask.abort(403, "Incorrect value for get parameter unlock!")
+
+    return f"""
+        <html>
+          <head><title>Talking Web</title></head>
+        <body>
+          <h1>Great job!</h1>
+          <p>{open("/flag").read().strip()}</p>
+        </body>
+        </html>
+    """
+
+
+app.secret_key = os.urandom(8)
+app.config["SERVER_NAME"] = "challenge.localhost:80"
+app.run("challenge.localhost", 80)

@@ -1,0 +1,130 @@
+id: intro-to-cybersecurity
+name: Intro to Cybersecurity
+
+award:
+  belt: orange
+
+image: pwncollege/challenge-legacy:latest
+
+description: |
+  Can you feel it?
+  The sun is beginning to rise on your journey of cybersecurity.
+  Armed with the fundamentals, you begin to push ever deeper into the realms of knowledge that previously eluded you.
+  Fear not: with perseverance, grit, and gumption, you will lay the groundwork for a towering mastery of security in your future.
+
+type: topic
+
+modules:
+
+- id: web-security
+
+- id: intercepting-communication
+
+- id: cryptography
+
+- id: access-control
+  name: Access Control
+  description: Exploit various access control issues for the POSIX/UNIX Discretionary Access Control model and answer questions about Mandatory Access Control models.
+  visibility:
+    start: "2023-11-08T22:00:00-00:00"
+  challenges:
+    - id: level-1
+      name: level1
+      description: Flag owned by you with different permissions
+    - id: level-2
+      name: level2
+      description: Flag owned by you with different permissions
+    - id: level-3
+      name: level3
+      description: Flag owned by you with different permissions
+    - id: level-4
+      name: level4
+      description: How does SETUID work?
+    - id: level-5
+      name: level5
+      description: How does SETUID and cp work?
+    - id: level-6
+      name: level6
+      description: Flag owned by a different group
+    - id: level-7
+      name: level7
+      description: Flag owned by you with different permissions, multiple users
+    - id: level-8
+      name: level8
+      description: Flag owned by other users
+    - id: level-9
+      name: level9
+      description: Flag owned by other users
+    - id: level-10
+      name: level10
+      description: Flag owned by a group
+    - id: level-11
+      name: level11
+      description: Find the flag using multiple users
+    - id: level-12
+      name: level12
+      description: Find the flag using multiple users
+    - id: level-13
+      name: level13
+      description: One Mandatory Access Control question without categories
+    - id: level-14
+      name: level14
+      description: Five Mandatory Access Control questions without categories
+    - id: level-15
+      name: level15
+      description: One Mandatory Access Control question with categories
+    - id: level-16
+      name: level16
+      description: Five Mandatory Access Control questions with categories
+    - id: level-17
+      name: level17
+      description: Automate answering 20 Mandatory Access Control questions with categories in one second
+    - id: level-18
+      name: level18
+      description: Automate answering 64 Mandatory Access Control questions with categories in one second
+    - id: level-19
+      name: level19
+      description: Automate Answering 128 Mandatory Access Control questions with random levels and categories in one second
+
+  resources:
+  - name: "Access Control: Introduction"
+    type: lecture
+    video: mdWa1SHkxmM
+    playlist: PL-ymxv0nOtqotjW-uK_YSj9pm5tTKf87J
+    slides: 1tBn2d4d7-kpaoAoEipts8ZqKhQsIsSvF
+  - name: "Access Control: Modeling Access Control"
+    type: lecture
+    video: Nq93Xz6yn3o
+    playlist: PL-ymxv0nOtqotjW-uK_YSj9pm5tTKf87J
+    slides: 1xGkSmpJBt4IMg2aW2vSoY5b0qHqF2t4h
+  - name: "Access Control: Implementing Access Control"
+    type: lecture
+    video: OGhKjwJ7PKE
+    playlist: PL-ymxv0nOtqotjW-uK_YSj9pm5tTKf87J
+    slides: 1D9C4dtWdsub504eGyzr0JEpOmwH4X8UJ
+  - name: "Access Control: POSIX Access Control"
+    type: lecture
+    video: OG5yXzn-cVs
+    playlist: PL-ymxv0nOtqotjW-uK_YSj9pm5tTKf87J
+    slides: 172XbD83EW8kZIHHZIbXVOmbDMYRm-VN1
+  - name: "Access Control: Types of Access Control"
+    type: lecture
+    video: b20SKFOI4Zo
+    playlist: PL-ymxv0nOtqotjW-uK_YSj9pm5tTKf87J
+    slides: 1dK3DNUznDqw0ddR-bYUgf7nHHTu9XhaE
+  - name: "Access Control: Mandatory Access Control"
+    type: lecture
+    video: e72S-sS9xDo
+    playlist: PL-ymxv0nOtqotjW-uK_YSj9pm5tTKf87J
+    slides: 12np5WiQv_h3VJTt7XMaYqb4ZkEoGpLM-
+  - name: "Access Control: Getting Started"
+    type: lecture
+    video: snDd4W0QnZo
+    playlist: PL-ymxv0nOtqotjW-uK_YSj9pm5tTKf87J
+
+
+- id: reverse-engineering
+
+- id: binary-exploitation
+
+- id: integrated-security

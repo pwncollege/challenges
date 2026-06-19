@@ -1,0 +1,51 @@
+--- a/src/d8/d8.cc	2026-02-15 00:21:17.038742391 +0000
++++ b/src/d8/d8.cc	2026-02-15 00:21:59.429730978 +0000
+@@ -355,6 +355,38 @@
+ v8::Platform* g_default_platform;
+ std::unique_ptr<v8::Platform> g_platform;
+ 
++// ---- maglev-warmup challenge helpers ----
++
++static void WinMaglevObserved(const v8::FunctionCallbackInfo<v8::Value>& info) {
++  v8::Isolate* isolate = info.GetIsolate();
++  if (info.Length() != 2) {
++    isolate->ThrowError(
++        "WinMaglevObserved(maglev_status, turbofan_status): expected 2 numbers");
++    return;
++  }
++  if (!info[0]->IsNumber() || !info[1]->IsNumber()) {
++    isolate->ThrowError("WinMaglevObserved: both arguments must be numbers");
++    return;
++  }
++  v8::Local<v8::Context> ctx = isolate->GetCurrentContext();
++  uint32_t maglev_status = info[0]->Uint32Value(ctx).FromJust();
++  uint32_t turbofan_status = info[1]->Uint32Value(ctx).FromJust();
++  // OptimizationStatus bits (from runtime.h):
++  //   bit 4 (0x10) = kOptimized  (TurboFan)
++  //   bit 5 (0x20) = kMaglevved
++  if (!(maglev_status & 0x20)) {
++    isolate->ThrowError(
++        "WinMaglevObserved: first status doesn't have Maglev bit (0x20) set");
++    return;
++  }
++  if (!(turbofan_status & 0x10)) {
++    isolate->ThrowError(
++        "WinMaglevObserved: second status doesn't have TurboFan bit (0x10) set");
++    return;
++  }
++  (void)system("/challenge/catflag");
++}
++
+ template <int N>
+ bool ThrowError(Isolate* isolate, const char (&message)[N]) {
+   if (isolate->IsExecutionTerminating()) return false;
+@@ -3358,7 +3390,9 @@
+ 
+ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+   Local<ObjectTemplate> global_template = ObjectTemplate::New(isolate);
++  global_template->Set(isolate, "WinMaglevObserved",
++                       FunctionTemplate::New(isolate, WinMaglevObserved));
+   global_template->Set(Symbol::GetToStringTag(isolate),
+                        String::NewFromUtf8Literal(isolate, "global"));
+   global_template->Set(isolate, "version",
+                        FunctionTemplate::New(isolate, Version));

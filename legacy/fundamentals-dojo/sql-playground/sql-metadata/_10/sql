@@ -1,0 +1,50 @@
+#!/opt/pwn.college/python
+
+import sys
+import string
+import random
+import sqlite3
+import tempfile
+
+
+# Don't panic about the TemporaryDB class. It simply implements a temporary database
+# in which this application can store data. You don't need to understand its internals,
+# just that it processes SQL queries using db.execute().
+class TemporaryDB:
+    def __init__(self):
+        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
+
+    def execute(self, sql, parameters=()):
+        connection = sqlite3.connect(self.db_file.name)
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        result = cursor.execute(sql, parameters)
+        connection.commit()
+        return result
+
+
+db = TemporaryDB()
+
+table_name = "".join(random.sample(string.ascii_letters, 8))
+db.execute(f"""CREATE TABLE {table_name} AS SELECT ? as secret""", [open("/flag").read().strip()])
+
+# HINT: https://www.sqlite.org/schematab.html
+for _ in range(2):
+    query = input("sql> ")
+
+    try:
+        results = db.execute(query).fetchall()
+    except sqlite3.Error as e:
+        print("SQL ERROR:", e)
+        sys.exit(1)
+
+    if len(results) == 0:
+        print("No results returned!")
+        sys.exit(0)
+
+    if len(results[0].keys()) > 1:
+        print("You're not allowed to read this many columns!")
+        sys.exit(1)
+    print(f"Got {len(results)} rows.")
+    for row in results:
+        print(f"- { { k:row[k] for k in row.keys() } }")

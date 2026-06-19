@@ -1,0 +1,1 @@
+overwrite /sbin/poweroff with a sh script because `init` invokes poweroff during exiting and it is writable

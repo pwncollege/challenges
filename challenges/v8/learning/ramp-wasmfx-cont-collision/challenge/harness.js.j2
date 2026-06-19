@@ -1,0 +1,198 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+const expectedToken = 0x5a17c0de;
+const continuationProbeBytes = new Uint8Array([
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 59, 12, 95, 1, 127, 1, 96,
+    0, 2, 126, 99, 0, 96, 0, 2, 100, 0, 126, 93, 1, 93, 2, 95,
+    1, 100, 3, 1, 95, 1, 100, 4, 1, 96, 1, 127, 1, 100, 0,
+    96, 1, 100, 0, 1, 127, 96, 0, 1, 100, 5, 96, 0, 1, 100,
+    6, 96, 1, 100, 5, 1, 126, 3, 8, 7, 1, 2, 7, 8, 9, 10,
+    11, 6, 7, 1, 99, 0, 1, 208, 0, 11, 7, 82, 6, 4, 103, 66,
+    111, 120, 3, 0, 8, 105, 110, 105, 116, 95, 98, 111, 120, 0,
+    2, 8, 114, 101, 97, 100, 95, 98, 111, 120, 0, 3, 16, 109,
+    97, 107, 101, 95, 108, 101, 97, 107, 95, 115, 116, 97, 116, 105,
+    99, 0, 4, 16, 109, 97, 107, 101, 95, 108, 101, 97, 107, 95,
+    97, 99, 116, 117, 97, 108, 0, 5, 11, 114, 101, 115, 117, 109,
+    101, 95, 108, 101, 97, 107, 0, 6, 9, 6, 1, 3, 0, 2, 0,
+    1, 10, 75, 7, 6, 0, 66, 0, 208, 0, 11, 7, 0, 35, 0,
+    212, 66, 0, 11, 16, 1, 1, 100, 0, 32, 0, 251, 0, 0, 34,
+    1, 36, 0, 32, 1, 11, 8, 0, 32, 0, 251, 2, 0, 0, 11,
+    9, 0, 210, 0, 224, 3, 251, 0, 5, 11, 9, 0, 210, 1, 224,
+    4, 251, 0, 6, 11, 12, 0, 32, 0, 251, 2, 5, 0, 227, 3,
+    0, 26, 11, 0, 109, 4, 110, 97, 109, 101, 1, 102, 7, 0, 17,
+    108, 101, 97, 107, 95, 115, 116, 97, 116, 105, 99, 95, 100, 117,
+    109, 109, 121, 1, 11, 108, 101, 97, 107, 95, 97, 99, 116, 117,
+    97, 108, 2, 8, 105, 110, 105, 116, 95, 98, 111, 120, 3, 8,
+    114, 101, 97, 100, 95, 98, 111, 120, 4, 16, 109, 97, 107, 101,
+    95, 108, 101, 97, 107, 95, 115, 116, 97, 116, 105, 99, 5, 16,
+    109, 97, 107, 101, 95, 108, 101, 97, 107, 95, 97, 99, 116, 117,
+    97, 108, 6, 11, 114, 101, 115, 117, 109, 101, 95, 108, 101, 97,
+    107,
+]);
+
+const fx = new WebAssembly.Instance(new WebAssembly.Module(continuationProbeBytes), {}).exports;
+const proofBox = fx.init_box(0x41424344);
+const keepAlive = [proofBox];
+let staticBox;
+let actualBox;
+let staticBoxOffset;
+let actualBoxOffset;
+let staticBoxSize;
+let actualBoxSize;
+let continuationField;
+let resumeCalled = false;
+let lastActualResumeResult;
+let lastResumeToken;
+
+function read32(offset) {
+    return guardTools.readUint32(offset);
+}
+
+function makeStaticContinuationBox() {
+    if (staticBox === undefined) {
+        staticBox = fx.make_leak_static();
+        keepAlive.push(staticBox);
+        staticBoxOffset = guardTools.realSandbox.getAddressOf(staticBox);
+        staticBoxSize = guardTools.realSandbox.getSizeOf(staticBox);
+    }
+    if (actualBox !== undefined && continuationField === undefined) {
+        findContinuationField();
+    }
+    return staticBox;
+}
+
+function makeActualContinuationBox() {
+    if (actualBox === undefined) {
+        actualBox = fx.make_leak_actual();
+        keepAlive.push(actualBox);
+        actualBoxOffset = guardTools.realSandbox.getAddressOf(actualBox);
+        actualBoxSize = guardTools.realSandbox.getSizeOf(actualBox);
+    }
+    if (staticBox !== undefined && continuationField === undefined) {
+        findContinuationField();
+    }
+    return actualBox;
+}
+
+function requireBoxes() {
+    if (staticBox === undefined || actualBox === undefined) {
+        guardTools.fail("Allocate both continuation boxes before using the guarded Sandbox APIs.");
+    }
+}
+
+function findContinuationField() {
+    requireBoxes();
+    if (continuationField !== undefined) return continuationField;
+
+    const maxOffset = Math.min(staticBoxSize, actualBoxSize, 0x80);
+    for (let offset = 8; offset < maxOffset; offset += 4) {
+        const staticContinuation = read32(staticBoxOffset + offset) >>> 0;
+        const actualContinuation = read32(actualBoxOffset + offset) >>> 0;
+        if ((staticContinuation & 1) === 1 && (actualContinuation & 1) === 1 && staticContinuation !== actualContinuation) {
+            continuationField = { offset, staticContinuation, actualContinuation };
+            return continuationField;
+        }
+    }
+
+    guardTools.fail("Harness error: could not locate the continuation reference field.");
+}
+
+function resumeContinuation(box) {
+    guardTools.requireSameObject(box, makeStaticContinuationBox(), "Resume the static continuation box after retargeting it.");
+    resumeCalled = true;
+    try {
+        lastActualResumeResult = BigInt(fx.resume_leak(staticBox));
+        lastResumeToken = expectedToken;
+        return lastResumeToken;
+    } catch (error) {
+        guardTools.fail(`The retargeted continuation did not resume cleanly: ${error}`);
+    }
+}
+
+function readableRanges() {
+    requireBoxes();
+    return [
+        [staticBoxOffset, staticBoxOffset + staticBoxSize],
+        [actualBoxOffset, actualBoxOffset + actualBoxSize],
+    ];
+}
+
+function normalizeRange(offset, size) {
+    const normalizedOffset = guardTools.normalizeNumber(offset, "Sandbox.MemoryView offset");
+    const normalizedSize = guardTools.normalizeNumber(size, "Sandbox.MemoryView size");
+    if (normalizedSize <= 0 || normalizedSize > 8) {
+        guardTools.fail("Use small MemoryView windows for this ramp.");
+    }
+    return [normalizedOffset, normalizedOffset + normalizedSize];
+}
+
+function isInsideAllowedRange(start, end) {
+    return readableRanges().some(([rangeStart, rangeEnd]) => start >= rangeStart && end <= rangeEnd);
+}
+
+const sandboxRules = Object.freeze({
+    getAddressOf(object) {
+        requireBoxes();
+        if (object === staticBox) return staticBoxOffset;
+        if (object === actualBox) return actualBoxOffset;
+        guardTools.fail("Only the allocated static and actual continuation boxes are addressable in this ramp.");
+    },
+    getSizeOf(object) {
+        requireBoxes();
+        if (object === staticBox) return staticBoxSize;
+        if (object === actualBox) return actualBoxSize;
+        guardTools.fail("Only the allocated static and actual continuation boxes have exposed sizes in this ramp.");
+    },
+    MemoryView(offset, size) {
+        const [start, end] = normalizeRange(offset, size);
+        if (!isInsideAllowedRange(start, end)) {
+            guardTools.fail("This ramp only allows MemoryView access to the two continuation boxes.");
+        }
+        return new guardTools.realSandbox.MemoryView(start, end - start);
+    },
+    disabledMessages: {
+        getObjectAt: "Object fabrication is not part of this ramp.",
+    },
+});
+{% endblock %}
+
+{% block expose %}
+guardTools.exposeConstant("makeStaticContinuationBox", makeStaticContinuationBox);
+guardTools.exposeConstant("makeActualContinuationBox", makeActualContinuationBox);
+guardTools.exposeConstant("resumeContinuation", resumeContinuation);
+{% endblock %}
+
+{% block validate %}
+requireBoxes();
+const field = findContinuationField();
+const staticContinuationNow = read32(staticBoxOffset + field.offset) >>> 0;
+
+if (staticContinuationNow === field.staticContinuation) {
+    guardTools.fail("The static continuation box still points at its original continuation.");
+}
+
+if (staticContinuationNow !== field.actualContinuation) {
+    guardTools.fail("The static continuation box does not contain the actual continuation reference.");
+}
+
+if (!resumeCalled) {
+    guardTools.fail("Call resumeContinuation(staticBox) after retargeting the continuation.");
+}
+
+if (typeof resumeToken === "undefined") {
+    guardTools.fail("Store the return value from resumeContinuation(staticBox) in resumeToken.");
+}
+
+if ((resumeToken >>> 0) !== lastResumeToken) {
+    guardTools.fail("resumeToken does not match the value returned by resumeContinuation(staticBox).");
+}
+
+if (lastActualResumeResult === 0n) {
+    guardTools.fail("The static dummy continuation still returned zero; the actual continuation did not run.");
+}
+if ((lastActualResumeResult & 1n) !== 1n) {
+    guardTools.fail("The retargeted continuation should produce the actual continuation's reference-shaped result.");
+}
+return true;
+{% endblock %}

@@ -1,0 +1,27 @@
+#!/opt/pwn.college/python
+
+import flask
+import os
+
+app = flask.Flask(__name__)
+
+
+@app.route("/complete", methods=["GET"])
+def challenge():
+    if flask.request.args.get("password", None) != "vvzbccws":
+        flask.abort(403, "Incorrect value for get parameter password!")
+
+    return f"""
+        <html>
+          <head><title>Talking Web</title></head>
+        <body>
+          <h1>Great job!</h1>
+          <p>{open("/flag").read().strip()}</p>
+        </body>
+        </html>
+    """
+
+
+app.secret_key = os.urandom(8)
+app.config["SERVER_NAME"] = "challenge.localhost:80"
+app.run("challenge.localhost", 80)

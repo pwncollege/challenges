@@ -8,7 +8,7 @@ You have to reach over into the caller's "frame" (what we call the part of the s
 
 **Wait, what?**  
 Let's walk through why this is possible.
-In this challenge, the `main` function calls the `caller` function, which then calls your `solve` function.
+In this challenge, the `main` function calls the `caller` functionm, which then calls your `solve` function.
 Right before the challenge's `caller` function executed `call solve`, the stack looked like this:
 
 ```text
@@ -38,7 +38,7 @@ If you think of the stack as a page that is 8 bytes wide, you would start writin
 In other words, say, `pop rdi` is equivalent to `mov rdi, [rsp]; add rsp, 8` and `push rdi` is equivalent to `sub rsp, 8; mov [rsp], rdi`.
 
 Note that this makes talking about the stack without confusion borderline impossible.
-For example, people with a math background tend to think of a coordinate of 0 as being on the bottom or the left of a page, whereas people with a video game or web development background tend to think of 0 as being on the top or the left.
+For example, people with a math background tend to thing of a coordinate of 0 as being on the bottom or the left of a page, whereas people with a video game or web development background tend to think of 0 as being on the top or the left.
 This leads to massive confusion about the definition of "higher address", "lower address", and so on.
 Everyone has different ways of dealing with this.
 In this document, because horizontal space is at a premium, we put diagrams from 0 (top) to 0xffffffff (bottom), but in everyday life when not restricted by horizontal space, we simply conceptualize memory from the "left" (0) to the "right" (0xffffffff).

@@ -1,0 +1,199 @@
+name: Web Security
+auxiliary:
+  pwnshop:
+    walkthrough: true
+    binary_name_prefix: web-security
+    build_image: pwncollege/challenge-legacy:latest
+    verify_image: pwncollege/challenge-legacy:latest
+    binary_name: server
+
+resources:
+- name: "Web Security: Introduction"
+  type: lecture
+  video: AKTYVWCi6ss
+  playlist: PL-ymxv0nOtqrvXLSALV5SQ5v3oyKY4DWg
+  slides: 1ATO_U0aUlk2LRhlnIwdqTkDfu-lWRb5xoLDv0NQLPs8
+
+- type: header
+  content: Content Injection
+- name: "Web Security: Structured Query Language"
+  type: lecture
+  video: 433mRGcpHeA
+  playlist: PL-ymxv0nOtqrvXLSALV5SQ5v3oyKY4DWg
+  slides: 1KpvjoFnlC9HcUJbkg-_VASf2JETMwEZjpzO0uGSoCo4
+- name: "Web Security: Injection"
+  type: lecture
+  video: sdStLx3_Q0M
+  playlist: PL-ymxv0nOtqrvXLSALV5SQ5v3oyKY4DWg
+  slides: 1rP8IIc_6B8Z7KpqBGxkneIzAjURRQ-YlkJV-_4dF-SM
+
+- id: path-traversal-1
+  name: Path Traversal 1
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: PathTraversal
+      variants: 16
+- id: path-traversal-2
+  name: Path Traversal 2
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: PathTraversalStripped
+      variants: 16
+- id: cmdi-ls-semicolon
+  name: CMDi 1
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: CommandInjectionLS
+      variants: 16
+- id: cmdi-ls-pipe
+  name: CMDi 2
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: CommandInjectionLSPipe
+      variants: 16
+- id: cmdi-ls-quote
+  name: CMDi 3
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: CommandInjectionLSQuote
+      variants: 16
+- id: cmdi-env
+  name: CMDi 4
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: CommandInjectionEnv
+      variants: 16
+- id: cmdi-touch-blind
+  name: CMDi 5
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: CommandInjectionTouch
+      variants: 16
+- id: cmdi-ls-filter
+  name: CMDi 6
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: CommandInjectionLSFilter
+      variants: 16
+- id: auth-bypass-param
+  name: Authentication Bypass 1
+  type: challenge
+- id: auth-bypass-cookie
+  name: Authentication Bypass 2
+  type: challenge
+- id: sqli-pin
+  name: SQLi 1
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: SQLInjectionPin
+      variants: 16
+- id: sqli-password
+  name: SQLi 2
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: SQLInjectionPassword
+      variants: 16
+- id: sqli-union
+  name: SQLi 3
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: SQLInjectionUnion
+- id: sqli-tablename
+  name: SQLi 4
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: SQLInjectionSchema
+- id: sqli-blind
+  name: SQLi 5
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: SQLInjectionBlind
+
+- type: header
+  content: Cross Site Scripting
+- name: "Tooling Documentation"
+  type: markdown
+  content: |
+    - [python -m http.server](https://docs.python.org/library/http.server.html)
+    - [JavaScript Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch)
+- id: xss-stored-html
+  name: XSS 1
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: XSSStoredHTML
+- id: xss-stored-alert
+  name: XSS 2
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: XSSStoredAlert
+- id: xss-reflected
+  name: XSS 3
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: XSSReflected
+- id: xss-context
+  name: XSS 4
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: XSSContext
+- id: xss-rf-get
+  name: XSS 5
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: XSSPublishGet
+- id: xss-rf-post
+  name: XSS 6
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: XSSPublishPost
+- id: xss-exfil-cookie
+  name: XSS 7
+  type: challenge
+  auxiliary:
+    pwnshop:
+      challenge: XSSExfilCookie
+
+- content: Cross-Site Request Forgery
+  type: header
+- name: "Web Security: Same-Origin Policy"
+  type: lecture
+  video: b1NOCHm4t_s
+  playlist: PL-ymxv0nOtqrvXLSALV5SQ5v3oyKY4DWg
+  slides: 1KkiR8B_9xQilW_yq6W9FZ6xBN78V0S1aH1XvQfufYIk
+- id: csrf-get
+  name: CSRF 1
+  type: challenge
+- id: csrf-post
+  name: CSRF 2
+  type: challenge
+- id: csrf-reflected-alert
+  name: CSRF 3
+  type: challenge
+- id: csrf-xss-cookie
+  name: CSRF 4
+  type: challenge
+- id: csrf-xss-post
+  name: CSRF 5
+  type: challenge
+
+
+

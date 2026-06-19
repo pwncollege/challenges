@@ -1,0 +1,81 @@
+--- a/src/builtins/builtins-array.cc
++++ b/src/builtins/builtins-array.cc
+@@ -407,6 +407,46 @@ BUILTIN(ArrayPush) {
+   return *isolate->factory()->NewNumberFromUint((new_length));
+ }
+ 
++BUILTIN(ArrayOffByOne) {
++	HandleScope scope(isolate);
++	Factory *factory = isolate->factory();
++	Handle<Object> receiver = args.receiver();
++
++	if (!IsJSArray(*receiver) || !HasOnlySimpleReceiverElements(isolate, Cast<JSArray>(*receiver))) {
++	  THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++    	factory->NewStringFromAsciiChecked("Nope")));
++	}
++
++	Handle<JSArray> array = Cast<JSArray>(receiver);
++
++	ElementsKind kind = array->GetElementsKind();
++
++	if (kind != PACKED_DOUBLE_ELEMENTS) {
++	  THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++    	factory->NewStringFromAsciiChecked("Need an array of double numbers")));
++	}
++
++	if (args.length() > 2) {
++	  THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++    	factory->NewStringFromAsciiChecked("Too many arguments")));
++	}
++	
++	Handle<FixedDoubleArray> elements(Cast<FixedDoubleArray>(array->elements()), isolate);
++	uint32_t len = static_cast<uint32_t>(Object::NumberValue(array->length()));
++	if (args.length() == 1) {	// read mode
++		return *(isolate->factory()->NewNumber(elements->get_scalar(len)));
++	} else {	// write mode
++		Handle<Object> value = args.at(1);
++		if (!IsNumber(*value)) {
++		  THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewTypeError(MessageTemplate::kPlaceholderOnly,
++    		factory->NewStringFromAsciiChecked("Need a number argument")));
++		}
++		double num = static_cast<double>(Object::NumberValue(*value));
++		elements->set(len, num);
++		return ReadOnlyRoots(isolate).undefined_value();
++	}
++}
++
+ namespace {
+ 
+ V8_WARN_UNUSED_RESULT Tagged<Object> GenericArrayPop(Isolate* isolate,
+--- a/src/builtins/builtins-definitions.h
++++ b/src/builtins/builtins-definitions.h
+@@ -394,6 +394,7 @@ namespace internal {
+       ArraySingleArgumentConstructor)                                          \
+   TFC(ArrayNArgumentsConstructor, ArrayNArgumentsConstructor)                  \
+   CPP(ArrayConcat)                                                             \
++  CPP(ArrayOffByOne)                                                           \
+   /* ES6 #sec-array.prototype.fill */                                          \
+   CPP(ArrayPrototypeFill)                                                      \
+   /* ES7 #sec-array.prototype.includes */                                      \
+--- a/src/compiler/typer.cc
++++ b/src/compiler/typer.cc
+@@ -1937,6 +1937,8 @@ Type Typer::Visitor::JSCallTyper(Type fun, Typer* t) {
+       return Type::Receiver();
+     case Builtin::kArrayUnshift:
+       return t->cache_->kPositiveSafeInteger;
++	case Builtin::kArrayOffByOne:
++	  return Type::Receiver();
+ 
+     // ArrayBuffer functions.
+     case Builtin::kArrayBufferIsView:
+--- a/src/init/bootstrapper.cc
++++ b/src/init/bootstrapper.cc
+@@ -2533,6 +2533,8 @@ void Genesis::InitializeGlobal(Handle<JSGlobalObject> global_object,
+ 
+     SimpleInstallFunction(isolate_, proto, "at", Builtin::kArrayPrototypeAt, 1,
+                           true);
++    SimpleInstallFunction(isolate_, proto, "offByOne",
++                          Builtin::kArrayOffByOne, 1, false);
+     SimpleInstallFunction(isolate_, proto, "concat",
+                           Builtin::kArrayPrototypeConcat, 1, false);
+     SimpleInstallFunction(isolate_, proto, "copyWithin",

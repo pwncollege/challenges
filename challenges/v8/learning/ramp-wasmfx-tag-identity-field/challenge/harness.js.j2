@@ -1,0 +1,110 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+const tagA = new WebAssembly.Tag({ parameters: ["externref", "i64"] });
+const tagB = new WebAssembly.Tag({ parameters: ["i64", "externref"] });
+const tagAOffset = guardTools.realSandbox.getAddressOf(tagA);
+const tagBOffset = guardTools.realSandbox.getAddressOf(tagB);
+const tagASize = guardTools.realSandbox.getSizeOf(tagA);
+const tagBSize = guardTools.realSandbox.getSizeOf(tagB);
+
+function read32(offset) {
+    return guardTools.readUint32(offset);
+}
+
+function isTaggedReference(value) {
+    return (value & 1) === 1;
+}
+
+function findTagIdentityField() {
+    const maxOffset = Math.min(tagASize, tagBSize, 0x80);
+    for (let offset = 8; offset < maxOffset; offset += 4) {
+        const tagAIdentity = read32(tagAOffset + offset) >>> 0;
+        const tagBIdentity = read32(tagBOffset + offset) >>> 0;
+        if (!isTaggedReference(tagAIdentity) || !isTaggedReference(tagBIdentity)) continue;
+        if (tagAIdentity === tagBIdentity) continue;
+
+        const tagAMap = read32(tagAIdentity - 1) >>> 0;
+        const tagBMap = read32(tagBIdentity - 1) >>> 0;
+        const tagAHeader = read32((tagAIdentity - 1) + 4) >>> 0;
+        const tagBHeader = read32((tagBIdentity - 1) + 4) >>> 0;
+        if (tagAMap === tagBMap && tagAHeader === tagBHeader) {
+            return { offset, tagAIdentity, tagBIdentity };
+        }
+    }
+
+    guardTools.fail("Harness error: could not locate the WebAssembly.Tag identity field.");
+}
+
+const identityField = findTagIdentityField();
+const readableRanges = Object.freeze([
+    [tagAOffset, tagAOffset + tagASize],
+    [tagBOffset, tagBOffset + tagBSize],
+    [identityField.tagAIdentity - 1, identityField.tagAIdentity - 1 + 0x20],
+    [identityField.tagBIdentity - 1, identityField.tagBIdentity - 1 + 0x20],
+]);
+
+function normalizeRange(offset, size) {
+    const normalizedOffset = guardTools.normalizeNumber(offset, "Sandbox.MemoryView offset");
+    const normalizedSize = guardTools.normalizeNumber(size, "Sandbox.MemoryView size");
+    if (normalizedSize <= 0 || normalizedSize > 8) {
+        guardTools.fail("Use small MemoryView windows for this ramp.");
+    }
+    return [normalizedOffset, normalizedOffset + normalizedSize];
+}
+
+function isInsideAllowedRange(start, end) {
+    return readableRanges.some(([rangeStart, rangeEnd]) => start >= rangeStart && end <= rangeEnd);
+}
+
+const sandboxRules = Object.freeze({
+    getAddressOf(object) {
+        if (object === tagA) return tagAOffset;
+        if (object === tagB) return tagBOffset;
+        guardTools.fail("Only the provided tagA and tagB wrappers are addressable in this ramp.");
+    },
+    getSizeOf(object) {
+        if (object === tagA) return tagASize;
+        if (object === tagB) return tagBSize;
+        guardTools.fail("Only the provided tagA and tagB wrappers have exposed sizes in this ramp.");
+    },
+    MemoryView(offset, size) {
+        const [start, end] = normalizeRange(offset, size);
+        if (!isInsideAllowedRange(start, end)) {
+            guardTools.fail("This ramp only allows MemoryView access to the tag wrappers and their tag identities.");
+        }
+        return new guardTools.realSandbox.MemoryView(start, end - start);
+    },
+    disabledMessages: {
+        getObjectAt: "Object fabrication is not part of this ramp.",
+    },
+});
+{% endblock %}
+
+{% block expose %}
+guardTools.exposeConstant("tagA", tagA);
+guardTools.exposeConstant("tagB", tagB);
+{% endblock %}
+
+{% block validate %}
+const tagAIdentityNow = read32(tagAOffset + identityField.offset) >>> 0;
+const tagBIdentityNow = read32(tagBOffset + identityField.offset) >>> 0;
+
+if (tagAIdentityNow !== identityField.tagAIdentity) {
+    guardTools.fail("Do not modify tag A's identity field; copy it into tag B.");
+}
+
+if (tagBIdentityNow === identityField.tagBIdentity) {
+    guardTools.fail("Tag B still points at its original identity.");
+}
+
+if (tagBIdentityNow === tagAOffset || tagBIdentityNow === tagAOffset + 1) {
+    guardTools.fail("Tag B should receive tag A's internal tag identity, not tag A's wrapper address.");
+}
+
+if (tagBIdentityNow !== identityField.tagAIdentity) {
+    guardTools.fail("Tag B's identity field does not contain tag A's identity.");
+}
+
+return true;
+{% endblock %}

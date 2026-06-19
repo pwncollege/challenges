@@ -1,0 +1,38 @@
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -1889,6 +1889,7 @@ if (v8_postmortem_support) {
+ }
+ 
+ torque_files = [
++  "src/builtins/array-setlength.tq",
+   "src/builtins/aggregate-error.tq",
+   "src/builtins/array-at.tq",
+   "src/builtins/array-concat.tq",
+--- /dev/null
++++ b/src/builtins/array-setlength.tq
+@@ -0,0 +1,14 @@
++namespace array {
++transitioning javascript builtin
++ArrayPrototypeSetLength(
++  js-implicit context: NativeContext, receiver: JSAny)(length: JSAny): JSAny {
++    try {
++      const len: Smi = Cast<Smi>(length) otherwise ErrorLabel;
++      const array: JSArray = Cast<JSArray>(receiver) otherwise ErrorLabel;
++      array.length = len;
++    } label ErrorLabel {
++        Print("Nope");
++    }
++    return receiver;
++}
++}
+--- a/src/init/bootstrapper.cc
++++ b/src/init/bootstrapper.cc
+@@ -2531,6 +2531,8 @@ void Genesis::InitializeGlobal(Handle<JSGlobalObject> global_object,
+     JSObject::AddProperty(isolate_, proto, factory->constructor_string(),
+                           array_function, DONT_ENUM);
+ 
++    SimpleInstallFunction(isolate_, proto, "setLength",
++                          Builtin::kArrayPrototypeSetLength, 1, true);
+     SimpleInstallFunction(isolate_, proto, "at", Builtin::kArrayPrototypeAt, 1,
+                           true);
+     SimpleInstallFunction(isolate_, proto, "concat",

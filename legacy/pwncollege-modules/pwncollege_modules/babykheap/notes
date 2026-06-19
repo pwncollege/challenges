@@ -1,0 +1,5 @@
+1. give flag once it mounts correctly
+2. allow SUID file execution during mounting
+3. OOB access with flag objects
+4. something UAF
+5. something UAF in usernamespace

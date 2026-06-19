@@ -1,0 +1,143 @@
+name: "SQL Playground"
+auxiliary:
+  pwnshop:
+    build_image: pwncollege/challenge-simple:latest
+    verify_image: pwncollege/challenge-simple:latest
+    binary_name: sql
+    variants: 16
+challenges:
+- id: sql-query
+  name: "SQL Queries"
+  description: |
+    This challenge will be the start of your SQL journey.
+    In this challenge, and throughout this module, we'll use a SQL engine called [SQLite](https://sqlite.org/).
+    SQLite is an extremely lightweight SQL engine that, rather than using a complex SQL server process to host databases, simply interacts with database files directly.
+    This makes it very convenient to prototype applications on, and we use it for almost all our SQL needs in the challenges on pwn.college, but you wouldn't want to use it for, say, a production website...
+    In the challenge file (`/challenge/sql`), you'll notice our use of SQLite via the TemporaryDB class.
+    Feel free to ignore the inner workings of that class --- we simply use it as a wrapper to execute SQL queries and get results.
+    Focus on the rest of the code!
+
+    This challenge will start with a very simple query.
+    The query we'll learn is `SELECT`.
+    You can use `SELECT` to (😎) _select_ data from tables in your databse.
+    Its basic syntax is `SELECT what FROM where`, where `what` and `where` are things you specify.
+    The `where`, typically, is a database table, and the `what` are the columns you want the query to fetch.
+    If you don't want to worry about the column to `SELECT`, you can do `SELECT *`!
+
+    Read the code to understand the layout of the database you're querying, and select the flag!
+
+    ----
+    **NOTE:**
+    This challenge, and the other challenges in the series, will try to link to relevant SQLite documentation.
+    This documentation can be rather dry and dense.
+    Feel free to use other resources as well.
+    There are LOTS of SQL guides on the internet: the only reason we made this one is to give an accelerated guide for the parts of SQL learners will need for pwn.college challenges!
+  auxiliary:
+    pwnshop:
+      challenge: SQLQuery
+- id: sql-where
+  name: "Filtering SQL"
+  description: |
+    Any non-trivial database will have enough data in it that one must be _selective_ (🥁) about what you access.
+    Luckily, the `SELECT` query can be filtered with the `WHERE` clause!
+    This challenge will require you to filter your data, because now there's lots of junk in the database!
+
+    The challenge links to the SQLite documentation for the WHERE clause, and we'd like you to go and read it.
+    The TLDR, to get you started, is that you can append `WHERE condition` to your query, where `condition` is some expression you specify, like `some_column < 10` (for integer comparisons) or `some_column = 'pwn'` (for string comparisons) or the like.
+
+    You'll need to analyze the code to understand what differentiates the flag from the junk data, and then query on it!
+    Hint: it's the new column we added.
+    Can you make the right filter and filter your data to just the flag?
+  auxiliary:
+    pwnshop:
+      challenge: SQLQueryWhere
+- id: sql-where-one
+  name: "Choosing Columns"
+  description: |
+    You've probably been using `SELECT *` because of our sublimital suggestion a few challenges ago.
+    This challenge will force you to choose a single column.
+    `SELECT` it by name and get the flag!
+  auxiliary:
+    pwnshop:
+      challenge: SQLQueryWhereOne
+- id: sql-where-one-random
+  name: "Exclusionary Filtering"
+  description: |
+    Here, we'll randomly tag the flag.
+    Can you still filter it out?
+
+    ----
+    **HINT:**
+    It might be easier to _exclude_ the garbage data with your filter rather than include the flag data.
+  auxiliary:
+    pwnshop:
+      challenge: SQLQueryWhereOneRandomTag
+- id: sql-where-one-string
+  name: "Filtering Strings"
+  description: |
+    Of course, you can also filter using string values.
+    Here, the flag tag is a string.
+    Can you still get the flag?
+  auxiliary:
+    pwnshop:
+      challenge: SQLQueryWhereOneStringTag
+- id: sql-where-substr
+  name: "Filtering on Expressions"
+  description: |
+    Let's move on to more advanced filtering.
+    We got rid of the flag tag in this challenge, and you'll need to filter on the actual values of the flag data!
+    Luckily, `SQLite` (and all SQL engines in general) provide some functions for working with strings, and you'll use the `substr` function here.
+    `substr(some_column, start, length)` extracts `length` characters starting from `start` (the first character is at position `1`, not `0` as it would be in a sane language) of column `some_column`.
+    You can use the result of this anywhere the query accepts expressions, such as in the `WHERE` clause to compare the resulting value against a string as in the previous challenge!
+  auxiliary:
+    pwnshop:
+      challenge: SQLQueryWhereOneNoTag
+- id: sql-substr
+  name: "SELECTing Expressions"
+  description: |
+    Functionality like `substr` isn't just for filtering: you can also `SELECT` expressions such as these (in place of or in addition to where you typically specify columns)!
+    This is super handy when you don't want (or, in the case of this challenge, cannot retrieve) _all_ the data, but just want the result of some computation on your data.
+    In this case, the challenge will simply not let you read the whole flag.
+    Can you read it piecemeal?
+  auxiliary:
+    pwnshop:
+      challenge: SQLQuerySubstr
+- id: sql-composite-conditions
+  name: "Composite Conditions"
+  description: |
+    So far, our `WHERE` conditions have been pretty simple.
+    This challenge complicates it somewhat by injection decoy data into your database.
+    Luckily, the flag tag is back.
+
+    You'll need to filter on _both_ the flag tag and the flag value.
+    Analogous to other programming languages, you can join together conditional expressions with boolean operators such as `AND` and `OR`.
+    Craft a powerful expression and filter the flag from the decoys!
+  auxiliary:
+    pwnshop:
+      challenge: SQLQueryWhereDecoys
+- id: sql-limit
+  name: "Reaching Your LIMITs"
+  description: |
+    You've been able to rely on your `WHERE` clause to filter things down to exactly one result, but in this challenge, we've taken away the flag tags that you relied on to filter out decoy flags!
+    Luckily, simple SQL queries tend to return data in the order that it was inserted into the database, and the real flag was inserted before the decoy flags (but after some of the garbage data).
+    All you need is to `LIMIT` your query to just `1` result, and that result should be your flag!
+    The challenge links you to the `LIMIT` documentation if you need it!
+  auxiliary:
+    pwnshop:
+      challenge: SQLQueryWhereDecoysNoTag
+- id: sql-metadata
+  name: "Querying Metadata"
+  description: |
+    In actual security scenarios, there are times where the attacker lacks certain information, such as the names of tables that they want to query!
+    Luckily, every SQL engine has some way to query _metadata_ about tables (though, confusingly, every engine does this differently!).
+    SQLite uses a special `sqlite_master` table, in which it stores information about all other tables.
+    Can you figure out the name of the table that contains the flag, and query it?
+  auxiliary:
+    pwnshop:
+      challenge: SQLQueryRandomTable
+resources:
+- name: "Structured Query Language"
+  type: lecture
+  video: 433mRGcpHeA
+  playlist: PL-ymxv0nOtqrvXLSALV5SQ5v3oyKY4DWg
+  slides: 1KpvjoFnlC9HcUJbkg-_VASf2JETMwEZjpzO0uGSoCo4

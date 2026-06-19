@@ -1,0 +1,5 @@
+./mount_kbfs ./disk.iso /tmp
+./exp
+
+after running ./exp for a few times, you will see some obvious kernel pointers. it's because we got full control over the kernel page. because of the struct file spray, we can overwrite file->fops and get root easily
+

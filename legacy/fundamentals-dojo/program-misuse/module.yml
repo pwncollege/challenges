@@ -1,0 +1,196 @@
+name: Program Misuse
+
+description: |
+  For each challenge in this module, a different (standard) program that is owned by root has its `suid` bit set.
+  Probably, this program is not normally designed to be `suid`.
+  Your task is to misuse the program with this increased privilege to read the flag.
+  Some of these programs are ordinarily used to read files; several of them are not.
+  In order to better understand how to use (and misuse) these programs, you may want to read through their `man` pages.
+
+image: pwncollege/challenge-program-misuse
+
+resources:
+- name: "Program Misuse: Privilege Escalation"
+  type: lecture
+  video: ZWxYWdiXqD8
+  playlist: PL-ymxv0nOtqoaG9YCGR36tCfRoXqVcE1E
+  slides: 1EB7dL5gx3pQlPDqZSEqTtlDiJRZmHGbqRnwxgm4feuw
+- name: "Program Misuse: Mitigations"
+  type: lecture
+  video: kzbyvr_PJ9k
+  playlist: PL-ymxv0nOtqoaG9YCGR36tCfRoXqVcE1E
+  slides: 1pvWd6n4UN3lZ1BdRySWDl80iEYGRJj9VC5exbYlGdAg
+
+challenges:
+- id: cat
+  name: cat
+  description: Lets you directly read the flag!
+- id: more
+  name: more
+  description: Lets you directly read the flag!
+- id: less
+  name: less
+  description: Lets you directly read the flag!
+- id: tail
+  name: tail
+  description: Lets you directly read the flag!
+- id: head
+  name: head
+  description: Lets you directly read the flag!
+- id: sort
+  name: sort
+  description: Lets you directly read the flag!
+- id: vim
+  name: vim
+  description: Shows you that an over-privileged editor is a very powerful tool!
+- id: emacs
+  name: emacs
+  description: Shows you that an over-privileged editor is a very powerful tool!
+- id: nano
+  name: nano
+  description: Shows you that an over-privileged editor is a very powerful tool!
+- id: rev
+  name: rev
+  description: Requires you to understand their output to derive the flag from it!
+- id: od
+  name: od
+  description: Requires you to understand their output to derive the flag from it!
+- id: hd
+  name: hd
+  description: Requires you to understand their output to derive the flag from it!
+- id: xxd
+  name: xxd
+  description: Requires you to understand their output to derive the flag from it!
+- id: base32
+  name: base32
+  description: Requires you to understand their output to derive the flag from it!
+- id: base64
+  name: base64
+  description: Requires you to understand their output to derive the flag from it!
+- id: split
+  name: split
+  description: Requires you to understand their output to derive the flag from it!
+- id: gzip
+  name: gzip
+  description: Forces you to understand different archive formats!
+- id: bzip2
+  name: bzip2
+  description: Forces you to understand different archive formats!
+- id: zip
+  name: zip
+  description: Forces you to understand different archive formats!
+- id: tar
+  name: tar
+  description: Forces you to understand different archive formats!
+- id: ar
+  name: ar
+  description: Forces you to understand different archive formats!
+- id: cpio
+  name: cpio
+  description: Forces you to understand different archive formats!
+- id: genisoimage
+  name: genisoimage
+  description: Forces you to understand different archive formats!
+- id: env
+  name: env
+  description: Enables you to read flags by making them execute other commands!
+- id: find
+  name: find
+  description: Enables you to read flags by making them execute other commands!
+- id: make
+  name: make
+  description: Enables you to read flags by making them execute other commands!
+- id: nice
+  name: nice
+  description: Enables you to read flags by making them execute other commands!
+- id: timeout
+  name: timeout
+  description: Enables you to read flags by making them execute other commands!
+- id: stdbuf
+  name: stdbuf
+  description: Enables you to read flags by making them execute other commands!
+- id: setarch
+  name: setarch
+  description: Enables you to read flags by making them execute other commands!
+- id: watch
+  name: watch
+  description: Enables you to read flags by making them execute other commands!
+- id: socat
+  name: socat
+  description: Enables you to read flags by making them execute other commands!
+- id: whiptail
+  name: whiptail
+  description: Requires some light programming to read the flag.!
+- id: awk
+  name: awk
+  description: Requires some light programming to read the flag.!
+- id: sed
+  name: sed
+  description: Requires some light programming to read the flag.!
+- id: ed
+  name: ed
+  description: Requires some light programming to read the flag.!
+- id: chown
+  name: chown
+  description: Lets you get the flag by doing tricks with permissions!
+- id: chmod
+  name: chmod
+  description: Lets you get the flag by doing tricks with permissions!
+- id: cp
+  name: cp
+  description: Lets you get the flag by doing tricks with permissions!
+- id: mv
+  name: mv
+  description: |
+    Lets you get the flag by doing tricks with permissions!
+
+    ----
+    **NOTE:**
+    It might be helpful to take a step back and think about the broader environment you are in, and what that makes possible.
+- id: perl
+  name: perl
+  description: Lets you read the flag because they let you program anything!
+- id: python
+  name: python
+  description: Lets you read the flag because they let you program anything!
+- id: ruby
+  name: ruby
+  description: Lets you read the flag because they let you program anything!
+- id: bash
+  name: bash
+  description: Lets you read the flag because they let you program anything!
+- id: date
+  name: date
+  description: Just straight up wasn't designed to let you read files!
+- id: dmesg
+  name: dmesg
+  description: Just straight up wasn't designed to let you read files!
+- id: wc
+  name: wc
+  description: Just straight up wasn't designed to let you read files!
+- id: gcc
+  name: gcc
+  description: Just straight up wasn't designed to let you read files!
+- id: as
+  name: as
+  description: Just straight up wasn't designed to let you read files!
+- id: wget
+  name: wget
+  description: |
+    Just straight up wasn't designed to let you read files!
+
+    ----
+    **NOTE:**
+    This level has a "decoy" solution that _looks_ like it leaks the flag, but is not correct.
+    If you're submitting what you feel should be a valid flag, and the dojo doesn't accept it, try your solution against a file with uppercase characters to see what's going on.
+- id: ssh-keygen
+  name: ssh-keygen
+  description: |
+    This level shows how dangerous it is to allow users to load their own code as plugins into the program.
+    Of course, figuring out how to do so is the hard part!
+
+    ----
+    **NOTE:**
+    You will need to write and compile C code to solve this level!
+    Don't know how?
+    [Learn it on pwn.college](/intro-to-programming-languages)!

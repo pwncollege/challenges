@@ -1,0 +1,3 @@
+chmod 6755 /challenge/run
+touch /run/xtables.lock
+rm /challenge/.init

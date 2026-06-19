@@ -1,0 +1,331 @@
+name: Reverse Engineering
+auxiliary:
+  pwnshop:
+    seed: 1337
+    variants: 16
+    walkthrough: false
+    keep_source: false
+    binary_name: cimg
+    build_image: pwncollege/challenge-legacy:latest
+    verify_image: pwncollege/challenge-legacy:latest
+visibility:
+  start: "2024-11-04T13:00:00-07:00"
+resources:
+- name: "Reverse Engineering: Introduction"
+  type: lecture
+  video: ClVocVk1c5g
+  playlist: PL-ymxv0nOtqrGVyPIpJeostmi7zW5JS5l
+  slides: 1hw_STBTJh4xqMv4TZAPRqt2rYIEAXXaCQlaBetxUufU
+- name: "Fundamentals: Binary Files"
+  type: lecture
+  video: nKqFeYJ483U
+  playlist: PL-ymxv0nOtqqQ4NR1JnbWoHNm0Q8EspO1
+  slides: 1wrX8tvwaxIEk5hx4OtQmPqps-MScIaDO-9bTKQqr8vI
+- name: "Fundamentals: Linux Process Loading"
+  type: lecture
+  video: kUMCAzSOY-o
+  playlist: PL-ymxv0nOtqqQ4NR1JnbWoHNm0Q8EspO1
+  slides: 1TwM5WLWnTqrNkpXjGKkaXYbKZEpatEQYA7ckBVXAOhs
+- name: "Fundamentals: Linux Process Execution"
+  type: lecture
+  video: Vtb5wIlthRg
+  playlist: PL-ymxv0nOtqqQ4NR1JnbWoHNm0Q8EspO1
+  slides: 1ezY9Q8I0tzDD-7ZDXMbQM5RQ7z1dvB9-U_nDEhc6qdE
+- name: "Reverse Engineering: Functions and Frames"
+  type: lecture
+  video: 3IdeyjrMBA4
+  playlist: PL-ymxv0nOtqrGVyPIpJeostmi7zW5JS5l
+  slides: 125gIw6rNKvwa-1DO6j3HTWbWtr2q3xD2coTCb0CgmAw
+- name: "Reverse Engineering: Data Access"
+  type: lecture
+  video: AtVprTb5xBs
+  playlist: PL-ymxv0nOtqrGVyPIpJeostmi7zW5JS5l
+  slides: 154CQfQtpleaAQv9xNI1FVosbXc_18VZvXVpcs9Ljzzo
+- name: "Reverse Engineering: Static Tools"
+  type: lecture
+  video: ls4Eoew6aSY
+  playlist: PL-ymxv0nOtqrGVyPIpJeostmi7zW5JS5l
+  slides: 1GcRLX3-cD9eLweEixmBPfawY7viOQWApG7E_HFfqHQQ
+- name: "Reverse Engineering: Dynamic Tools"
+  type: lecture
+  video: HcBordv7aWU
+  playlist: PL-ymxv0nOtqrGVyPIpJeostmi7zW5JS5l
+  slides: 13yzjaRTIlloV8Lg5fcQN2ZYXooVqizLgHVby1ltYeWY
+- name: "Reverse Engineering: Real-world Applications"
+  type: lecture
+  video: 2pqvHSy11JE
+  playlist: PL-ymxv0nOtqrGVyPIpJeostmi7zW5JS5l
+  slides: 1HWiy6OzvPO8YhgTPOsALobh9LagZsJ3Jsx7DJFLAKn4
+- name: Other Resources
+  type: markdown
+  content: |
+    There are many resources related to reverse engineering around the internet.
+
+    - A good place to start is a series of walkthroughs of several hacking challenges by ASU's own Adam Doupe on his [YouTube channel](https://www.youtube.com/watch?v=qGt-0OOAFcM&list=PLK06XT3hFPziMAZj8QuoqC8iVaEbrlZWh).
+    - A comprehensive revese engineering [tutorial series](https://github.com/mytechnotalent/Reverse-Engineering).
+- name: Useful Tools
+  type: markdown
+  content: |
+    As mentioned in the slides, there are a number of useful tools for this assignment!
+    Here is a (non-exhaustive) list:
+
+    * `gdb` will let you run and inspect the state of these programs.
+      Please check out the Debugging Refresher module.
+      We have also provided a quick briefer here.
+      Some useful gdb concepts:
+       * Know the difference between `step instruction` (`si`) and `next instruction` (`ni`).
+         It boils down to the fact that `si` will follow jumps, and `ni` will step over jumps.
+         This means that if you use `si`, you will quickly find yourself crawling through libc code, which is insane and unnecessary.
+       * You can use `x/i $rip` to disassemble the next instruction that will be executed.
+         You can call `display/i $rip` to make the next instruction display every time gdb prompts you for input.
+         You can also do `x/2i` and `display/2i` to print two (or other quantities of) instructions.
+       * The `disas` command will disassemble the current function that you are looking at.
+       * gdb can be scripted!
+         Look up conditional breakpoints and scriptable breakpoints in the gdb manual.
+       * Modern binaries are _position independent_, meaning that they can be loaded anywhere in memory when they run.
+         GDB will load them at the offset `0x555555554000`.
+         This means that if objdump is telling you that main starts at some address like, `0x100`, the address when debugging with GDB will be `0x555555554100`
+    * `strings` will list printable strings in the file.
+      This is useful for looking for constant strings that the program checks for (such as file names and so on) in the course of getting input.
+      Keep in mind that the options for string include a minimum size that it will print.
+    * Don't forget about pwntools! You will need to interact heavily with these programs. Do it right (with pwntools).
+    * `rappel` is a nice tool to help you figure out what certain instructions do.
+    * Tools for reverse engineering actual binaries, included inthe dojo:
+       * IDA is the industry standard of reverse-engineering tools.
+       * Ghidra is an open source direct competitor to IDA that is used and loved by many.
+       * Binary Ninja is an alternative product that competes with IDA in the space.
+       * angr-management is an open source up-and-coming reversing tool with some advanced functionality.
+       * In a pinch, `objdump -d -M intel the_binary` will disassemble the binary you want to look at.
+         `-M intel`, in that command, makes objdump give you nice and readable Intel assembly syntax.
+challenges:
+- id: cimg-magic-number-python
+  name: "File Formats: Magic Numbers (Python)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGMagicNumberPython
+- id: cimg-magic-number-c
+  name: "File Formats: Magic Numbers (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGMagicNumber
+      keep_source: True
+- id: cimg-magic-number
+  name: "File Formats: Magic Numbers (x86)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGMagicNumber
+- id: cimg-magic-int-python
+  name: "Reading Endianness (Python)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGMagicIntPython
+- id: cimg-magic-int-c
+  name: "Reading Endianness (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGMagicInt
+      keep_source: True
+- id: cimg-magic-int
+  name: "Reading Endianness (x86)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGMagicInt
+- id: cimg-version-python
+  name: "Version Information (Python)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGVersionPython
+- id: cimg-version-c
+  name: "Version Information (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGVersion
+      keep_source: True
+- id: cimg-version
+  name: "Version Information (x86)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGVersion
+- id: cimg-dimensions-python
+  name: "Metadata and Data (Python)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGDimensionsPython
+- id: cimg-dimensions-c
+  name: "Metadata and Data (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGDimensions
+      keep_source: True
+- id: cimg-dimensions
+  name: "Metadata and Data (x86)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGDimensions
+- id: cimg-ascii-python
+  name: "Input Restrictions (Python)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGAsciiPython
+- id: cimg-ascii-c
+  name: "Input Restrictions (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGAscii
+      keep_source: True
+- id: cimg-ascii
+  name: "Input Restrictions (x86)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGAscii
+- id: cimg-display-python
+  name: "Behold the cIMG! (Python)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGDisplayPython
+- id: cimg-display-c
+  name: "Behold the cIMG! (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGDisplay
+      keep_source: True
+- id: cimg-display
+  name: "Behold the cIMG! (x86)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGDisplay
+- id: cimg-color-python
+  name: "A Basic cIMG (Python)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGColorPython
+- id: cimg-color-c
+  name: "A Basic cIMG (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGColor
+      keep_source: True
+- id: cimg-color
+  name: "A Basic cIMG (x86)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGColor
+- id: "cimg-framebuffer-mini-c"
+  name: "Internal State Mini (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGFramebufferMini
+      keep_source: True
+- id: cimg-framebuffer-mini
+  name: "Internal State Mini (x86)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGFramebufferMini
+- id: "cimg-framebuffer-c"
+  name: "Internal State (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGFramebuffer
+      keep_source: True
+- id: cimg-framebuffer
+  name: "Internal State (x86)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGFramebuffer
+- id: cimg-operations-c
+  name: "File Formats: Directives (C)"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGDirectives
+      keep_source: True
+- id: cimg-operations
+  name: "File Formats: Directives"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGDirectives
+      attributes:
+        partial_source: True
+- id: cimg-patch
+  name: The Patch Directive
+  auxiliary:
+    pwnshop:
+      challenge: CIMGPatch
+      attributes:
+        partial_source: True
+- id: cimg-patch1337
+  name: Optimizing for Space
+  auxiliary:
+    pwnshop:
+      challenge: CIMGPatch1337
+      attributes:
+        partial_source: True
+- id: cimg-patch-oneline
+  name: Tweaking Images
+  auxiliary:
+    pwnshop:
+      challenge: CIMGPatchNoWin
+      attributes:
+        partial_source: True
+- id: cimg-sprite
+  name: Storage and Retrieval
+  auxiliary:
+    pwnshop:
+      challenge: CIMGSprite
+      attributes:
+        partial_source: True
+- id: cimg-sprite-parse
+  name: Extracting Knowledge
+  auxiliary:
+    pwnshop:
+      challenge: CIMGSpriteParse
+      attributes:
+        partial_source: True
+- id: cimg-sprite-tiled
+  name: Advanced Sprites
+  auxiliary:
+    pwnshop:
+      challenge: CIMGSpriteTiled
+      attributes:
+        partial_source: True
+- id: cimg-sprite-load
+  name: Accessing Resources
+  auxiliary:
+    pwnshop:
+      challenge: CIMGSpriteLoad
+      attributes:
+        partial_source: True
+- id: cimg-animate-unsafe
+  name: Unsafe Animations
+  auxiliary:
+    pwnshop:
+      challenge: CIMGAnimateUnsafe
+      attributes:
+        partial_source: True
+- id: cimg-animate
+  name: Animations
+  auxiliary:
+    pwnshop:
+      challenge: CIMGAnimate
+      attributes:
+        partial_source: True
+- id: cimg-quest-1
+  name: "Interoperability: Patching Data"
+  auxiliary:
+    pwnshop:
+      challenge: CIMGQuestUnpatchedSwitch
+      attributes:
+        partial_source: True
+- id: cimg-quest-2
+  name: Patching Code
+  auxiliary:
+    pwnshop:
+      challenge: CIMGQuestUnpatched
+      attributes:
+        partial_source: True
+- id: cimg-quest-3
+  name: Patching Control Flow
+  auxiliary:
+    pwnshop:
+      challenge: CIMGQuestUnpatchedSwitch
+      attributes:
+        partial_source: True

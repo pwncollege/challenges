@@ -1,0 +1,9 @@
+{%- set pwn_d8_flags = [
+    '--fuzzing',
+    '--omit-quit',
+    '--experimental-wasm-type-reflection',
+    '--no-turboshaft-wasm',
+    '--no-wasm-tier-up',
+    '--wasm-tier-mask-for-testing=196608',
+] -%}
+{% include "../../../common/run" %}

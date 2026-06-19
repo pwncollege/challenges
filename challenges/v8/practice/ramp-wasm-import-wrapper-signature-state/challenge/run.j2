@@ -1,0 +1,9 @@
+{%- set pwn_d8_flags = [
+    '--sandbox-testing',
+    '--fuzzing',
+    '--omit-quit',
+    '--wasm-tiering-budget=1',
+    '--wasm-wrapper-tiering-budget=1',
+    '--wasm-sync-tier-up',
+] -%}
+{% include "../../../common/learning-run" %}

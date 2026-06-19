@@ -1,0 +1,56 @@
+name: test pwncollege modules
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - armrop
+          - babyarch
+          - babyauto
+          - babyfile
+          - babyfmt
+          - babyheap
+          - babyjail
+          - babykernel
+          - babykheap
+          - babymem
+          - babymisc
+          - babyprime
+          - babyrace
+          - babyrev
+          - babyrop
+          - babyshell
+          - data_dealings
+          - embryogdb
+          - mach_ipc
+          - mach_task_ports
+          - reverse_engineering
+          - sql_playground
+          - talking_web
+          - toddlerheap
+          - toddlerone
+          - toddlertwo
+          - toddlerzero
+          - web_security
+
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v2
+      - name: info
+        run: |
+          ls -lR
+          git show
+      - name: install
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y parallel
+          docker pull pwncollege/pwnshop:latest
+          docker build -t modules .
+      - name: test-all
+        run: |
+          echo /core | sudo tee /proc/sys/kernel/core_pattern
+          docker run modules pwnshop verify -m ${{ matrix.module }}

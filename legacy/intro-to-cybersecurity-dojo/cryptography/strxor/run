@@ -1,0 +1,34 @@
+#!/opt/pwn.college/python
+
+import random
+import string
+import sys
+
+from Crypto.Util.strxor import strxor
+
+valid_keys = "!#$%&()"
+valid_chars = ''.join(
+    c for c in string.ascii_letters
+    if all(chr(ord(k)^ord(c)) in string.ascii_letters for k in valid_keys)
+)
+
+print(valid_keys, valid_chars)
+
+for n in range(1, 10):
+    print(f"Challenge number {n}...")
+
+    key_str = ''.join(random.sample(valid_keys*10, 10))
+    pt_str = ''.join(random.sample(valid_chars*10, 10))
+    ct_str = strxor(pt_str.encode(), key_str.encode()).decode()
+
+    print(f"- Encrypted String: {ct_str}")
+    print(f"- XOR Key String: {key_str}")
+    answer = input("- Decrypted String? ").strip()
+    if answer != pt_str:
+        print("Incorrect!")
+        sys.exit(1)
+
+    print("Correct! Moving on.")
+
+print("You have mastered XORing ASCII! Your flag:")
+print(open("/flag").read())

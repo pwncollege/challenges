@@ -1,0 +1,52 @@
+#!/opt/pwn.college/python
+
+import flask
+import os
+
+app = flask.Flask(__name__)
+
+
+import sqlite3
+import tempfile
+
+
+class TemporaryDB:
+    def __init__(self):
+        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
+
+    def execute(self, sql, parameters=()):
+        connection = sqlite3.connect(self.db_file.name)
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        result = cursor.execute(sql, parameters)
+        connection.commit()
+        return result
+
+
+db = TemporaryDB()
+
+# https://www.sqlite.org/lang_createtable.html
+db.execute("""CREATE TABLE posts AS SELECT "First Post!" AS content""")
+
+
+@app.route("/", methods=["POST"])
+def challenge_post():
+    content = flask.request.form.get("content", "")
+    db.execute("INSERT INTO posts VALUES (?)", [content])
+    return flask.redirect(flask.request.path)
+
+
+@app.route("/", methods=["GET"])
+def challenge_get():
+    page = "<html><body>\nWelcome to pwnpost, the anonymous posting service. Post away!\n"
+    page += "<form method=post>Post:<input type=text name=content><input type=submit value=Submit></form>\n"
+
+    for post in db.execute("SELECT content FROM posts").fetchall():
+        page += "<hr>" + post["content"] + "\n"
+
+    return page + "</body></html>"
+
+
+app.secret_key = os.urandom(8)
+app.config["SERVER_NAME"] = f"challenge.localhost:80"
+app.run("challenge.localhost", 80)

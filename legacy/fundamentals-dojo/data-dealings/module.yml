@@ -1,0 +1,604 @@
+name: "Dealing with Data"
+auxiliary:
+  pwnshop:
+    build_image: pwncollege/challenge-simple:latest
+    verify_image: pwncollege/challenge-simple:latest
+    binary_name: runme
+    variants: 16
+    challenge: PasswordCheckerBase
+challenges:
+- id: password-simple-1
+  name: "What's the password?"
+  description: |
+    Let's start your journey through encodings with something simple.
+    This program takes a password, but you have no way to know what it is...
+    unless you _READ_ it!
+
+    In most cybersecurity analysis settings, you will be analyzing software that you did not write, like this program.
+    Thus, the very first skill you will learn in this module is to read software to understand what is the data that it wants you to send.
+    We'll start with this trivial Python program.
+
+    The program lives in `/challenge/runme`, and will request a tricky password before it gives you the flag.
+    It's going to be the simplest program you read in your journey, as it just reads data over standard input and makes one simple check.
+
+    Read the program, understand the Python, and make the program give you the flag!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 133728000
+        strip: True
+- id: password-simple-2
+  name: "... and again!"
+  description: |
+    Once more into the breach, dear hacker!
+    Just to make sure you get the idea.
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 133738000
+        strip: True
+- id: password-simple-nostrip
+  name: "Newline Troubles"
+  description: |
+    The previous challenges were quite simple, as is this one.
+    But it does one thing slightly differently: it does not ignore the Enter that you press on the terminal when entering your password.
+    This causes your `entered_password` to contain a newline, and since `correct_password` has no newline, the comparison fails!
+
+    This sort of stuff --- errant delimiters in data --- happens ALL the time and can lead to crazy amounts of lost time.
+    There are a few ways to get around it in this level:
+
+    1. Look into ways to terminate your terminal input _without_ pressing Enter.
+       This is super searchable online!
+    2. Recall, from the Linux Luminarium, how to redirect an `echo` (with arguments to disable newlines) to the stdin of `/challenge/runme`.
+    3. Create a file without a newline, and remember your Linux Luminarium to redirect the file to stdin of `/challenge/runme`.
+
+    Good luck!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 133759000
+        strip: False
+        warn_newline: True
+
+- id: password-from-file
+  name: "Reasoning about files"
+  description: |
+    Let's explore some other ways programs might take security-relevant input.
+    Here, the program does _not_ read the password from the terminal.
+    Can you still crack it?
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 133772000
+        strip: False
+        warn_newline: True
+        input_method: "fixedfile"
+
+- id: password-from-arg-file
+  name: "Specifying Filenames"
+  description: |
+    Here's another slight twist on it.
+    Can you still get it?
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 133785000
+        strip: False
+        warn_newline: True
+        input_method: "argfile"
+
+- id: password-hex-byte
+  name: "Binary and Hex Encoding"
+  description: |
+    Now, life must get complex.
+    You may have noticed the `b` letters in front of the password constants throughout this module.
+    Python has two types of string-like constants: `str`ings (specified as `"asdf"`) and `bytes` (specified as `b"asdf"`).
+    Let's talk about `bytes` in this level.
+
+    Bytes are what is actually stored in your computer's memory.
+    As you might know, computers think in binary: just a bunch of ones and zeroes.
+    For historical reasons, we express these ones and zeroes ("bits") in groups of 8, and each group of 8 (a "byte").
+    This number is purely arbitrary: early computers (pre-1960s or so) didn't have this grouping at all, or had other arbitrary groupings.
+    It is very feasible for there to be an alternate universe in which a byte is 16, 32, or really any numbers of bits (though for math reasons, it'll likely remain a power-of-2).
+
+    A single binary digit (bit) can represent two values (`0` and `1`), two bits can represent four values (`00`, `01`, `10`, and `11`), three bits can represent eight values (`000`, `001`, `010`, `011`, `100`, `101`, `110`, `111`), and four bits can represent sixteen values.
+    Comparatively, a single decimal digit can represent 10 values (from `0` to `9`).
+    Ten values are represented by roughly `log2(10) == 3.3219...` bits, and you get weird situations like binary `1001` being decimal `9`, but binary `1100` (still 4 binary digits) being `12` (_two_ decimal digits!).
+    Another way of expressing this digit desynchronization between decimal and binary is that decimal does not have clean _bit boundaries_.
+
+    The lack of bit boundaries makes reasoning about the relationship between decimal and binary complex.
+    For example, it is hard to spot-translate numbers between decimal and binary in general: we can work out that `97` is `110001`, but it's hard to see that at a glance.
+
+    It's much easier to spot-translate between bases that have more alignment between digits.
+    For example, a single hexadecimal (base 16) digit can represent 16 values (`0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `a`, `b`, `c`, `d`, `e`, `f`): the same number of values that binary can represent in 4 digits!
+    This allows us to have a super simple mapping:
+
+    | Hex | Binary | Decimal |
+    |-----|--------|---------|
+    | `0` | `0000` | `0`     |
+    | `1` | `0001` | `1`     |
+    | `2` | `0010` | `2`     |
+    | `3` | `0011` | `3`     |
+    | `4` | `0100` | `4`     |
+    | `5` | `0101` | `5`     |
+    | `6` | `0110` | `6`     |
+    | `7` | `0111` | `7`     |
+    | `8` | `1000` | `8`     |
+    | `9` | `1001` | `9`     |
+    | `a` | `1010` | `10`    |
+    | `b` | `1011` | `11`    |
+    | `c` | `1100` | `12`    |
+    | `d` | `1101` | `13`    |
+    | `e` | `1110` | `14`    |
+    | `f` | `1111` | `15`    |
+
+    This mapping from a hex digit to 4 bits is something that's easily memorizable (most important: memorize `1`, `2`, `4`, and `8`, and you can quickly derive the rest).
+    Better yet, two hex digits is **8** bits, which is one byte!
+    Unlike decimal, where you'd have to memorize 16 mappings for 4 bits and 256 mappings for 8 bits, with hexadecimal, you only have to memorize 16 mappings for 4 bits and the same amount of mappings for 8 bits, since it's just two hexadecimal digits concatenated!
+    Some examples:
+
+    | Hex  | Binary      | Decimal |
+    |------|-------------|---------|
+    | `00` | `0000 0000` | `0`     |
+    | `0e` | `0000 1110` | `14`    |
+    | `3e` | `0011 1110` | `62`    |
+    | `e3` | `1110 0011` | `227`   |
+    | `ee` | `1110 1110` | `238`   |
+
+    Now you're starting to see the beauty.
+    This gets even more obvious when you expand beyond one byte of input, but we'll let you find that out through future challenges!
+
+    Now, let's talk about notation.
+    How do you differentiate `11` in decimal, `11` in binary (which equals `3` in decimal), and 11 in hex (which equals `17` in decimal)?
+    For numerical constants, Python's notation is to prepend binary data with `0b`, hexadecimal with `0x`, and keep decimal as is, resulting in `11 == 0b1011 == 0xb`, `3 == 0b11 == 0x3`, and `17 == 0b10001 == 0x11`.
+    But for `bytes`, as in this challenge, you can specify them using _escape sequences_.
+    The escape sequence starts with `\x` and is followed by two hex digits, resulting in a single byte with that value being put in the `bytes` constant!
+
+    Armed with this knowledge, go and hex the challenge and get the flag!
+
+    ---
+    **Fun facts:**
+    Some other Pythonisms that might be useful:
+
+    - If you `print(n)` a number or convert it to a string with `str(n)`, the number will be represented in base 10.
+    - You can get a hexadecimal string representation of a number using `hex(n)`.
+    - You can get a binary string representation of a number using `bin(n)`.
+    - Converting a string to a number with `int(s)` will read it as a base 10 number by default.
+    - You can specify a different base to use with a second argument: `int(s, 16)` will interpret the string as hex, `int(s, 2)` will interpret it as binary.
+    - You can try to auto-identify the number base using `int(s, 0)`, which requires a prefix on the string (`0b` or binary, `0x` for hex, nothing for decimal).
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337172000
+        input_method: "stdin"
+        pw_type: highbyte
+        input_mutators:
+          - hexdecode
+
+- id: password-hex-bytes
+  name: "More Hex"
+  description: |
+    You're not limited to two hex digits!
+    Like decimal numbers, you can add arbitrary amounts of them to represent more and more bytes.
+    Every two hex digits are one additional byte.
+    One hex digit, for those curious, is called a _nibble_ (har har!), but this is not used when specifying data.
+    We almost always work with data on the _byte_ level, not less.
+
+    What you will do in this level is _hex encode_ arbitrary data.
+    That is, you will figure out what value you want your data to have at the end, _encode_ that value in hex, and send the hex bytes.
+    Wow, your first encoding!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337193000
+        input_method: "stdin"
+        pw_type: highbytes
+        input_mutators:
+          - hexdecode
+
+- id: password-hex-decode
+  name: "Decoding Hex"
+  description: |
+    Now, let's _decode_ some hex, rather than encoding it.
+    Can you figure out what the program needs?
+
+    ---
+    **NOTE:**
+    One of the toughest parts of this challenge is to send raw binary data to it stdin.
+    There are a few ways to do this:
+
+    1. Write a python script to output data to stdout and pipe that to the challenge's stdin!
+       This would involve using the raw byte interface to stdout: `sys.stdout.buffer.write()`.
+    2. Write a python script to run the challenge and interact with it directly.
+       Our recommendation is to use pwntools for this: `import pwn`, `p = pwn.process("/challenge/runme")`, `p.write()`, and `p.readall()`.
+       A pwn.college alumni has created an awesome [pwntools cheat sheet](https://gist.github.com/anvbis/64907e4f90974c4bdd930baeb705dedf) that you may reference.
+    3. For an increasingly hacky solution, `echo -e -n "\xAA\xBB"` will print out bytes to stdout that you can pipe.
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337219000
+        input_method: "stdin"
+        pw_type: highbytes
+        reference_mutators:
+          - hexdecode
+
+- id: password-bin-decode
+  name: "Decoding Practice"
+  description: |
+    How many bases can you hold in your head?
+    Here, we explore _binary encoding_ of input.
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337233000
+        input_method: "stdin"
+        pw_type: highbytes
+        reference_mutators:
+          - bindecode
+
+- id: password-bin-encode
+  name: "Encoding Practice"
+  description: |
+    Now it's your turn!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337246000
+        input_method: "stdin"
+        pw_type: highbytes
+        input_mutators:
+          - bindecode
+
+- id: password-hex-ascii
+  name: "Hex-encoding ASCII"
+  description: |
+    Now, let's talk about `str`ings!
+    In Python, strings are meant for human consumption.
+    A string is a sequence of characters that a human might write down, read, speak, and dream.
+    This includes things like letters of the alphabet but also things like 🕴️.
+    When one thinks about how many different letters of different alphabets and different emoji and so on there are, it's clear that there are _thousands_ of different options for each character of a string.
+
+    The representation of a human-readable character as a bunch of bytes in memory is yet another _Encoding_ (here, used as a noun).
+    A character, such as 🐉, is "encoded" (here, used as a verb) by bytes in memory, and those bytes "decode" to that character.
+    In this use of "encoding" and "decoding", the data actually stays the same, but its interpretation changes: the encoding is applied by, say, your commandline terminal to translate the bytes being sent by the program into the characters and emoji you see on the screen.
+
+    In Python, you convert a `str` to its equivalent `bytes` by doing `my_string.encode()`.
+    If you have a bunch of bytes that you want to interpret as a string, you can do `my_bytes.decode()`.
+    But how are string characters mapped to byte values?
+
+    Back in its early days (say, pre-2000), when computing was less international and people still typed `:-)` instead of 🙂, people didn't really worry about the limited number of characters that a single byte could represent.
+    Thus, early encodings simply encoded each character to be a single byte, with a resulting limit of 256 possible characters.
+    Because early computing was predominantly US- and Western Europe-based, the most popular such encoding, specifically designed to represent characters in the Latin alphabet with various byte values, was [_ASCII_](https://en.wikipedia.org/wiki/ASCII), dating back to 1963 (ancient history by computing standards!).
+
+    ASCII is pretty simple: every character is one byte, uppercase letters are `0x40+letter_index` (e.g., A is `0x41`, F is `0x46`, and Z is `0x5a`), lowercase letters are `0x60+letter_index` (a is `0x61`, f is `0x66`, and z is `0x7a`), and numbers (yes, the numeric characters you're seeing are _not_ bytes of those values, they are ASCII-encoded number characters) are `0x30+number`, so 0 is `0x30` and 7 is `0x37`.
+    Useful special characters are sprinkled around the mapping as well: forward slash (`/` is `0x2f`), space is `0x20`, and newline is 0x0a.
+    Because early computing pioneers were making stuff up as they went along, some of the ASCII characters aren't really characters: `0x07` is a _bell_; it literally makes your terminal beep when it is "printed" out!
+    Other "control characters" do other whacky things: `0x08`, for example, _deletes the last character_ on the terminal instead of being a character itself.
+
+    Byte values below `0x80` (`128`), considered "standard ASCII", were pretty universally defined even for non-English countries.
+    You can see this whole standard ASCII definition with `man ascii`!
+    You can also use standard ASCII in python to encode strings: `my_string.encode("ascii")`.
+    But beware, standard ASCII doesn't define values above `0x80`, so if you _decode_ bytes that have those values, you will get an exception!
+    This, for example, won't work: `b"\x80".decode("ascii")`.
+
+    Values _above_ `0x80` ("extended ASCII") were used by different countries for their own characters, leading to some chaos due to colliding byte values.
+    In the US, the typical "extended ASCII" encoding was called [Latin 1](https://en.wikipedia.org/wiki/ISO/IEC_8859-1), and it defined a character for each of the 256 possible byte values.
+    This is useful for us because we can use "latin1" to easily convert between Python's bytes and strings, including: `b"\x80".decode("latin1")`.
+
+    In this challenge, we want you to give us ASCII-encoded hex values (fun fact: specifying byte values in hexadecimal is called "hex encoding"!), and we'll match them against the password.
+    Good luck!
+
+    ---
+    **NOTE:**
+    As you read the challenge to understand what value you need to send, you'll notice that some parts of the `bytes` constant specified for `correct_password` looks ... weird.
+    Each byte in `correct_password` represents a byte in memory, but they often still have useful, human-relevant information.
+    Printing _every_ byte with escape sequences, though it would be valid, would not be as useful for humans, even if bytes aren't _really_ meant for human consumption.
+    Thus, the Python developers decided to represent bytes as ... standard ASCII!
+    Python `bytes` are specified using ASCII characters, with the weirder "non-printable" ones (e.g., anything over `0x80` and a few others are specified using `\x` _escape sequences_).
+    This can work for normal characters as well: `\x41` happily encodes `A`.
+    Some other special characters have their own bespoke escape sequences: for example, `\n` encodes a newline character (equivalent to `\x0a`).
+    You can see other escape sequences in `man ascii`.
+    Because `\` is used as an escape sequence, Python (and other languages that use the escape sequence concept, which is almost everything) must specify an _actual_ backslash as an escape sequence as well (specifically, `\\` encodes a `\` byte with a value of `0x5c`).
+
+    Okay, that was a lot.
+    Go put it into practice!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337308000
+        input_method: "random"
+        input_mutators:
+          - hexdecode
+
+- id: password-hex-nested
+  name: "Nested Encoding"
+  description: |
+    Okay, now that we understand how bytes are presented to us humans, we can play around with more encoding practice!
+    Let's multi-encode our bytes!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337321000
+        input_method: "random"
+        input_mutators:
+          - hexdecode
+          - hexdecode
+          - hexdecode
+          - hexdecode
+
+- id: password-hex-unicode
+  name: "Hex-encoding UTF-8"
+  description: |
+    Once computing went international and emojis were added, people needed to be able to use more than 256 possible characters at a time.
+    In the modern era, this has been largely solved by the [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding.
+    UTF-8 is a specific multi-byte encoding of [Unicode](https://en.wikipedia.org/wiki/Unicode), a global standardized character set containing essentially all characters known to humanity, plus the fun emoji that you know and love.
+    There are many ways to encode Unicode, and UTF-8 is one of them.
+    Unicode (character set) is to UTF-8 (encoding) as English (character set) is to standard ASCII (encoding).
+
+    Conveniently, UTF-8 is backwards-compatible with standard ASCII (e.g., standard ASCII byte values represent the same character in UTF-8 as in ASCII), but in certain situations will use _more than one byte_ to represent a single character.
+    This allows UTF-8 to have essentially limitless character options (it can always interpret more bytes!): currently, it supports well over 1,000,000 characters!
+
+    UTF-8 is (by default) how Python's strings are specified, so you can do stuff like `my_string = "💥"`).
+    You can convert that into the actual byte representation (as it's stored in bytes in memory) by doing `my_string.encode("utf-8")` which, in the case of the emoji in question, results in the bytes `b'\xf0\x9f\x92\xa5'`.
+    Those four bytes represent that emoji in UTF-8.
+
+    In this challenge, you will learn to craft emoji bytes.
+    We want you to create raw bytes representing UTF-8 emoji, hex-encode them, and send those hex values to us.
+    Can you do it?
+
+    ---
+    **DOJO NOTE:**
+    Due to a bug with unicode displays in the GUI Desktop terminal, we recommend that you use the VSCode Workspace for this challenge (and any other emoji-dependent challenges!).
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337355000
+        input_method: "random"
+        pw_type: "emoji"
+        input_mutators:
+          - hexdecode
+
+- id: unicode-confusion
+  name: "UTF Mixups"
+  description: |
+    UTF-8 is the current king of encodings.
+    It is used, for example, by the [vast majority](https://en.wikipedia.org/wiki/Popularity_of_text_encodings) of websites on the internet.
+
+    But it's not the only game in town.
+    Outside of the web, other encodings are present in significant numbers.
+    For various (misguided) technical reasons, Windows systems often use a different Unicode encoding: UTF-16.
+    This encoding represents the same Unicode characters _using different byte values_!
+    Needless to say, this leads to much confusion, and occasionally, security vulnerabilities.
+
+    A common way encoding mixups lead to security vulnerabilities is by incorrectly decoding data to perform security checks, then correctly (and differently) decoding it later to actually carry out security-sensitive actions.
+    If security checks are performed on bad data, then dangerous data can be missed.
+
+    This is the case in this challenge.
+    Can you get the flag?
+
+    ---
+    **DOJO NOTE:**
+    Due to a bug with unicode displays in the GUI Desktop terminal, we recommend that you use the VSCode Workspace for this challenge (and any other emoji-dependent challenges!).
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337385000
+        input_method: "random"
+        forbid_password: True
+        input_mutators:
+          - utf-16-confusion-encode
+
+- id: password-hex-reverse
+  name: "Modifying Encoded Data"
+  description: |
+    So far, we have seen a few types of encodings: UTF-8, UTF-16, extended ASCII (latin-1), and hex encoding.
+    This encoding translates data, whether that's a concept such as a 🎈 emoji character or an actual byte in memory into other bytes.
+    What happens when you mess with the encoded data?
+    Nothing good!
+    In UTF-8, 🎈 encodes to:
+
+    ```console
+    hacker@dojo:~$ ipython
+    In [1]: "🎈".encode("utf-8")
+    Out[1]: b'\xf0\x9f\x8e\x88'
+    ```
+
+    If we mess with the resulting bytes, and then decode them, we would (of course) get something different:
+
+    ```console
+    In [2]: b'\xf0\x9f\x8e\xaa'.decode("utf-8")
+    Out[2]: '🎪'
+
+    In [3]: b'\xf0\x9f\x8e\x42'.decode("utf-8")
+    ---------------------------------------------------------------------------
+    UnicodeDecodeError                        Traceback (most recent call last)
+    Cell In[3], line 1
+    ----> 1 b'\xf0\x9f\x8e\x42'.decode("utf-8")
+
+    UnicodeDecodeError: 'utf-8' codec can't decode bytes in position 0-2: invalid continuation byte
+    ```
+
+    The first modification resulted in a different emoji, and the second one errored out.
+    Depending on the encoding, not all byte values can be decoded properly!
+    For UTF-8, this is due to a complex algorithm to specify the data.
+    For hex encoding, this is due to only numbers 0 through 9 and letters A through F being valid in hexadecimal!
+
+    All this being said, any encoding _can_ be messed with to some extent, as we can see in the first example above.
+    When a security flaw allows data to be corrupted, this can enable an attacker to carefully transform data to their purposes.
+    We'll learn about how to protect data from this later in pwn.college, but for now, let's practice this concept by seeing what happens when we mess with some hex!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337432000
+        input_mutators:
+          - reverse
+          - hexdecode
+        pw_type: bytes
+
+- id: password-b64-decode
+  name: "Decoding Base64"
+  description: |
+    ASCII and UTF-8 are encodings meant for very specific data: text (or text-like characters).
+    Hex encoding is more general, and you can apply it to any data.
+    The reason that we might use an encoding like hex is to transfer information via some medium where it is hard to write arbitrary binary code, such as a piece of paper or certain communication protocols.
+    However, it is horribly inefficient: it _doubles_ the size of the data by outputting two ASCII hex digits for every byte!
+
+    Hex is inefficient for a similar reason that it convenient: there are only 4 bits available per digit, and since each output character digit takes 8 bits to display (in ASCII), the data size doubles.
+    Luckily, we can increase the efficiency of an encoding by increasing the number of bits we can convey per output character.
+
+    The name "base64" comes from the fact that there are 64 characters used in each output character.
+    These can actually vary, but the standard base64 encoding uses an "alphabet" of the uppercase letters `A` through `Z`, the lowercase letters `a` through `z`, the digits `0` through `9`, and the `+` and `/` symbols.
+    This results in 64 total output symbols, and each symbol can encode `2**6` (2 to the power of 6) possible input symbols, or 6 bits of data.
+    That means that to encode a single byte (8 bits) of input, you need more than one base64 output character.
+    In fact, you need _two_: one that encodes the first 6 bits and one that encodes the remaining 2 (with 4 bits of that second output character being unused).
+    To mark these unused bits, base64 encoded data appends an `=` for every two unused bits.
+    For example:
+
+    ```console
+    hacker@dojo:~$ echo -n A | base64
+    QQ==
+    hacker@dojo:~$ echo -n AA | base64
+    QUE=
+    hacker@dojo:~$ echo -n AAA | base64
+    QUFB
+    hacker@dojo:~$ echo -n AAAA | base64
+    QUFBQQ==
+    hacker@dojo:~$
+    ```
+
+    As you can see, 3 bytes (`3*8 == 24` bits) encode precisely into 4 base64 characters (`4*6 == 24` bits).
+
+    base64 is a popular encoding because it can represent any data without using "tricky" characters such as newlines, spaces, quotes, semicolons, unprintable special characters, and so on.
+    Such characters can cause trouble in certain scenarios, and base64-encoding the data avoids this nicely.
+
+    You've also explored other "base" encodings: base2 is binary, and base16 is hex!
+
+    Now, go and decode your way to the flag!
+
+    ----
+    **HINT:**
+    You can use Python's `base64` module (note: the base64 decoding functions in this module consume and return Python bytes) or the `base64` command line utility to do this!
+
+    **FUN FACT:**
+    The flag data in `pwn.college{FLAG}` is actually base64-encoded ciphertext.
+    You're well on the way to being able to build something like the dojo!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337488000
+        reference_mutators:
+          - b64decode
+        pw_type: bytes
+
+- id: password-b64-encode
+  name: "Encoding Base64"
+  description: |
+    Needless to say, you can also _en_code things to base64!
+    Go do that now!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337501000
+        input_mutators:
+          - b64decode
+        pw_type: bytes
+
+- id: password-obfuscate-1
+  name: "Dealing with Obfuscation"
+  description: |
+    Security-oblivious developers often use encoding-based obfuscation in lieu of encryption.
+    This sort of obfuscation typically fails to prevent determined hackers from accessing the data in question, especially once they read the software logic implementing it.
+    Put yourself in the shoes of such a hacker, and get this flag.
+
+    Remember: "Good Artists Copy, Great Artists Steal!"
+    When you're doing security analysis and need to interact with bespoke software, ripping the implementations of custom communication protocols out of that software is a good way to reach interoperability.
+    Give it a try here!
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337519000
+        reference_mutator_depth: 4
+        reference_mutator_options:
+          - binencode
+          - binencode
+          - hexencode
+          - hexencode
+          - hexencode
+          - hexencode
+          - b64encode
+          - b64encode
+          - b64encode
+          - b64encode
+          - reverse
+          - reverse
+          - reverse
+          - reverse
+        pw_type: bytes
+
+- id: password-obfuscate-2
+  name: "Dealing with Obfuscation 2"
+  description: |
+    Can you go further?
+  auxiliary:
+    pwnshop:
+      attributes:
+        seed: 1337545000
+        reference_mutator_depth: 4
+        input_mutator_depth: 4
+        input_mutator_options:
+          - hexdecode
+          - hexdecode
+          - hexdecode
+          - hexdecode
+          - b64decode
+          - b64decode
+          - b64decode
+          - b64decode
+          - reverse
+          - reverse
+          - reverse
+          - reverse
+        reference_mutator_options:
+          - hexencode
+          - hexencode
+          - hexencode
+          - hexencode
+          - binencode
+          - b64encode
+          - b64encode
+          - b64encode
+          - b64encode
+          - reverse
+          - reverse
+          - reverse
+          - reverse
+        pw_type: bytes
+resources:
+- name: "Binary Data"
+  type: lecture
+  video: suXDtRgeHdU
+  playlist: PL-ymxv0nOtqrIw6GL1ih9aMoX0UdzUBWI
+  slides: 13lXkCQ-wkc-AHZkNhPAckDLX_kTt6N5Jx2bD_27Wkys
+- name: "Hex"
+  type: lecture
+  video: POOGhx_c3K4
+  playlist: PL-ymxv0nOtqrIw6GL1ih9aMoX0UdzUBWI
+  slides: 18GJFqBmM0Iei6QNzz_uozpfKACGuv6FUxCMv108uQew
+- name: "Encoding Text"
+  type: lecture
+  video: wKRBLlXRg4E
+  playlist: PL-ymxv0nOtqrIw6GL1ih9aMoX0UdzUBWI
+  slides: 1xgKZFAlf7KlDQ1c-gmCX3I2HHS4gaxS92dPj88H8_B0
+- name: "Playing with Encodings"
+  type: lecture
+  video: qeNxIxzGvkU 
+  playlist: PL-ymxv0nOtqrIw6GL1ih9aMoX0UdzUBWI
+- name: "Base64"
+  type: lecture
+  video: -f7kwANJ_x4 
+  playlist: PL-ymxv0nOtqrIw6GL1ih9aMoX0UdzUBWI
+  slides: 1zU1PZBhxCNuP4_gKBB3jeRDSJD1P8RNDA3sA3PGfKBg
+- name: "Gleaning Challenge Insight"
+  type: lecture
+  video: 2Zu7qHC_C28
+  playlist: PL-ymxv0nOtqrIw6GL1ih9aMoX0UdzUBWI

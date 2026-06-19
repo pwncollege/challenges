@@ -1,0 +1,157 @@
+{% include "../../../common/provided-process-memory.js.j2" %}
+
+const primitive = createProvidedProcessMemory();
+
+Object.defineProperty(globalThis, "Sandbox", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+});
+
+const PROCESS_IMAGE_BASE = 0x555555554000n;
+const ELF_MAGIC_QWORD = 0x00010102464c457fn;
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function internalRead8(address) {
+    address = BigInt(address);
+    const aligned = address & ~7n;
+    return Number((primitive.read64(aligned) >> ((address - aligned) * 8n)) & 0xffn);
+}
+
+function internalRead16(address) {
+    return internalRead8(address) | (internalRead8(BigInt(address) + 1n) << 8);
+}
+
+function internalRead32(address) {
+    return (
+        internalRead8(address) |
+        (internalRead8(BigInt(address) + 1n) << 8) |
+        (internalRead8(BigInt(address) + 2n) << 16) |
+        (internalRead8(BigInt(address) + 3n) << 24)
+    ) >>> 0;
+}
+
+function findWritableScratch() {
+    if (primitive.read64(PROCESS_IMAGE_BASE) !== ELF_MAGIC_QWORD) {
+        fail("Harness error: unexpected process-image ELF base.");
+    }
+
+    const ePhOff = primitive.read64(PROCESS_IMAGE_BASE + 0x20n);
+    const ePhEntSize = internalRead16(PROCESS_IMAGE_BASE + 0x36n);
+    const ePhNum = internalRead16(PROCESS_IMAGE_BASE + 0x38n);
+    let writeStart = 0n;
+    let writeSize = 0n;
+
+    for (let i = 0; i < ePhNum; i++) {
+        const ph = PROCESS_IMAGE_BASE + ePhOff + BigInt(i * ePhEntSize);
+        const type = internalRead32(ph);
+        const flags = internalRead32(ph + 4n);
+        const vaddr = primitive.read64(ph + 0x10n);
+        const memsz = primitive.read64(ph + 0x28n);
+        if (type === 1 && (flags & 2) !== 0) {
+            writeStart = PROCESS_IMAGE_BASE + vaddr;
+            writeSize = memsz;
+        }
+    }
+
+    if (writeStart === 0n || writeSize < 0x2000n) {
+        fail("Harness error: failed to locate a writable process-image segment.");
+    }
+    return writeStart + writeSize - 0x1000n;
+}
+
+function qwordFromBytes(bytes, start) {
+    let value = 0n;
+    for (let i = 0; i < 8; i++) {
+        value |= BigInt(bytes[start + i] || 0) << BigInt(i * 8);
+    }
+    return value;
+}
+
+function reversedQwordFromBytes(bytes, start) {
+    let value = 0n;
+    for (let i = 0; i < 8; i++) {
+        value = (value << 8n) | BigInt(bytes[start + i] || 0);
+    }
+    return value;
+}
+
+const scratchAddress = findWritableScratch() + 0x180n;
+const payloadA = [0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00];
+const payloadB = [0x2f, 0x63, 0x68, 0x61, 0x6c, 0x6c, 0x65, 0x6e, 0x67, 0x65, 0x2f, 0x63, 0x61, 0x74, 0x66, 0x6c, 0x61, 0x67, 0x00];
+
+primitive.write64(scratchAddress, 0n);
+primitive.write64(scratchAddress + 8n, 0n);
+primitive.write64(scratchAddress + 16n, 0n);
+primitive.write64(scratchAddress + 24n, 0n);
+
+let write64Calls = 0;
+
+function write64(address, value) {
+    const normalizedAddress = BigInt(address);
+    if (normalizedAddress < 0n) {
+        fail("write64 address must be nonnegative.");
+    }
+    write64Calls++;
+    primitive.write64(normalizedAddress, BigInt.asUintN(64, BigInt(value)));
+}
+
+function requireFunction(object, name) {
+    if (object === null || typeof object !== "object" || typeof object[name] !== "function") {
+        fail(`Return an object with a ${name}(address, bytes) helper.`);
+    }
+}
+
+function validatePayload(address, bytes) {
+    const first = primitive.read64(address);
+    const expected = qwordFromBytes(bytes, 0);
+    if (first === reversedQwordFromBytes(bytes, 0)) {
+        fail("writeBytes packed the bytes as big-endian. The first byte should become the least-significant byte of the qword.");
+    }
+    if (first !== expected) {
+        fail(`writeBytes stored 0x${first.toString(16)} at 0x${address.toString(16)}; expected 0x${expected.toString(16)}.`);
+    }
+
+    for (let i = 0; i < bytes.length; i++) {
+        const actual = internalRead8(address + BigInt(i));
+        if (actual !== bytes[i]) {
+            fail(`writeBytes stored byte 0x${actual.toString(16)} at byte ${i}; expected 0x${bytes[i].toString(16)}.`);
+        }
+    }
+
+    const paddedLength = Math.ceil(bytes.length / 8) * 8;
+    for (let i = bytes.length; i < paddedLength; i++) {
+        const actual = internalRead8(address + BigInt(i));
+        if (actual !== 0) {
+            fail("Pad the final partial qword with zero bytes.");
+        }
+    }
+}
+
+const api = Object.freeze({
+    write64,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+const helpers = solve(api);
+requireFunction(helpers, "writeBytes");
+
+helpers.writeBytes(scratchAddress, payloadA);
+helpers.writeBytes(scratchAddress + 8n, payloadB);
+
+validatePayload(scratchAddress, payloadA);
+validatePayload(scratchAddress + 8n, payloadB);
+
+if (write64Calls === 0) {
+    fail("Build writeBytes on top of api.write64(address, value).");
+}
+
+print("__PWN_SUCCESS_MARKER__");
