@@ -7,7 +7,6 @@ import sys
 
 shared = True
 give_flag = True
-SUCCESS_MARKER = b"stale-stack-value-success\n"
 
 check_runtime_prologue = (
     "Let's see if your solve calls load_secret, then returns the stale "
@@ -18,8 +17,12 @@ check_runtime_failure = "Hmm, that's not right:\n"
 
 
 def check_runtime(so_path):
-    secret = random.randrange(0, 2**64)
+    secret_value = random.randrange(0, 2**64)
+    secret = secret_value.to_bytes(8, "little")
+    # Use the secret itself as the success token: the fd is inherited by the
+    # submitted library, but the fixed capability is not.
     success_read_fd, success_write_fd = os.pipe()
+    os.set_blocking(success_read_fd, False)
 
     print("")
     checker.print_prompt()
@@ -31,7 +34,7 @@ def check_runtime(so_path):
         try:
             result = subprocess.run(
                 ["/challenge/harness", so_path, str(success_write_fd)],
-                input=secret.to_bytes(8, "little"),
+                input=secret,
                 pass_fds=(success_write_fd,),
                 timeout=5,
             )
@@ -39,7 +42,10 @@ def check_runtime(so_path):
             raise AssertionError("solve() never returned. Make sure your function reaches `ret`.") from None
         finally:
             os.close(success_write_fd)
-        success_marker = os.read(success_read_fd, len(SUCCESS_MARKER) + 1)
+        try:
+            success_marker = os.read(success_read_fd, len(secret) + 1)
+        except BlockingIOError:
+            success_marker = b""
     finally:
         os.close(success_read_fd)
     print("")
@@ -54,6 +60,6 @@ def check_runtime(so_path):
     if result.returncode == 1:
         raise AssertionError("Your solve returned the wrong value or never called load_secret.")
     assert result.returncode == 0, f"The harness exited abnormally (status {result.returncode})."
-    assert success_marker == SUCCESS_MARKER, "The harness exited without confirming a successful stale-value read."
+    assert success_marker == secret, "The harness exited without confirming a successful stale-value read."
 
     return True

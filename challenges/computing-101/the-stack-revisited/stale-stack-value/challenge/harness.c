@@ -14,16 +14,17 @@
  */
 
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
-#define SUCCESS_MARKER "stale-stack-value-success\n"
 
 uint64_t secret_value;
 int load_secret_ran = 0;
 
 extern uint64_t load_secret(void);
 
-static int write_all(int fd, const char *buf, size_t len) {
+static int write_all(int fd, const void *buf, size_t len) {
+    const unsigned char *p = buf;
+
     while (len > 0) {
-        ssize_t written = write(fd, buf, len);
+        ssize_t written = write(fd, p, len);
         if (written < 0) {
             if (errno == EINTR) {
                 continue;
@@ -33,7 +34,7 @@ static int write_all(int fd, const char *buf, size_t len) {
         if (written == 0) {
             return -1;
         }
-        buf += written;
+        p += written;
         len -= written;
     }
     return 0;
@@ -93,7 +94,7 @@ int main(int argc, char **argv) {
     }
 
     LOG("match! return value == stale secret.");
-    if (success_fd >= 0 && write_all(success_fd, SUCCESS_MARKER, sizeof(SUCCESS_MARKER) - 1) < 0) {
+    if (success_fd >= 0 && write_all(success_fd, &secret_value, sizeof secret_value) < 0) {
         LOG("failed to report success to checker");
         return 2;
     }
