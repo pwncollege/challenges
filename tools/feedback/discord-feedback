@@ -3009,6 +3009,7 @@ def create_pull_request(
     title: str,
     body_path: pathlib.Path,
     draft: bool,
+    require_changes: bool = True,
 ) -> str:
     if not shutil.which("gh"):
         raise click.ClickException(
@@ -3016,9 +3017,14 @@ def create_pull_request(
         )
 
     if not commit_and_push(repo, title):
-        raise click.ClickException(
-            "No repository changes to commit; refusing to open an empty PR."
-        )
+        if require_changes:
+            raise click.ClickException(
+                "No repository changes to commit; refusing to open an empty PR."
+            )
+        # Resume after an interruption between push and PR creation: the branch is already
+        # committed, so there's nothing new to commit -- just make sure it's pushed, then
+        # open the PR from the existing commits instead of failing on the clean worktree.
+        subprocess.run(["git", "push", "-u", "origin", "HEAD"], cwd=repo, check=True)
 
     base_branch = base_ref.split("/", 1)[1] if "/" in base_ref else base_ref
     command = [
@@ -3045,6 +3051,86 @@ def create_pull_request(
     pr_url = run.stdout.strip()
     (artifact_dir / "pr-url.txt").write_text(pr_url + "\n")
     return pr_url
+
+
+def load_resume_state(path: pathlib.Path) -> dict[str, Any]:
+    if path.exists():
+        try:
+            state = json.loads(path.read_text())
+            if isinstance(state, dict):
+                state.setdefault("completed_phases", [])
+                return state
+        except json.JSONDecodeError:
+            pass
+    return {"completed_phases": []}
+
+
+def save_resume_state(path: pathlib.Path, state: dict[str, Any]) -> None:
+    path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+
+
+# Phases in execution order, with the artifact that proves each one finished. Validation has
+# no standalone "passed" marker, but it runs before casts/pr-body/create-pr, so a later
+# artifact implies it completed. Used to resume runs created before resume-state.json existed.
+_RESUME_PHASE_MARKERS = [
+    ("analysis", "analysis.md"),
+    ("implementation", "implementation-notes.md"),
+    ("validation", None),
+    ("casts", "ux-review.md"),
+    ("pr-body", "pr-body.md"),
+    ("create-pr", "pr-url.txt"),
+]
+
+
+def infer_completed_phases(artifact_dir: pathlib.Path) -> list[str]:
+    """Best-effort reconstruction of finished phases from artifacts, for runs with no
+    resume-state.json. Phases are sequential, so the furthest non-empty artifact implies all
+    earlier phases (validation included) also completed."""
+
+    def present(name: Optional[str]) -> bool:
+        if not name:
+            return False
+        path = artifact_dir / name
+        return path.is_file() and path.stat().st_size > 0
+
+    highest = -1
+    for index, (_phase, marker) in enumerate(_RESUME_PHASE_MARKERS):
+        if present(marker):
+            highest = index
+    if highest < 0:
+        return []
+    return [phase for phase, _ in _RESUME_PHASE_MARKERS[: highest + 1]]
+
+
+def resumed_test_log(
+    artifact_dir: pathlib.Path, resume_state: dict[str, Any]
+) -> pathlib.Path:
+    """The test log to reference for the PR body when validation is reused on resume."""
+    stored = resume_state.get("test_log")
+    if stored and pathlib.Path(stored).exists():
+        return pathlib.Path(stored)
+    logs = sorted(artifact_dir.glob("pwnshop-test-attempt-*.log"))
+    return logs[-1] if logs else (artifact_dir / "pwnshop-test-skipped.log")
+
+
+def existing_pr_url(repo: pathlib.Path) -> Optional[str]:
+    """URL of an open PR for the current branch, or None (used to resume into watching)."""
+    if not shutil.which("gh"):
+        return None
+    result = subprocess.run(
+        ["gh", "pr", "view", "--json", "url", "-q", ".url"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() or None
+
+
+def latest_run_id(artifact_root_dir: pathlib.Path) -> Optional[str]:
+    if not artifact_root_dir.is_dir():
+        return None
+    runs = sorted(p.name for p in artifact_root_dir.iterdir() if p.is_dir())
+    return runs[-1] if runs else None
 
 
 @click.command("discord-feedback")
@@ -3175,6 +3261,18 @@ def create_pull_request(
     is_flag=True,
     help="Allow running with pre-existing uncommitted changes.",
 )
+@click.option(
+    "--resume",
+    "resume_run_id",
+    metavar="RUN_ID",
+    help="Resume an interrupted run from its existing artifact dir (e.g. 20260618-204210), "
+    "reusing completed phases instead of starting over.",
+)
+@click.option(
+    "--resume-latest",
+    is_flag=True,
+    help="Resume the most recent run under --artifact-root.",
+)
 def feedback_command(
     guild_id,
     channel_ids,
@@ -3201,6 +3299,8 @@ def feedback_command(
     max_watch_fix_attempts,
     fetch_only,
     allow_dirty,
+    resume_run_id,
+    resume_latest,
 ):
     """Turn recent public Discord feedback into challenge improvement PRs."""
     repo = git_root()
@@ -3214,14 +3314,79 @@ def feedback_command(
         raise click.ClickException(
             f"{token_env} is not set. Create a Discord bot token and export it first."
         )
-    if (apply or create_pr or branch) and not allow_dirty:
-        ensure_clean_worktree(repo)
+    resuming = bool(resume_run_id) or resume_latest
+    if resume_run_id and resume_latest:
+        raise click.ClickException("Use either --resume or --resume-latest, not both.")
+    if resuming:
+        run_id = resume_run_id or latest_run_id((repo / artifact_root).resolve())
+        if not run_id:
+            raise click.ClickException(
+                f"No previous run found under {repo / artifact_root} to resume."
+            )
+        artifact_dir = (repo / artifact_root / run_id).resolve()
+        if not artifact_dir.is_dir():
+            raise click.ClickException(f"Cannot resume: {artifact_dir} does not exist.")
+        click.echo(f"Resuming run {run_id} from {artifact_dir}")
+    else:
+        # A resumable run leaves its in-progress changes in the working tree, so the
+        # clean-worktree gate only applies to fresh runs.
+        if (apply or create_pr or branch) and not allow_dirty:
+            ensure_clean_worktree(repo)
+        run_id = utc_now().strftime("%Y%m%d-%H%M%S")
+        artifact_dir = (repo / artifact_root / run_id).resolve()
+        artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    run_id = utc_now().strftime("%Y%m%d-%H%M%S")
-    artifact_dir = (repo / artifact_root / run_id).resolve()
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    resume_state_path = artifact_dir / "resume-state.json"
+    resume_state = load_resume_state(resume_state_path) if resuming else {"completed_phases": []}
+    completed_phases = set(resume_state.get("completed_phases", []))
+    if resuming and not completed_phases and not resume_state_path.exists():
+        # Run predates resume-state.json; infer finished phases from its artifacts.
+        completed_phases = set(infer_completed_phases(artifact_dir))
+        if completed_phases:
+            click.echo(
+                "Resume: no checkpoint file; inferred completed phase(s) from artifacts: "
+                f"{', '.join(sorted(completed_phases))}"
+            )
+
+    def phase_done(name: str) -> bool:
+        return name in completed_phases
+
+    def mark_phase_done(name: str, **extra: Any) -> None:
+        completed_phases.add(name)
+        resume_state["completed_phases"] = sorted(completed_phases)
+        resume_state.update(extra)
+        save_resume_state(resume_state_path, resume_state)
+
     if apply or create_pr or branch:
         prepare_branch(repo, branch, create_pr, run_id)
+
+    # Fast path: resuming a run that already opened its PR. The scrape only feeds analysis
+    # (already done), so re-running it just wastes time and prints misleading "scraping from
+    # PR #N" lines. Skip the whole pipeline and go straight back to watching that PR --
+    # which is what "resume my PR" means.
+    if resuming and create_pr and watch_pr and phase_done("create-pr"):
+        pr_url_path = artifact_dir / "pr-url.txt"
+        pr_url = pr_url_path.read_text().strip() if pr_url_path.exists() else ""
+        pr_url = pr_url or existing_pr_url(repo) or ""
+        if pr_url:
+            click.echo(
+                f"Resume: re-attaching to {pr_url}; continuing to watch "
+                "(skipping scrape and pipeline)"
+            )
+            watch_pull_request(
+                repo,
+                artifact_dir,
+                pr_url,
+                agent,
+                directions,
+                watch_pr_interval,
+                max_watch_fix_attempts,
+            )
+            return
+        click.echo(
+            "Resume: create-pr was already done but no PR URL was found; "
+            "falling through to the normal flow."
+        )
 
     env_channel_ids = os.environ.get("PWN_FEEDBACK_DISCORD_CHANNEL_IDS")
     selected_channel_ids = parse_channel_ids(channel_ids, env_channel_ids)
@@ -3334,38 +3499,53 @@ def feedback_command(
     if fetch_only:
         return
 
-    analysis_path = run_agent(
-        agent,
-        build_analysis_prompt(
-            transcript_path, jsonl_path, artifact_dir, directions, pr_feedback_path
-        ),
-        repo=repo,
-        artifact_dir=artifact_dir,
-        output_name="analysis.md",
-    )
+    analysis_path = artifact_dir / "analysis.md"
+    if phase_done("analysis"):
+        click.echo("Resume: reusing existing analysis.md")
+    else:
+        analysis_path = run_agent(
+            agent,
+            build_analysis_prompt(
+                transcript_path, jsonl_path, artifact_dir, directions, pr_feedback_path
+            ),
+            repo=repo,
+            artifact_dir=artifact_dir,
+            output_name="analysis.md",
+        )
+        mark_phase_done("analysis")
     click.echo(f"Wrote feedback analysis to {analysis_path}")
     if not apply:
         return
 
-    run_agent(
-        agent,
-        build_implementation_prompt(
-            analysis_path, artifact_dir, directions, pr_feedback_path
-        ),
-        repo=repo,
-        artifact_dir=artifact_dir,
-        output_name="implementation-agent.log",
-        apply=True,
-    )
     implementation_notes = artifact_dir / "implementation-notes.md"
-    if not implementation_notes.exists():
-        implementation_notes.write_text(
-            "Implementation agent did not write a separate report; see implementation-agent.log.\n"
+    if phase_done("implementation"):
+        click.echo(
+            "Resume: skipping implementation agent (its changes are already in this run's "
+            "working tree/branch)"
         )
+    else:
+        run_agent(
+            agent,
+            build_implementation_prompt(
+                analysis_path, artifact_dir, directions, pr_feedback_path
+            ),
+            repo=repo,
+            artifact_dir=artifact_dir,
+            output_name="implementation-agent.log",
+            apply=True,
+        )
+        if not implementation_notes.exists():
+            implementation_notes.write_text(
+                "Implementation agent did not write a separate report; see implementation-agent.log.\n"
+            )
+        mark_phase_done("implementation")
 
     test_log = artifact_dir / "pwnshop-test-skipped.log"
     if skip_tests:
         test_log.write_text("Tests skipped by --skip-tests.\n")
+    elif phase_done("validation"):
+        test_log = resumed_test_log(artifact_dir, resume_state)
+        click.echo("Resume: skipping main validation (already passed in this run)")
     else:
         test_log = validate_with_fixes(
             repo,
@@ -3378,11 +3558,15 @@ def feedback_command(
             first_attempt=1,
             fix_attempts=max_fix_attempts,
         )
+        mark_phase_done("validation", test_log=str(test_log))
 
     changed_challenges = changed_challenges_since(repo, base_ref)
     ux_review = artifact_dir / "ux-review.md"
     if skip_casts or not changed_challenges:
         ux_review.write_text("Asciinema UX review skipped.\n")
+    elif phase_done("casts"):
+        test_log = resumed_test_log(artifact_dir, resume_state)
+        click.echo("Resume: reusing recorded casts and UX review")
     else:
         click.echo(
             "Planning and recording UX casts for "
@@ -3420,52 +3604,72 @@ def feedback_command(
                 first_attempt=max_fix_attempts + 2,
                 fix_attempts=max_fix_attempts,
             )
+        mark_phase_done("casts", test_log=str(test_log))
 
     pr_body = artifact_dir / "pr-body.md"
-    pr_body_agent_output = run_agent(
-        agent,
-        build_pr_body_prompt(
-            analysis_path,
-            implementation_notes,
-            ux_review,
-            test_log,
-            artifact_dir,
-            directions,
-        ),
-        repo=repo,
-        artifact_dir=artifact_dir,
-        output_name="pr-body.raw",
-    )
-    agent_pr_body = pr_body_agent_output.read_text()
-    if pr_body_is_usable(agent_pr_body):
-        pr_body.write_text(with_automation_notice(agent_pr_body))
+    if phase_done("pr-body"):
+        click.echo("Resume: reusing existing pr-body.md")
     else:
-        click.echo(
-            "PR body agent output was not usable markdown; writing local fallback body"
+        pr_body_agent_output = run_agent(
+            agent,
+            build_pr_body_prompt(
+                analysis_path,
+                implementation_notes,
+                ux_review,
+                test_log,
+                artifact_dir,
+                directions,
+            ),
+            repo=repo,
+            artifact_dir=artifact_dir,
+            output_name="pr-body.raw",
         )
-        pr_body.write_text(
-            with_automation_notice(
-                build_fallback_pr_body(
-                    repo,
-                    base_ref,
-                    analysis_path,
-                    implementation_notes,
-                    ux_review,
-                    test_log,
+        agent_pr_body = pr_body_agent_output.read_text()
+        if pr_body_is_usable(agent_pr_body):
+            pr_body.write_text(with_automation_notice(agent_pr_body))
+        else:
+            click.echo(
+                "PR body agent output was not usable markdown; writing local fallback body"
+            )
+            pr_body.write_text(
+                with_automation_notice(
+                    build_fallback_pr_body(
+                        repo,
+                        base_ref,
+                        analysis_path,
+                        implementation_notes,
+                        ux_review,
+                        test_log,
+                    )
                 )
             )
-        )
+        mark_phase_done("pr-body")
 
     if create_pr:
-        pr_url = create_pull_request(
-            repo,
-            artifact_dir,
-            base_ref,
-            "Address challenge feedback from Discord",
-            pr_body,
-            draft_pr,
-        )
-        click.echo(f"Opened PR: {pr_url}")
+        # Reuse an already-opened PR on resume (the branch may already be pushed); only
+        # create one if none exists yet, so a mid-create interruption recovers cleanly.
+        pr_url_path = artifact_dir / "pr-url.txt"
+        pr_url = None
+        if phase_done("create-pr") and pr_url_path.exists():
+            pr_url = pr_url_path.read_text().strip() or None
+        if not pr_url and resuming:
+            pr_url = existing_pr_url(repo)
+        if pr_url:
+            click.echo(f"Resume: reusing existing PR {pr_url}")
+        else:
+            pr_url = create_pull_request(
+                repo,
+                artifact_dir,
+                base_ref,
+                "Address challenge feedback from Discord",
+                pr_body,
+                draft_pr,
+                # On resume the work may already be committed/pushed; allow opening the PR
+                # from existing commits instead of demanding a fresh change.
+                require_changes=not resuming,
+            )
+            click.echo(f"Opened PR: {pr_url}")
+        mark_phase_done("create-pr")
         if watch_pr:
             watch_pull_request(
                 repo,
