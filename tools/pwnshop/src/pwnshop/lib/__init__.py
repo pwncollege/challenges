@@ -146,48 +146,48 @@ def run_challenge(
         .strip()
     )
     logger.debug("container started: %s", container[:12])
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            "--interactive",
-            "--user=0:0",
-            container,
-            "/bin/sh",
-            "-c",
-            "cat >/flag && chown 0:0 /flag && chmod 0400 /flag",
-        ],
-        input=f"{flag}\n",
-        text=True,
-        check=True,
-    )
-    logger.debug("flag written to /flag")
     try:
         subprocess.run(
             [
                 "docker",
                 "exec",
+                "--interactive",
                 "--user=0:0",
                 container,
                 "/bin/sh",
                 "-c",
-                INIT_SCRIPT,
+                "cat >/flag && chown 0:0 /flag && chmod 0400 /flag",
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            input=f"{flag}\n",
             text=True,
             check=True,
         )
-    except subprocess.CalledProcessError as error:
-        output = (error.stdout or "").rstrip()
-        message = f"Failed to initialize {challenge_path} with /challenge/.init (exit code {error.returncode})."
-        if output:
-            message = f"{message}\n{output}"
-        else:
-            message = f"{message}\n/challenge/.init produced no output."
-        raise RuntimeError(message) from error
-    logger.debug(".init completed (if present)")
-    try:
+        logger.debug("flag written to /flag")
+        try:
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "--user=0:0",
+                    container,
+                    "/bin/sh",
+                    "-c",
+                    INIT_SCRIPT,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as error:
+            output = (error.stdout or "").rstrip()
+            message = f"Failed to initialize {challenge_path} with /challenge/.init (exit code {error.returncode})."
+            if output:
+                message = f"{message}\n{output}"
+            else:
+                message = f"{message}\n/challenge/.init produced no output."
+            raise RuntimeError(message) from error
+        logger.debug(".init completed (if present)")
         yield container, flag
     finally:
         logger.debug("killing container %s", container[:12])
