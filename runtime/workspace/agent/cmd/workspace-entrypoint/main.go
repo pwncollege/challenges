@@ -16,7 +16,11 @@ import (
 
 const agentUID = 1000
 const agentGID = 1000
+const challengeBin = "/challenge/bin"
+const challengeRunDir = "/run/challenge"
+const challengeRunBin = "/run/challenge/bin"
 const workspaceRunDir = "/run/workspace"
+const workspaceProfile = "/run/workspace/profile"
 const workspaceUserRunDir = "/run/workspace/user"
 const workspaceServicesDir = "/run/workspace/user/services"
 
@@ -142,11 +146,13 @@ func prepareWorkspace(config workspaceConfig) error {
 }
 
 func setupRunDirectories() error {
-	if err := os.MkdirAll(workspaceRunDir, 0755); err != nil {
-		return err
-	}
-	if err := os.Chmod(workspaceRunDir, 0755); err != nil {
-		return err
+	for _, directory := range []string{challengeRunDir, workspaceRunDir} {
+		if err := os.MkdirAll(directory, 0755); err != nil {
+			return err
+		}
+		if err := os.Chmod(directory, 0755); err != nil {
+			return err
+		}
 	}
 	for _, directory := range []string{workspaceUserRunDir, workspaceServicesDir} {
 		if err := os.MkdirAll(directory, 0700); err != nil {
@@ -159,7 +165,47 @@ func setupRunDirectories() error {
 			return err
 		}
 	}
+	if err := linkChallengeBin(); err != nil {
+		return err
+	}
+	if err := linkWorkspaceProfile(); err != nil {
+		return err
+	}
 	return linkServiceDefinitions()
+}
+
+func linkChallengeBin() error {
+	if _, err := os.Stat(challengeBin); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := os.Remove(challengeRunBin); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.Symlink(challengeBin, challengeRunBin)
+}
+
+func linkWorkspaceProfile() error {
+	target, err := workspaceProfileTarget()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(workspaceProfile); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.Symlink(target, workspaceProfile)
+}
+
+func workspaceProfileTarget() (string, error) {
+	if len(os.Args) > 0 && filepath.IsAbs(os.Args[0]) {
+		return filepath.Clean(filepath.Join(filepath.Dir(os.Args[0]), "..")), nil
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(executable), "..")), nil
 }
 
 func runChallengeInit() error {
@@ -306,27 +352,11 @@ func linkServiceDefinitions() error {
 }
 
 func serviceDefinitionsDir() (string, error) {
-	candidates := make([]string, 0, 3)
-	if workspace := os.Getenv("PWN_WORKSPACE"); workspace != "" {
-		candidates = append(candidates, filepath.Join(workspace, "share", "workspace", "services"))
-	}
-	if len(os.Args) > 0 && filepath.IsAbs(os.Args[0]) {
-		candidates = append(candidates, filepath.Join(filepath.Dir(os.Args[0]), "..", "share", "workspace", "services"))
-	}
-	executable, err := os.Executable()
-	if err != nil {
+	directory := filepath.Join(workspaceProfile, "share", "workspace", "services")
+	if _, err := os.Stat(directory); err != nil {
 		return "", err
 	}
-	candidates = append(candidates, filepath.Join(filepath.Dir(executable), "..", "share", "workspace", "services"))
-
-	for _, candidate := range candidates {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return "", err
-		}
-	}
-	return "", fmt.Errorf("workspace service definitions not found in %v", candidates)
+	return directory, nil
 }
 
 func writeFlag(flag string) error {
