@@ -288,17 +288,3 @@ resources:
   - id: ramp-catflag-invocation
     name: ramp-catflag-invocation
     type: challenge
-  - type: header
-    content: 2025 Descriptor and Dispatch Chains
-  - id: chain-cve-2025-13226-446113730
-    name: chain-cve-2025-13226-446113730
-    type: challenge
-  - id: chain-cve-2025-13228-446113730
-    name: chain-cve-2025-13228-446113730
-    type: challenge
-  - id: chain-cve-2025-13228-452605803
-    name: chain-cve-2025-13228-452605803
-    type: challenge
-  - id: chain-cve-2025-13230-452605803
-    name: chain-cve-2025-13230-452605803
-    type: challenge

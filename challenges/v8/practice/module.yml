@@ -19,6 +19,10 @@ resources:
     name: chain-cve-2025-13226-452605803
     type: challenge
     description: "CVE-2025-13226 plus Chromium issue 452605803: Wasm custom-descriptor subtype-validation confusion to cage read/write, then dispatch-table corruption to escape the V8 heap sandbox."
+  - id: chain-cve-2025-13226-446113730
+    name: chain-cve-2025-13226-446113730
+    type: challenge
+    description: "CVE-2025-13226 plus Chromium issue 446113730: Wasm custom-descriptor subtype-validation confusion to cage read/write, then stale Wasm dispatch-table growth to reclaim code-pointer-table state and escape the V8 heap sandbox."
   - id: chain-cve-2025-13227-452605803
     name: chain-cve-2025-13227-452605803
     type: challenge
@@ -27,6 +31,14 @@ resources:
     name: chain-cve-2025-13227-446113730
     type: challenge
     description: "CVE-2025-13227 plus Chromium issue 446113730: Wasm custom-descriptor confusion to cage read/write, then stale Wasm dispatch-table growth to reclaim code-pointer-table state and escape the V8 heap sandbox."
+  - id: chain-cve-2025-13228-452605803
+    name: chain-cve-2025-13228-452605803
+    type: challenge
+    description: "CVE-2025-13228 plus Chromium issue 452605803: Wasm ref.get_desc exactness confusion to cage read/write, then dispatch-table corruption to escape the V8 heap sandbox."
+  - id: chain-cve-2025-13228-446113730
+    name: chain-cve-2025-13228-446113730
+    type: challenge
+    description: "CVE-2025-13228 plus Chromium issue 446113730: Wasm ref.get_desc exactness confusion to cage read/write, then stale Wasm dispatch-table growth to reclaim code-pointer-table state and escape the V8 heap sandbox."
   - id: chain-cve-2025-13229-452605803
     name: chain-cve-2025-13229-452605803
     type: challenge
@@ -35,6 +47,10 @@ resources:
     name: chain-cve-2025-13229-446113730
     type: challenge
     description: "CVE-2025-13229 plus Chromium issue 446113730: imported ref.func exactness confusion to cage read/write, then stale Wasm dispatch-table growth to reclaim code-pointer-table state and escape the V8 heap sandbox."
+  - id: chain-cve-2025-13230-452605803
+    name: chain-cve-2025-13230-452605803
+    type: challenge
+    description: "CVE-2025-13230 plus Chromium issue 452605803: Wasm JS-to-Wasm exactness confusion to cage read/write, then dispatch-table corruption to escape the V8 heap sandbox."
   - id: chain-cve-2025-13230-446113730
     name: chain-cve-2025-13230-446113730
     type: challenge
