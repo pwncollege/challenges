@@ -150,6 +150,9 @@ def run_challenge(
             check=True,
         )
         logger.debug("flag written to /flag")
+        init_stdout = "/tmp/pwnshop-init.stdout"
+        init_stderr = "/tmp/pwnshop-init.stderr"
+        # Capture through container files so background daemons cannot keep host pipes open.
         init_result = subprocess.run(
             [
                 "docker",
@@ -158,15 +161,39 @@ def run_challenge(
                 container,
                 "/bin/sh",
                 "-c",
-                "[ ! -e /challenge/.init ] || /challenge/.init",
+                (
+                    'stdout="$1"; stderr="$2"; '
+                    'rm -f "$stdout" "$stderr"; '
+                    '[ ! -e /challenge/.init ] || /challenge/.init >"$stdout" 2>"$stderr"'
+                ),
+                "sh",
+                init_stdout,
+                init_stderr,
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
         if init_result.returncode:
-            stdout = init_result.stdout.strip() or "<empty>"
-            stderr = init_result.stderr.strip() or "<empty>"
+            def read_init_output(path: str) -> str:
+                output = subprocess.check_output(
+                    [
+                        "docker",
+                        "exec",
+                        "--user=0:0",
+                        container,
+                        "/bin/sh",
+                        "-c",
+                        '[ ! -e "$1" ] || cat "$1"',
+                        "sh",
+                        path,
+                    ],
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                )
+                return output.strip() or "<empty>"
+
+            stdout = read_init_output(init_stdout)
+            stderr = read_init_output(init_stderr)
             logger.error(
                 ".init failed for %s in container %s with exit code %d\nstdout:\n%s\nstderr:\n%s",
                 challenge_path,
