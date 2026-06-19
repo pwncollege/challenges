@@ -3063,6 +3063,50 @@ def save_resume_state(path: pathlib.Path, state: dict[str, Any]) -> None:
     path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
 
 
+# Phases in execution order, with the artifact that proves each one finished. Validation has
+# no standalone "passed" marker, but it runs before casts/pr-body/create-pr, so a later
+# artifact implies it completed. Used to resume runs created before resume-state.json existed.
+_RESUME_PHASE_MARKERS = [
+    ("analysis", "analysis.md"),
+    ("implementation", "implementation-notes.md"),
+    ("validation", None),
+    ("casts", "ux-review.md"),
+    ("pr-body", "pr-body.md"),
+    ("create-pr", "pr-url.txt"),
+]
+
+
+def infer_completed_phases(artifact_dir: pathlib.Path) -> list[str]:
+    """Best-effort reconstruction of finished phases from artifacts, for runs with no
+    resume-state.json. Phases are sequential, so the furthest non-empty artifact implies all
+    earlier phases (validation included) also completed."""
+
+    def present(name: Optional[str]) -> bool:
+        if not name:
+            return False
+        path = artifact_dir / name
+        return path.is_file() and path.stat().st_size > 0
+
+    highest = -1
+    for index, (_phase, marker) in enumerate(_RESUME_PHASE_MARKERS):
+        if present(marker):
+            highest = index
+    if highest < 0:
+        return []
+    return [phase for phase, _ in _RESUME_PHASE_MARKERS[: highest + 1]]
+
+
+def resumed_test_log(
+    artifact_dir: pathlib.Path, resume_state: dict[str, Any]
+) -> pathlib.Path:
+    """The test log to reference for the PR body when validation is reused on resume."""
+    stored = resume_state.get("test_log")
+    if stored and pathlib.Path(stored).exists():
+        return pathlib.Path(stored)
+    logs = sorted(artifact_dir.glob("pwnshop-test-attempt-*.log"))
+    return logs[-1] if logs else (artifact_dir / "pwnshop-test-skipped.log")
+
+
 def existing_pr_url(repo: pathlib.Path) -> Optional[str]:
     """URL of an open PR for the current branch, or None (used to resume into watching)."""
     if not shutil.which("gh"):
@@ -3289,6 +3333,14 @@ def feedback_command(
     resume_state_path = artifact_dir / "resume-state.json"
     resume_state = load_resume_state(resume_state_path) if resuming else {"completed_phases": []}
     completed_phases = set(resume_state.get("completed_phases", []))
+    if resuming and not completed_phases and not resume_state_path.exists():
+        # Run predates resume-state.json; infer finished phases from its artifacts.
+        completed_phases = set(infer_completed_phases(artifact_dir))
+        if completed_phases:
+            click.echo(
+                "Resume: no checkpoint file; inferred completed phase(s) from artifacts: "
+                f"{', '.join(sorted(completed_phases))}"
+            )
 
     def phase_done(name: str) -> bool:
         return name in completed_phases
@@ -3458,7 +3510,7 @@ def feedback_command(
     if skip_tests:
         test_log.write_text("Tests skipped by --skip-tests.\n")
     elif phase_done("validation"):
-        test_log = pathlib.Path(resume_state.get("test_log") or test_log)
+        test_log = resumed_test_log(artifact_dir, resume_state)
         click.echo("Resume: skipping main validation (already passed in this run)")
     else:
         test_log = validate_with_fixes(
@@ -3479,7 +3531,7 @@ def feedback_command(
     if skip_casts or not changed_challenges:
         ux_review.write_text("Asciinema UX review skipped.\n")
     elif phase_done("casts"):
-        test_log = pathlib.Path(resume_state.get("test_log") or test_log)
+        test_log = resumed_test_log(artifact_dir, resume_state)
         click.echo("Resume: reusing recorded casts and UX review")
     else:
         click.echo(
