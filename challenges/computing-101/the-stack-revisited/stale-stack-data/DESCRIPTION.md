@@ -1,12 +1,5 @@
-In the last level, you read data sitting to the right of your current `rsp`, inside your caller's frame.
-Now you'll look the other way.
-
-When your code calls a function, that callee can move `rsp` left and use stack memory of its own.
-When it returns, it moves `rsp` back right, but the bytes it wrote are not automatically erased.
-They become stale stack data: ordinary memory left behind by code that already finished.
-Software could erase those bytes before returning, but erasing data means running more instructions and writing more memory, which has a performance cost.
-When the leftover data is sensitive, skipping that erasure can become a vulnerability.
-That vulnerable case is what this level explores.
+In the last level, you loaded one stale 8-byte value from an old callee frame.
+Now you'll use the same stale-stack idea on a byte buffer.
 
 This challenge passes your `solve` a pointer to a function named `read_flag`.
 Call that function first.
@@ -15,12 +8,21 @@ After it returns, that old frame is to the left of your current `rsp`, and the *
 
 Write a function called `solve` that calls the function pointer in `rdi`, then writes the stale flag bytes from the old callee frame to stdout.
 From `solve`'s perspective, those stale bytes sit at a negative offset from `rsp`; find the exact offset in `gdb` or read it from the checker output.
-For example, if the checker says the stale bytes start at `[rsp-0x40]`, an 8-byte read from that old frame would look like this:
+The important distinction is value versus address.
+If you wanted to load one 8-byte value from that old frame, you would use `mov`:
 
 ```asm
 mov rax, qword ptr [rsp-0x40]
 ```
 
+But `write` needs the address of the first byte in `rsi`, not the qword stored there as a value.
+For that, compute the address with `lea`:
+
+```asm
+lea rsi, [rsp-0x40]
+```
+
+That example offset is hypothetical; use the offset printed by the checker.
 Build it into a shared library and hand it to the grader:
 
 ```console

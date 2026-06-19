@@ -15,18 +15,22 @@ check_runtime_failure = "Hmm, that's not right:\n"
 
 
 def check_runtime(so_path):
-    flag = checker.read_flag().rstrip(b"\n").decode()
+    flag = checker.read_flag().rstrip(b"\n")
 
     print("")
     checker.print_prompt()
-    checker.slow_print(f"/challenge/harness {so_path} <flag>")
+    checker.slow_print(f"/challenge/harness {so_path}")
     print("")
     sys.stdout.flush()
 
-    result = subprocess.run(
-        ["/challenge/harness", so_path, flag],
-        timeout=5,
-    )
+    try:
+        result = subprocess.run(
+            ["/challenge/harness", so_path],
+            input=flag,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError("The harness did not finish within 5 seconds. Make sure your solve returns.") from None
     print("")
 
     if result.returncode < 0:
@@ -36,5 +40,9 @@ def check_runtime(so_path):
         sys.stderr.write(("Segmentation fault" if signum == signal.SIGSEGV else signame) + "\n")
         sys.stderr.flush()
         raise AssertionError(f"The harness crashed with {signame}.")
+
+    if result.returncode == 1:
+        raise AssertionError("Your solve returned without calling the callback function pointer.")
+    assert result.returncode == 0, f"The harness exited abnormally (status {result.returncode})."
 
     return True
