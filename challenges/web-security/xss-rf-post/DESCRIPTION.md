@@ -4,3 +4,10 @@ This challenge ratchets up the realism: the `/publish` now needs a `POST` reques
 Luckily, `fetch` supports this!
 
 Go figure out how to `POST`, and get the flag.
+
+----
+**DEBUGGING:**
+The debugging path is the same as the previous level, but isolate the `POST` request while you work.
+Open Firefox's console and Network tab, trigger your injected script, and confirm that the browser sends a `POST` to `/publish`.
+If no request appears, debug the HTML injection and JavaScript first.
+If the request appears with the wrong method or target, focus on the `fetch()` options.
