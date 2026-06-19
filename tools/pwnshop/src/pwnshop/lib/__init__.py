@@ -1,5 +1,6 @@
 import base64
 import contextlib
+import json
 import logging
 import os
 import pathlib
@@ -85,6 +86,20 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
     return rendered_directory
 
 
+def image_path(challenge_image: str) -> str:
+    image_env = json.loads(
+        subprocess.check_output(
+            ["docker", "image", "inspect", "--format={{json .Config.Env}}", challenge_image],
+            text=True,
+        )
+    )
+    for entry in image_env or []:
+        name, separator, value = entry.partition("=")
+        if separator and name == "PATH":
+            return value
+    return ""
+
+
 @contextlib.contextmanager
 def run_challenge(
     challenge_path: pathlib.Path,
@@ -115,6 +130,9 @@ def run_challenge(
     logger.debug("container runtime options for %s: %s", challenge_path, runtime_options)
     if volumes:
         logger.debug("mounting volumes: %s", volumes)
+    container_path = ":".join(
+        path for path in ["/run/challenge/bin", "/run/workspace/profile/bin", image_path(challenge_image)] if path
+    )
     container = None
     try:
         container = subprocess.check_output(
@@ -125,8 +143,7 @@ def run_challenge(
                 "--user=0:0",
                 f"--env=PWN_FLAG={flag}",
                 "--env=PWN_USER=hacker",
-                f"--env=PWN_WORKSPACE={workspace}",
-                f"--env=PATH={workspace}/bin:/challenge/bin:/run/workspace/bin:/run/dojo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                f"--env=PATH={container_path}",
                 "--volume=/nix:/nix:ro",
                 *runtime_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
