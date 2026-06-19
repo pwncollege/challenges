@@ -3360,6 +3360,34 @@ def feedback_command(
     if apply or create_pr or branch:
         prepare_branch(repo, branch, create_pr, run_id)
 
+    # Fast path: resuming a run that already opened its PR. The scrape only feeds analysis
+    # (already done), so re-running it just wastes time and prints misleading "scraping from
+    # PR #N" lines. Skip the whole pipeline and go straight back to watching that PR --
+    # which is what "resume my PR" means.
+    if resuming and create_pr and watch_pr and phase_done("create-pr"):
+        pr_url_path = artifact_dir / "pr-url.txt"
+        pr_url = pr_url_path.read_text().strip() if pr_url_path.exists() else ""
+        pr_url = pr_url or existing_pr_url(repo) or ""
+        if pr_url:
+            click.echo(
+                f"Resume: re-attaching to {pr_url}; continuing to watch "
+                "(skipping scrape and pipeline)"
+            )
+            watch_pull_request(
+                repo,
+                artifact_dir,
+                pr_url,
+                agent,
+                directions,
+                watch_pr_interval,
+                max_watch_fix_attempts,
+            )
+            return
+        click.echo(
+            "Resume: create-pr was already done but no PR URL was found; "
+            "falling through to the normal flow."
+        )
+
     env_channel_ids = os.environ.get("PWN_FEEDBACK_DISCORD_CHANNEL_IDS")
     selected_channel_ids = parse_channel_ids(channel_ids, env_channel_ids)
     until = utc_now()
