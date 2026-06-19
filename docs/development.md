@@ -48,6 +48,48 @@ When adding a dojo that needs encrypted tests or maintainer access, update `main
 Each challenge still builds as its own image from its rendered `/challenge` directory.
 Shared Dockerfiles and packages reuse Docker's layer cache, so the monorepo does not require one giant image per dojo.
 
+## Known Production Parity Constraints
+
+`pwnshop run` and `pwnshop test` use the local challenge runtime to approximate production, but privileged container behavior can still differ from deployed challenges.
+Treat production as the source of truth for kernel-global state and host-provided networking features.
+
+Production exposes `/proc/sys` read-only to challenge containers.
+Do not rely on a local privileged run that can write `/proc/sys`, and do not let `.init` scripts ignore a failed `sysctl -w`.
+Use `set -euo pipefail` in bash `.init` scripts, or `set -eu` in POSIX `sh`, and add an explicit post-check when the setting matters:
+
+```bash
+sysctl -w net.ipv4.ip_forward=1
+test "$(cat /proc/sys/net/ipv4/ip_forward)" = 1
+```
+
+The shared Ubuntu challenge base in `challenges/common/Dockerfile.j2` installs only the default Python/web packages unless a challenge adds more packages.
+It does not provide `iptables`, `iptables-legacy`, or `nft` by default.
+If a challenge needs firewall rules, add the needed package in the challenge Dockerfile and prefer `iptables-legacy` over `nft`, since production does not provide nftables.
+Check the exact binary in the built challenge:
+
+```bash
+./pwnshop run --user 0 challenges/MODULE/CHALLENGE /bin/sh -lc 'command -v iptables-legacy && ! command -v nft'
+```
+
+Failed `/challenge/.init` output is surfaced by `pwnshop`, so a minimal smoke check for init diagnostics is:
+
+```bash
+tmp="$(mktemp -d challenges/.runtime-smoke.XXXXXX)"
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/challenge"
+cat > "$tmp/challenge/Dockerfile.j2" <<'EOF'
+FROM ubuntu:24.04
+COPY . /challenge
+EOF
+cat > "$tmp/challenge/.init" <<'EOF'
+#!/bin/sh
+echo "visible init failure" >&2
+exit 42
+EOF
+chmod +x "$tmp/challenge/.init"
+./pwnshop run "$tmp" /bin/true
+```
+
 ## Troubleshooting
 
 `nix develop` prompts for sudo every time:

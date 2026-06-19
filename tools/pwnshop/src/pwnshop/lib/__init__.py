@@ -18,6 +18,19 @@ import yaml
 logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
+INIT_SCRIPT = r"""
+if [ -e /challenge/.init ]; then
+    init_log="$(mktemp)"
+    /challenge/.init >"$init_log" 2>&1
+    init_status=$?
+    if [ "$init_status" -ne 0 ]; then
+        cat "$init_log"
+        rm -f "$init_log"
+        exit "$init_status"
+    fi
+    rm -f "$init_log"
+fi
+"""
 
 clang_format = shutil.which("clang-format")
 if not clang_format:
@@ -149,20 +162,30 @@ def run_challenge(
         check=True,
     )
     logger.debug("flag written to /flag")
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            "--user=0:0",
-            container,
-            "/bin/sh",
-            "-c",
-            "[ ! -e /challenge/.init ] || /challenge/.init",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=True,
-    )
+    try:
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "--user=0:0",
+                container,
+                "/bin/sh",
+                "-c",
+                INIT_SCRIPT,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as error:
+        output = (error.stdout or "").rstrip()
+        message = f"Failed to initialize {challenge_path} with /challenge/.init (exit code {error.returncode})."
+        if output:
+            message = f"{message}\n{output}"
+        else:
+            message = f"{message}\n/challenge/.init produced no output."
+        raise RuntimeError(message) from error
     logger.debug(".init completed (if present)")
     try:
         yield container, flag
