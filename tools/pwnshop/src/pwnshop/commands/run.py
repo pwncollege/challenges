@@ -58,40 +58,43 @@ def run_command(challenge_path, user, volumes, cast_to, timeout, command):
         raise click.ClickException(str(error)) from error
     resolved_volumes = [path.resolve() for path in volumes]
     logger.info("running %s as uid=%d, command=%s", challenge_path, user, list(command))
-    with lib.run_challenge(challenge_path, image_id, volumes=resolved_volumes) as (container, flag):
-        docker_command = ["docker", "exec", f"--user={user}", "-it", container, *command]
-        try:
-            if cast_to is None:
-                subprocess.run(docker_command, timeout=timeout)
-            else:
-                if not shutil.which("asciinema"):
-                    raise click.ClickException("--cast-to requires `asciinema` on PATH (it's in the nix dev shell).")
-                cols, rows = shutil.get_terminal_size((100, 30))
-                logger.info("recording session to %s", cast_to)
-                subprocess.run(
-                    [
-                        "asciinema",
-                        "rec",
-                        "--command",
-                        shlex.join(docker_command),
-                        "--overwrite",
-                        "--quiet",
-                        "--cols",
-                        str(cols),
-                        "--rows",
-                        str(rows),
-                        "--title",
-                        f"{challenge_path.name} (pwnshop run)",
-                        str(cast_to),
-                    ],
-                    check=True,
-                    timeout=timeout,
-                )
-                click.echo(f"Session recorded to {cast_to}", err=True)
-        except subprocess.TimeoutExpired as error:
-            # Leaving the `with` block tears the container down via the docker daemon,
-            # which kills every process inside it -- including SUID-root ones that a
-            # command running as `user` (or an in-container `timeout`) could never signal.
-            raise click.ClickException(
-                f"command did not finish within {timeout:g}s; aborting and tearing down the container"
-            ) from error
+    try:
+        with lib.run_challenge(challenge_path, image_id, volumes=resolved_volumes) as (container, flag):
+            docker_command = ["docker", "exec", f"--user={user}", "-it", container, *command]
+            try:
+                if cast_to is None:
+                    subprocess.run(docker_command, timeout=timeout)
+                else:
+                    if not shutil.which("asciinema"):
+                        raise click.ClickException("--cast-to requires `asciinema` on PATH (it's in the nix dev shell).")
+                    cols, rows = shutil.get_terminal_size((100, 30))
+                    logger.info("recording session to %s", cast_to)
+                    subprocess.run(
+                        [
+                            "asciinema",
+                            "rec",
+                            "--command",
+                            shlex.join(docker_command),
+                            "--overwrite",
+                            "--quiet",
+                            "--cols",
+                            str(cols),
+                            "--rows",
+                            str(rows),
+                            "--title",
+                            f"{challenge_path.name} (pwnshop run)",
+                            str(cast_to),
+                        ],
+                        check=True,
+                        timeout=timeout,
+                    )
+                    click.echo(f"Session recorded to {cast_to}", err=True)
+            except subprocess.TimeoutExpired as error:
+                # Leaving the `with` block tears the container down via the docker daemon,
+                # which kills every process inside it -- including SUID-root ones that a
+                # command running as `user` (or an in-container `timeout`) could never signal.
+                raise click.ClickException(
+                    f"command did not finish within {timeout:g}s; aborting and tearing down the container"
+                ) from error
+    except (RuntimeError, subprocess.CalledProcessError) as error:
+        raise click.ClickException(str(error)) from error

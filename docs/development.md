@@ -34,6 +34,15 @@ Then use `pwnshop` for all workflows:
 ./pwnshop test web-security/path-traversal-1
 ```
 
+## Runtime Parity Checks
+
+Privileged challenges should still verify the kernel or network side effects they rely on from inside the challenge runtime.
+For example, if `.init` changes a `/proc/sys` value, read it back and fail when it did not take effect.
+If a challenge depends on firewall behavior, use the backend that production expects and check that the rules were installed and effective.
+
+The dev shell runtime is configured for challenge testing, and `pwnshop` surfaces `.init` stdout and stderr when startup setup fails.
+Do not paper over a local `.init` failure with host-Docker behavior or a hand-run container; fix the challenge setup or the runtime expectation that the failing check exposed.
+
 ## Community Dojo Workflow
 
 Add new or ported community dojo content under `challenges/`.

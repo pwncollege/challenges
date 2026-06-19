@@ -21,9 +21,19 @@ COPY --chmod=755 <<'EOF' /challenge/init-coal.sh
 
 set -eu
 
+cleanup() {
+    mount -o remount,ro /proc/sys || true
+}
+
+trap cleanup EXIT
 mount -o remount,rw /proc/sys
-echo coal > /proc/sys/kernel/core_pattern
-mount -o remount,ro /proc/sys
+printf '%s\n' coal > /proc/sys/kernel/core_pattern
+
+actual="$(cat /proc/sys/kernel/core_pattern)"
+if [ "$actual" != coal ]; then
+    echo "expected /proc/sys/kernel/core_pattern to be coal, got: $actual" >&2
+    exit 1
+fi
 EOF
 
 RUN cd /challenge && ln -s ./init-coal.sh ./.init

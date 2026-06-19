@@ -133,38 +133,54 @@ def run_challenge(
         .strip()
     )
     logger.debug("container started: %s", container[:12])
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            "--interactive",
-            "--user=0:0",
-            container,
-            "/bin/sh",
-            "-c",
-            "cat >/flag && chown 0:0 /flag && chmod 0400 /flag",
-        ],
-        input=f"{flag}\n",
-        text=True,
-        check=True,
-    )
-    logger.debug("flag written to /flag")
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            "--user=0:0",
-            container,
-            "/bin/sh",
-            "-c",
-            "[ ! -e /challenge/.init ] || /challenge/.init",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=True,
-    )
-    logger.debug(".init completed (if present)")
     try:
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "--interactive",
+                "--user=0:0",
+                container,
+                "/bin/sh",
+                "-c",
+                "cat >/flag && chown 0:0 /flag && chmod 0400 /flag",
+            ],
+            input=f"{flag}\n",
+            text=True,
+            check=True,
+        )
+        logger.debug("flag written to /flag")
+        init_result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                "--user=0:0",
+                container,
+                "/bin/sh",
+                "-c",
+                "[ ! -e /challenge/.init ] || /challenge/.init",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if init_result.returncode:
+            stdout = init_result.stdout.strip() or "<empty>"
+            stderr = init_result.stderr.strip() or "<empty>"
+            logger.error(
+                ".init failed for %s in container %s with exit code %d\nstdout:\n%s\nstderr:\n%s",
+                challenge_path,
+                container[:12],
+                init_result.returncode,
+                stdout,
+                stderr,
+            )
+            raise RuntimeError(
+                f".init failed for {challenge_path} with exit code {init_result.returncode}\n"
+                f"stdout:\n{stdout}\n"
+                f"stderr:\n{stderr}"
+            )
+        logger.debug(".init completed (if present)")
         yield container, flag
     finally:
         logger.debug("killing container %s", container[:12])

@@ -6,4 +6,11 @@ touch /root/access.log
 chmod 600 /root/access.log
 
 nohup /usr/bin/python3 /challenge/turkey.py > /root/access.log 2>&1 &
+turkey_pid=$!
+sleep 1
+if ! kill -0 "$turkey_pid" 2>/dev/null; then
+    cat /root/access.log >&2
+    exit 1
+fi
+
 rm /challenge/.init
