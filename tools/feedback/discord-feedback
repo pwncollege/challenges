@@ -3009,6 +3009,7 @@ def create_pull_request(
     title: str,
     body_path: pathlib.Path,
     draft: bool,
+    require_changes: bool = True,
 ) -> str:
     if not shutil.which("gh"):
         raise click.ClickException(
@@ -3016,9 +3017,14 @@ def create_pull_request(
         )
 
     if not commit_and_push(repo, title):
-        raise click.ClickException(
-            "No repository changes to commit; refusing to open an empty PR."
-        )
+        if require_changes:
+            raise click.ClickException(
+                "No repository changes to commit; refusing to open an empty PR."
+            )
+        # Resume after an interruption between push and PR creation: the branch is already
+        # committed, so there's nothing new to commit -- just make sure it's pushed, then
+        # open the PR from the existing commits instead of failing on the clean worktree.
+        subprocess.run(["git", "push", "-u", "origin", "HEAD"], cwd=repo, check=True)
 
     base_branch = base_ref.split("/", 1)[1] if "/" in base_ref else base_ref
     command = [
@@ -3630,6 +3636,9 @@ def feedback_command(
                 "Address challenge feedback from Discord",
                 pr_body,
                 draft_pr,
+                # On resume the work may already be committed/pushed; allow opening the PR
+                # from existing commits instead of demanding a fresh change.
+                require_changes=not resuming,
             )
             click.echo(f"Opened PR: {pr_url}")
         mark_phase_done("create-pr")
