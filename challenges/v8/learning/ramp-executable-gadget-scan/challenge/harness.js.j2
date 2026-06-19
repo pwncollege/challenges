@@ -1,0 +1,132 @@
+{% include "../../../common/provided-process-memory.js.j2" %}
+
+const primitive = createProvidedProcessMemory();
+
+Object.defineProperty(globalThis, "Sandbox", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+});
+
+const PROCESS_IMAGE_BASE = 0x555555554000n;
+const ELF_MAGIC_QWORD = 0x00010102464c457fn;
+const PT_LOAD = 1;
+const PF_X = 1;
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function read8(address) {
+    address = BigInt(address);
+    const aligned = address & ~7n;
+    return Number((primitive.read64(aligned) >> ((address - aligned) * 8n)) & 0xffn);
+}
+
+function read16(address) {
+    return read8(address) | (read8(BigInt(address) + 1n) << 8);
+}
+
+function read32(address) {
+    return (
+        read8(address) |
+        (read8(BigInt(address) + 1n) << 8) |
+        (read8(BigInt(address) + 2n) << 16) |
+        (read8(BigInt(address) + 3n) << 24)
+    ) >>> 0;
+}
+
+function read64(address) {
+    return primitive.read64(BigInt(address));
+}
+
+let learnerReadCalls = 0;
+
+function learnerRead8(address) {
+    learnerReadCalls++;
+    return read8(address);
+}
+
+function learnerRead64(address) {
+    learnerReadCalls++;
+    return read64(address);
+}
+
+function executableSegment() {
+    if (read64(PROCESS_IMAGE_BASE) !== ELF_MAGIC_QWORD) {
+        fail("Harness error: unexpected process-image ELF base.");
+    }
+
+    const ePhOff = read64(PROCESS_IMAGE_BASE + 0x20n);
+    const ePhEntSize = read16(PROCESS_IMAGE_BASE + 0x36n);
+    const ePhNum = read16(PROCESS_IMAGE_BASE + 0x38n);
+
+    for (let i = 0; i < ePhNum; i++) {
+        const ph = PROCESS_IMAGE_BASE + ePhOff + BigInt(i * ePhEntSize);
+        const type = read32(ph);
+        const flags = read32(ph + 4n);
+        const vaddr = read64(ph + 0x10n);
+        const memsz = read64(ph + 0x28n);
+        if (type === PT_LOAD && (flags & PF_X) !== 0) {
+            return Object.freeze({ start: PROCESS_IMAGE_BASE + vaddr, size: memsz });
+        }
+    }
+    fail("Harness error: failed to locate executable segment.");
+}
+
+function normalizeAddress(value, name) {
+    if (typeof value === "bigint") return value;
+    const asNumber = Number(value);
+    if (!Number.isSafeInteger(asNumber)) {
+        fail(`${name} must be returned as a BigInt process address.`);
+    }
+    return BigInt(asNumber);
+}
+
+function checkPattern(address, pattern, name) {
+    address = normalizeAddress(address, name);
+    if (address < execStart || address + BigInt(pattern.length) > execStart + execSize) {
+        fail(`${name} must point inside the executable segment.`);
+    }
+    for (let i = 0; i < pattern.length; i++) {
+        const byte = read8(address + BigInt(i));
+        if (byte !== pattern[i]) {
+            fail(`${name} does not point at the requested gadget bytes.`);
+        }
+    }
+}
+
+const segment = executableSegment();
+const execStart = segment.start;
+const execSize = segment.size;
+const api = Object.freeze({
+    execStart,
+    execSize,
+    read8: learnerRead8,
+    read64: learnerRead64,
+    patterns: Object.freeze({
+        popArgs: Object.freeze([0x58, 0x59, 0x5a, 0x5e, 0x5f, 0x41, 0x58, 0x41, 0x59, 0x41, 0x5a, 0x5d, 0xc3]),
+        ret: Object.freeze([0xc3]),
+    }),
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+const result = solve(api);
+if (result === null || typeof result !== "object") {
+    fail("Return an object with popArgs and ret.");
+}
+
+for (const name of ["popArgs", "ret"]) {
+    checkPattern(result[name], api.patterns[name], name);
+}
+
+if (learnerReadCalls === 0) {
+    fail("Scan the provided executable segment with the provided read helpers.");
+}
+
+print("__PWN_SUCCESS_MARKER__");

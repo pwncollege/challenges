@@ -1,0 +1,45 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/python -I
+
+import psutil
+import socket
+import time
+import os
+
+from dojjail import Host, Network
+
+flag = open("/flag").read()
+parent_process = psutil.Process(os.getppid())
+
+class ServerHost(Host):
+    def entrypoint(self):
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server_socket.bind(("0.0.0.0", 31337))
+        while True:
+            try:
+                client_message, (client_host, client_port) = server_socket.recvfrom(1024)
+                if client_message.strip() == b"ACTION?":
+                    server_socket.sendto(b"NONE", (client_host, client_port))
+            except ConnectionError:
+                continue
+
+class ClientHost(Host):
+    def entrypoint(self):
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        while True:
+            time.sleep(1)
+            try:
+                client_socket.sendto(b"ACTION?", ("10.0.0.3", 31337))
+                message, (peer_host, peer_port) = client_socket.recvfrom(1024)
+                if peer_host == "10.0.0.3" and peer_port == 31337 and message.startswith(b"FLAG"):
+                    _, flag_host, flag_port = message.strip().split(b":")
+                    client_socket.sendto(flag.encode(), (flag_host, int(flag_port)))
+            except (ConnectionError, ValueError):
+                continue
+
+user_host = Host("ip-10-0-0-1", privileged_uid=parent_process.uids().effective)
+client_host = ClientHost("ip-10-0-0-2")
+server_host = ServerHost("ip-10-0-0-3")
+network = Network(hosts={user_host: "10.0.0.1", client_host: "10.0.0.2", server_host: "10.0.0.3"}, subnet="10.0.0.0/24")
+network.run()
+
+user_host.interactive(environ=parent_process.environ())

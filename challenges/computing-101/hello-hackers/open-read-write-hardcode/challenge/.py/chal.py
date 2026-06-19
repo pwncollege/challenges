@@ -1,11 +1,10 @@
 import __main__ as checker
 import os
+import time
 
-# Run the learner's own complete program as-is (executable mode --- no builder rebuild),
-# so it executes with exactly the privileges we give it rather than the builder's SUID
-# wrapper. These levels need the program to read the real /flag, so we run it as root.
-executable = True
 give_flag = False
+
+FLAG_SIZE = 64
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -16,12 +15,12 @@ check_runtime_success = "Your program opened, read, and wrote the flag!"
 check_runtime_failure = "Hmm, that's not right:\n"
 
 def check_disassembly(disas):
-	mov_operands = checker.mov_operands(disas)
+	mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
 
 	byte_stores = [dst for dst, _ in mov_operands if "byte ptr [rsp" in dst]
 	assert len(byte_stores) >= 6, (
 		"You need to write the filename '/flag\\0' byte by byte onto the stack!\n"
-		'Use instructions such as "mov BYTE PTR [rsp], \'/\'", one byte per character, plus the null terminator.'
+		"Use 'mov BYTE PTR [rsp], '/'' for each character, plus the null terminator."
 	)
 
 	assert ['rax', '2'] in mov_operands, (
@@ -43,32 +42,32 @@ def check_disassembly(disas):
 		"You need to set rdi to 42 (0x2a), the exit code!"
 	)
 
-	# Write back exactly what you read: write's length (rdx) must come from read's
-	# return value (rax), the idiom you learned in read-exact --- not a hardcoded count.
-	checker.assert_write_count_from_read(disas)
-
-	# Find the exit syscall (the last syscall) by scanning, not by assuming it is the
-	# final instruction --- a program may legitimately store data after its code. The
-	# last rax written before that syscall must be 60 (0x3c) for exit.
-	syscall_indices = [i for i, insn in enumerate(disas) if insn.mnemonic == "syscall"]
-	assert syscall_indices, "You need to invoke the exit syscall!"
-	rax_before_exit = [m for m in checker.mov_operands(disas[:syscall_indices[-1]]) if m[0] == 'rax']
-	assert rax_before_exit and rax_before_exit[-1] == ['rax', '0x3c'], (
-		"Your last assignment to rax before the exit syscall should be 60 (0x3c),\n"
+	last_rax = max(i for i, m in enumerate(mov_operands) if m[0] == 'rax')
+	assert mov_operands[last_rax] == ['rax', '0x3c'], (
+		"Your last assignment to rax should be 60 (0x3c) for the exit syscall,\n"
 		"but you're overwriting it afterwards!"
+	)
+
+	assert disas[-1].mnemonic == "syscall", (
+		f"Your last instruction should be 'syscall', but you used '{disas[-1].mnemonic}'!"
 	)
 
 	return True
 
 def check_runtime(filename):
-	# The program opens and reads the real /flag, so run it as root --- the privilege a
-	# real flag-reading program holds for that protected (0400, root-owned) file. We
-	# never relax the flag's permissions.
-	saved_ids = os.getresuid()
 	try:
 		print("")
 
-		os.setresuid(0, 0, 0)
+		# pad /flag to exactly FLAG_SIZE bytes so the student's program reads clean data
+		os.seteuid(0)
+		with open("/flag", "r") as f:
+			flag_content = f.read().strip()
+		padded = (flag_content + "\n").ljust(FLAG_SIZE)[:FLAG_SIZE]
+		with open("/flag", "w") as f:
+			f.write(padded)
+		os.chmod("/flag", 0o644)
+		os.seteuid(65534)
+
 		returncode = checker.dramatic_command(filename)
 
 		checker.dramatic_command("echo $?", actual_command=f"echo {returncode}")
@@ -76,7 +75,9 @@ def check_runtime(filename):
 			f"Your program should exit with code 42, but it exited with {returncode}!"
 		)
 	finally:
-		os.setresuid(*saved_ids)
+		os.seteuid(0)
+		os.chmod("/flag", 0o600)
+		os.seteuid(65534)
 		checker.dramatic_command("")
 		print("")
 

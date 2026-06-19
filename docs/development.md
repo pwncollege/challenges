@@ -34,20 +34,6 @@ Then use `pwnshop` for all workflows:
 ./pwnshop test web-security/path-traversal-1
 ```
 
-## Community Dojo Workflow
-
-Add new or ported community dojo content under `challenges/`.
-A full dojo uses `challenges/$DOJO_ID/dojo.yml`, module ordering lives in each `module.yml`, and challenge code/tests live under that module's challenge directory.
-
-After changing dojo or module YAML, run `tools/dojo/parse-dojo-yml`.
-After changing a challenge, run `pwnshop test` for that challenge from inside `nix develop`.
-
-Private solves in `tests_private/` are encrypted with the git-crypt filter configured by the dojo or module `.gitattributes`.
-When adding a dojo that needs encrypted tests or maintainer access, update `maintainers.yml` and check it with `tools/maintainers/check-maintainers`.
-
-Each challenge still builds as its own image from its rendered `/challenge` directory.
-Shared Dockerfiles and packages reuse Docker's layer cache, so the monorepo does not require one giant image per dojo.
-
 ## Troubleshooting
 
 `nix develop` prompts for sudo every time:

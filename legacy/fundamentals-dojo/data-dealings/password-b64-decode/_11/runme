@@ -1,0 +1,23 @@
+#!/usr/bin/exec-suid -- /bin/python3 -I
+
+import sys
+
+import base64
+
+
+print("Enter the password:")
+entered_password = sys.stdin.buffer.read1()
+correct_password = b"FavJIIOzcfU="
+
+print(f"Read {len(entered_password)} bytes.")
+
+
+correct_password = base64.b64decode(correct_password.decode("l1"))
+
+
+if entered_password == correct_password:
+    print("Congrats! Here is your flag:")
+    print(open("/flag").read().strip())
+else:
+    print("Incorrect!")
+    sys.exit(1)

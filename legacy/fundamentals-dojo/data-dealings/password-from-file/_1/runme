@@ -1,0 +1,26 @@
+#!/usr/bin/exec-suid -- /bin/python3 -I
+
+import sys
+
+
+try:
+    entered_password = open("chfl", "rb").read()
+except FileNotFoundError:
+    print("Input file not found...")
+    sys.exit(1)
+if b"\n" in entered_password:
+    print("Password has newlines /")
+    print("Editors add them sometimes /")
+    print("Learn to remove them.")
+
+correct_password = b"norpzzrr"
+
+print(f"Read {len(entered_password)} bytes.")
+
+
+if entered_password == correct_password:
+    print("Congrats! Here is your flag:")
+    print(open("/flag").read().strip())
+else:
+    print("Incorrect!")
+    sys.exit(1)

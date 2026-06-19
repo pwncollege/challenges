@@ -8,16 +8,10 @@ import os
 sys.path.append("/challenge")
 import chio
 
-
-def check_challenge_solve(process):
-    assert os.path.basename(process.exe()) in ["sh", "bash"]
-    assert "/challenge/solve" in process.cmdline()
-
-
 try:
     time.sleep(1) # sleep to give the parent process enough time to spawn the partner, in case of stdout piping
     partner = psutil.Process(chio.resolve_fd_pipe_partner(os.getpid(), 1, parent_ok=False))
-    check_challenge_solve(partner)
+    chio.check_challenge_shellscript(partner)
     sys.exit(0)
 except AssertionError as e:
     sys.exit(1)

@@ -3,25 +3,22 @@ import tempfile
 import time
 import os
 
-# Run the learner's own complete program as-is (executable mode --- no builder rebuild).
-executable = True
 give_flag = False
 
-# Fixed challenge I/O size; keep this above the repo's minimum flag buffer size.
-FLAG_SIZE = 128
+FLAG_SIZE = 64
 
 try:
 	_flag = open("/flag").read().strip()
 except FileNotFoundError:
 	_flag = "pwn.college{test_placeholder_00000000000000}"
 
-_flag_padded = (_flag + "\n").encode().ljust(FLAG_SIZE, b" ")[:FLAG_SIZE]
+_flag_padded = (_flag + "\n").ljust(FLAG_SIZE, "\r")[:FLAG_SIZE]
 _flag_masked = "pwn.college{" + "*" * (len(_flag) - len("pwn.college{}")) + "}"
 
 # Write padded flag to a temp file so the shell can pipe it as stdin
 _flag_stdin_file = tempfile.mktemp(prefix='check_flag_')
 with open(_flag_stdin_file, 'wb') as f:
-	f.write(_flag_padded)
+	f.write(_flag_padded.encode())
 
 check_disassembly_prologue = "Checking the assembly code..."
 check_disassembly_success = "Your assembly looks correct!"
@@ -34,7 +31,7 @@ check_runtime_failure = "Hmm, that's not right:\n"
 must_set_regs = [ "rax", "rdi", "rsi", "rdx" ]
 
 def check_disassembly(disas):
-	mov_operands = checker.mov_operands(disas)
+	mov_operands = [d.op_str.split(", ") for d in disas if d.mnemonic == 'mov']
 
 	set_regs = [dst for dst, _ in mov_operands]
 	assert set(set_regs) >= set(must_set_regs), (
@@ -77,7 +74,7 @@ def check_runtime(filename):
 		time.sleep(0.1)
 
 		actual_bytes = open("/tmp/stdout", "rb").read()
-		assert actual_bytes == _flag_padded, (
+		assert actual_bytes == _flag_padded.encode(), (
 			f"Your program should echo the flag to stdout!"
 		)
 

@@ -1,9 +1,3 @@
 #!/bin/bash
 
-if [ "$(id -u)" = 0 ]
-then
-	echo "Congratulations, you have run this command as root!"
-	echo "You can now read the flag yourself. Run: sudo cat /flag"
-else
-	fold -s <<< "You are the $(whoami) user... Run /challenge/run with sudo to read the flag."
-fi
+cat /challenge/DESCRIPTION.md

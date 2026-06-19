@@ -9,7 +9,6 @@ NBYTES = WIDTH // 8
 MOD = 1 << WIDTH                  # 2**WIDTH
 HIGH = 1 << (WIDTH - 1)           # the sign bit
 UNIT = "byte" if NBYTES == 1 else "bytes"
-MAX_ATTEMPTS = 3
 
 # Read the flag now, while we have the privileges to (this program is SUID).
 with open("/flag") as f:
@@ -33,28 +32,20 @@ def grouped(value):
 
 
 def ask(prompt, expected, *, kind=None, value=None):
-    for attempt in range(MAX_ATTEMPTS):
-        try:
-            answer = int(input(prompt).strip())
-        except (EOFError, ValueError):
-            print("\n  That wasn't a whole number.")
-        else:
-            if answer == expected:
-                print("  Correct!")
-                return
-
-            hint = ""
-            if kind == "signed" and answer == value:
-                hint = f" That's the UNSIGNED reading; subtract {MOD} for the signed value."
-            elif kind == "unsigned" and value is not None and answer == value - MOD:
-                hint = " That's the SIGNED reading; the unsigned value just adds the bits up."
-            print(f"  Not quite.{hint}")
-
-        if attempt < MAX_ATTEMPTS - 1:
-            print("  Try this one again.")
-
-    print("  Run me again when you're ready.")
-    sys.exit(1)
+    try:
+        answer = int(input(prompt).strip())
+    except (EOFError, ValueError):
+        print("\n  That wasn't a whole number. Run me again!")
+        sys.exit(1)
+    if answer != expected:
+        hint = ""
+        if kind == "signed" and answer == value:
+            hint = f" That's the UNSIGNED reading; subtract {MOD} for the signed value."
+        elif kind == "unsigned" and value is not None and answer == value - MOD:
+            hint = " That's the SIGNED reading; the unsigned value just adds the bits up."
+        print(f"  Not quite --- the answer was {expected}.{hint}")
+        sys.exit(1)
+    print("  Correct!")
 
 
 for i, value in enumerate(order, 1):

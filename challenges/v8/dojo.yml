@@ -1,0 +1,9 @@
+name: V8
+type: public
+id: v8
+award:
+  emoji: "🧩"
+modules:
+- id: learning
+- id: practice
+- id: legacy

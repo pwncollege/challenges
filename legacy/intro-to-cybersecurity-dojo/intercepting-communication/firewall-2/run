@@ -1,0 +1,61 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/python -I
+
+import multiprocessing
+import os
+import socket
+import socketserver
+import time
+
+import psutil
+from dojjail import Host, Network
+
+flag = open("/flag").read()
+parent_process = psutil.Process(os.getppid())
+
+class ServerHost(Host):
+    def entrypoint(self):
+        manager = multiprocessing.Manager()
+        last_connected_times = manager.dict()
+
+        def watchdog():
+            while True:
+                time.sleep(1)
+                current_time = time.time()
+                if current_time - last_connected_times.get("10.0.0.2", current_time) > 2:
+                    continue
+                if current_time - last_connected_times.get("10.0.0.3", current_time) < 2:
+                    continue
+                print(flag, flush=True)
+                break
+
+        watchdog_process = multiprocessing.Process(target=watchdog)
+        watchdog_process.daemon = True
+        watchdog_process.start()
+
+        class ForkingTCPHandler(socketserver.BaseRequestHandler):
+            def handle(self):
+                client_ip, _ = self.client_address
+                last_connected_times[client_ip] = time.time()
+                self.request.recv(1024)
+
+        with socketserver.ForkingTCPServer(("0.0.0.0", 31337), ForkingTCPHandler) as server:
+            server.serve_forever()
+
+class ClientHost(Host):
+    def entrypoint(self):
+        while True:
+            time.sleep(1)
+            try:
+                with socket.create_connection(("10.0.0.1", 31337)) as client_socket:
+                    client_socket.sendall(b"Hello, World!\n")
+            except (OSError, ConnectionError, TimeoutError):
+                continue
+
+user_host = ServerHost("ip-10-0-0-1", privileged_uid=parent_process.uids().effective)
+client_host_1 = ClientHost("ip-10-0-0-2")
+client_host_2 = ClientHost("ip-10-0-0-3")
+network = Network(hosts={user_host: "10.0.0.1", client_host_1: "10.0.0.2", client_host_2: "10.0.0.3"},
+                  subnet="10.0.0.0/24")
+network.run()
+
+user_host.interactive(environ=parent_process.environ())

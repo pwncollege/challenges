@@ -9,4 +9,5 @@ For a zero-or-positive number, that's just its plain binary, padded with leading
 
 (Equivalently: flip the bits of `+5` and add one, which gives you the same answer, `11111011`. Either way of thinking about it works.)
 
-Run `/challenge/encode` and get the flag!
+Run `/challenge/encode`. It gives you numbers (some negative, some not) and you write each one as **8-bit two's-complement binary**.
+Encode them all to get the flag.

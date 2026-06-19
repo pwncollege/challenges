@@ -1,0 +1,3 @@
+sc = shellcraft.linux.setuid(0) + shellcraft.linux.sh()
+e = ELF.from_assembly(sc)
+e.save('bin')

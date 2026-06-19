@@ -1,0 +1,8 @@
+#!/opt/pwn.college/python
+
+from Crypto.Util.strxor import strxor
+
+key = open("/challenge/.key", "rb").read()
+ciphertext = strxor(b"sleep", key[:5])
+
+print(f"TASK: {ciphertext.hex()}")

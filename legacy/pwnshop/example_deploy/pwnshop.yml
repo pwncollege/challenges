@@ -1,0 +1,27 @@
+seed: 1337
+variants: 1
+walkthrough: false
+keep_source: false
+binary_name: shell
+challenges:
+- id: shell-walkthrough
+  challenge: ShellExample
+  walkthrough: false
+- id: shell-example-src
+  challenge: ShellExample
+  keep_source: true
+- id: shell-example
+  challenge: ShellExample
+- id: shell-optimized
+  challenge: ShellOptimized
+  variants: 2
+- id: shell-1604
+  challenge: Shell1604
+  variants: 1
+- id: python-pass
+  challenge: PythonPass
+  binary_name: pp
+  variants: 2
+- id: checked-shell
+  challenge: CheckedShellcode
+  variants: 2

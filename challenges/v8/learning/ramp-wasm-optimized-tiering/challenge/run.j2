@@ -1,0 +1,10 @@
+{%- set pwn_d8_flags = [
+    '--fuzzing',
+    '--allow-natives-syntax',
+    '--no-liftoff',
+    '--no-wasm-lazy-compilation',
+    '--wasm-tiering-budget=1',
+    '--wasm-sync-tier-up',
+    '--no-concurrent-recompilation',
+] -%}
+{% include "../../../common/learning-run" %}

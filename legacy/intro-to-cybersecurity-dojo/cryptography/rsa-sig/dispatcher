@@ -1,0 +1,21 @@
+#!/opt/pwn.college/python
+
+import sys
+
+from base64 import b64encode, b64decode
+
+n = int(open("/challenge/key-n").read(), 16)
+d = int(open("/challenge/key-d").read(), 16)
+
+if len(sys.argv) < 2:
+    print(f"Usage: {sys.argv[0]} [command-b64]")
+    sys.exit(1)
+
+command = b64decode(sys.argv[1].strip("\0"))
+
+if b"flag" in command:
+    print(f"Command contains 'flag'")
+    sys.exit(1)
+
+signature = pow(int.from_bytes(command, "little"), d, n).to_bytes(256, "little")
+print(f"Signed command (b64): {b64encode(signature).decode()}")

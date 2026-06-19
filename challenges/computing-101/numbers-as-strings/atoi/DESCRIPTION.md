@@ -20,7 +20,7 @@ So, your loop is: look at the next byte, if it's `0`, jump beyond the loop (look
 Easy!
 
 Your `atoi` receives a pointer to the string in `rdi` and must return the integer value in `rax`.
-Loop the digits and return the number.
+Loop the digits, return the number, and score!
 
 ----
 

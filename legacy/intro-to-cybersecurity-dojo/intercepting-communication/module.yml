@@ -1,0 +1,101 @@
+name: Intercepting Communication
+description: Learn various techniques to intercept and manipulate network communication, from connecting to remote hosts to performing man-in-the-middle attacks.
+privileged: true
+challenges:
+- id: level-1
+  name: Connect
+- id: level-1a
+  name: Send
+- id: level-1b
+  name: Shutdown
+- id: level-2
+  name: Listen
+- id: level-3
+  name: Scan 1
+- id: level-4
+  name: Scan 2
+- id: level-5
+  name: Monitor 1
+- id: level-6
+  name: Monitor 2
+- id: sniff-cookie
+  name: Sniffing Cookies
+- id: level-7
+  name: Network Configuration
+- id: firewall-1
+  name: Firewall 1
+- id: firewall-2
+  name: Firewall 2
+- id: firewall-3
+  name: Firewall 3
+- id: dos-1
+  name: Denial of Service 1
+- id: dos-2
+  name: Denial of Service 2
+- id: dos-3
+  name: Denial of Service 3
+- id: level-8
+  name: Ethernet
+- id: level-9
+  name: IP
+- id: level-10
+  name: TCP
+- id: level-11
+  name: TCP Handshake
+- id: udp-1
+  name: UDP
+- id: udp-2
+  name: UDP 2
+- id: udp-spoof-host
+  name: UDP Spoofing 1
+- id: udp-spoof-host-2
+  name: UDP Spoofing 2
+- id: udp-spoof-host-3
+  name: UDP Spoofing 3
+- id: udp-spoof-host-4
+  name: UDP Spoofing 4
+- id: level-12
+  name: ARP
+- id: level-13
+  name: Intercept
+- id: level-14
+  name: Man-in-the-Middle
+resources:
+- name: "Intercepting Communication: Introduction"
+  type: lecture
+  video: TLJHimgblCM
+  playlist: PL-ymxv0nOtqrrjUFj5DL7jby9xA4sPFq-
+  slides: 1fj5anIxRY3haHl81dFWwwCMQhJCUEY-NrTClwYH9_iE
+- name: "Intercepting Communication: Ethernet"
+  type: lecture
+  video: TaPsmkBNJ64
+  playlist: PL-ymxv0nOtqrrjUFj5DL7jby9xA4sPFq-
+  slides: 1OFdRsadX7HaLVtrVC5rV8837W8FY83Qzca5OIhhade0
+- name: "Intercepting Communication: Internet Protocol"
+  type: lecture
+  video: _3F7lRUoIXM
+  playlist: PL-ymxv0nOtqrrjUFj5DL7jby9xA4sPFq-
+  slides: 1fiTAFWX-ASikEFD1QRmgangaUzLvE2Ym7UlSjVnx4Oc
+- name: "Intercepting Communication: Transmission Control Protocol"
+  type: lecture
+  video: v3m9F9nEpCA
+  playlist: PL-ymxv0nOtqrrjUFj5DL7jby9xA4sPFq-
+  slides: 1ALXCLKkbGgzOJ0qrCGD-UekGOGjzH74tLAaZLw4CvWc
+- name: "Intercepting Communication: Address Resolution Protocol"
+  type: lecture
+  video: 9p2OU4r4aGs
+  playlist: PL-ymxv0nOtqrrjUFj5DL7jby9xA4sPFq-
+  slides: 1VoEUlgjCNZuNIdh8KSxF6bTXPr1ylaeokwFDOLk7F94
+- name: "Getting Started Notes"
+  type: markdown
+  content: |
+    To get started with this module, run the challenge located in `/challenge` from within a terminal session.  This will create the network environment for you to work with.  This will also change your terminal prompt to indicate the host machine you are working on.  You can run the command `exit` to return to your original terminal prompt outside of the challenge network.  Trying to connect to the network hosts outside of the challenge environment will not work.
+- name: "Tooling Documentation"
+  type: markdown
+  content: |
+    - [man page: `nc`](https://linux.die.net/man/1/nc)
+    - [man page: `ip`](https://linux.die.net/man/8/ip)
+    - [man page: `tcpdump`](https://linux.die.net/man/8/tcpdump)
+    - [Cheat Sheet For `ip` Command](https://access.redhat.com/sites/default/files/attachments/rh_ip_command_cheatsheet_1214_jcs_print.pdf)
+    - [Wireshark User's Guide](https://www.wireshark.org/docs/wsug_html_chunked/)
+    - [Scapy's Documentation](https://scapy.readthedocs.io/en/latest/)

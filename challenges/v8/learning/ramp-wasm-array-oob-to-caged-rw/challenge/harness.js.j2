@@ -1,0 +1,355 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+function u32v(value) {
+    const out = [];
+    value >>>= 0;
+    do {
+        let byte = value & 0x7f;
+        value >>>= 7;
+        if (value) byte |= 0x80;
+        out.push(byte);
+    } while (value);
+    return out;
+}
+
+function str(value) {
+    return [value.length, ...Array.from(value, (c) => c.charCodeAt(0))];
+}
+
+function section(id, body) {
+    return [id, ...u32v(body.length), ...body];
+}
+
+function funcBody(code) {
+    return [...u32v(code.length + 2), 0x00, ...code, 0x0b];
+}
+
+function makeArrayModule() {
+    const I32 = 0x7f;
+    const FUNC = 0x60;
+    const ARRAY = 0x5e;
+    const MUTABLE = 0x01;
+    const EXTERNAL_FUNCTION = 0x00;
+    const GC = 0xfb;
+    const LOCAL_GET = 0x20;
+    const ARRAY_NEW_DEFAULT = 0x07;
+    const ARRAY_GET = 0x0b;
+    const ARRAY_SET = 0x0e;
+    const ARRAY_LEN = 0x0f;
+
+    const arrayType = 0;
+    const types = [
+        ...u32v(5),
+        ARRAY, I32, MUTABLE,
+        FUNC, ...u32v(1), I32, ...u32v(1), 0x64, ...u32v(arrayType),
+        FUNC, ...u32v(1), 0x64, ...u32v(arrayType), ...u32v(1), I32,
+        FUNC, ...u32v(2), 0x64, ...u32v(arrayType), I32, ...u32v(1), I32,
+        FUNC, ...u32v(3), 0x64, ...u32v(arrayType), I32, I32, ...u32v(0),
+    ];
+
+    const functions = [1, 2, 3, 4];
+    const exports = [
+        ["newArray", 0],
+        ["arrayLen", 1],
+        ["arrayGet", 2],
+        ["arraySet", 3],
+    ];
+    const bodies = [
+        [LOCAL_GET, 0, GC, ARRAY_NEW_DEFAULT, ...u32v(arrayType)],
+        [LOCAL_GET, 0, GC, ARRAY_LEN],
+        [LOCAL_GET, 0, LOCAL_GET, 1, GC, ARRAY_GET, ...u32v(arrayType)],
+        [LOCAL_GET, 0, LOCAL_GET, 1, LOCAL_GET, 2, GC, ARRAY_SET, ...u32v(arrayType)],
+    ];
+
+    return new Uint8Array([
+        0x00, 0x61, 0x73, 0x6d,
+        0x01, 0x00, 0x00, 0x00,
+        ...section(1, types),
+        ...section(3, [...u32v(functions.length), ...functions.flatMap(u32v)]),
+        ...section(7, [
+            ...u32v(exports.length),
+            ...exports.flatMap(([name, index]) => [...str(name), EXTERNAL_FUNCTION, ...u32v(index)]),
+        ]),
+        ...section(10, [...u32v(bodies.length), ...bodies.flatMap(funcBody)]),
+    ]);
+}
+
+function makeSmiToken(mask) {
+    let value;
+    do {
+        value = ((((Math.random() * 0x1fffffff) >>> 0) | mask) + 1) >>> 0;
+    } while (value === initialProofValue);
+    return {
+        value,
+        token: (value << 1) >>> 0,
+    };
+}
+
+const wasm = new WebAssembly.Instance(new WebAssembly.Module(makeArrayModule())).exports;
+const initialLength = 2;
+const initialProofValue = 4;
+const element0Token = 0x11111111;
+const element1Token = 0x22222222;
+const expectedProof = makeSmiToken(0x1000);
+const expectedCheck = makeSmiToken(0x2000);
+let victimArray;
+let proofObject;
+let checkObject;
+let victimArrayOffset;
+let victimArraySize;
+let victimLengthOffset;
+let victimElementBaseOffset;
+let proofFieldOffset;
+let checkFieldOffset;
+const calls = {
+    madeVictimArray: false,
+    madeProofObject: false,
+    madeCheckObject: false,
+    leakedVictimAddress: false,
+    sizedVictim: false,
+    leakedProofAddress: false,
+    sizedProof: false,
+    leakedCheckAddress: false,
+    sizedCheck: false,
+    memoryViews: 0,
+    arrayLenReads: 0,
+    arrayGets: 0,
+    arraySets: 0,
+};
+
+function byteSwap32(value) {
+    return (((value & 0xff) << 24) | ((value & 0xff00) << 8) | ((value >>> 8) & 0xff00) | ((value >>> 24) & 0xff)) >>> 0;
+}
+
+function requireVictimArray() {
+    if (victimArray === undefined) {
+        guardTools.fail("Allocate the victim Wasm array first.");
+    }
+}
+
+function requireObjects() {
+    requireVictimArray();
+    if (proofObject === undefined || checkObject === undefined) {
+        guardTools.fail("Allocate the proof and check objects after the victim array.");
+    }
+}
+
+function allocateVictimArray() {
+    if (victimArray !== undefined) return victimArray;
+
+    victimArray = wasm.newArray(initialLength);
+    wasm.arraySet(victimArray, 0, element0Token | 0);
+    wasm.arraySet(victimArray, 1, element1Token | 0);
+    victimArrayOffset = guardTools.realSandbox.getAddressOf(victimArray);
+    victimArraySize = guardTools.realSandbox.getSizeOf(victimArray);
+    victimLengthOffset = victimArrayOffset + 8;
+    victimElementBaseOffset = victimArrayOffset + 12;
+    calls.madeVictimArray = true;
+    return victimArray;
+}
+
+function allocateProofObject() {
+    requireVictimArray();
+    if (proofObject === undefined) {
+        proofObject = Object.freeze({ proof: initialProofValue });
+        const objectOffset = guardTools.realSandbox.getAddressOf(proofObject);
+        proofFieldOffset = objectOffset + guardTools.realSandbox.getSizeOf(proofObject) - 4;
+    }
+    calls.madeProofObject = true;
+    return proofObject;
+}
+
+function allocateCheckObject() {
+    requireVictimArray();
+    if (checkObject === undefined) {
+        checkObject = Object.freeze({ proof: initialProofValue });
+        const objectOffset = guardTools.realSandbox.getAddressOf(checkObject);
+        checkFieldOffset = objectOffset + guardTools.realSandbox.getSizeOf(checkObject) - 4;
+    }
+    calls.madeCheckObject = true;
+    return checkObject;
+}
+
+function requiredExpandedLength() {
+    requireObjects();
+    const highestTarget = Math.max(proofFieldOffset, checkFieldOffset);
+    return Math.floor((highestTarget - victimElementBaseOffset) / 4) + 1;
+}
+
+function ensureLayout() {
+    requireObjects();
+    for (const [name, offset] of [["proof", proofFieldOffset], ["check", checkFieldOffset]]) {
+        if (offset < victimElementBaseOffset || ((offset - victimElementBaseOffset) % 4) !== 0) {
+            guardTools.fail(`Harness error: ${name} object did not land at a usable 32-bit Wasm array index.`);
+        }
+    }
+}
+
+function diagnoseTargetOffset(targetOffset) {
+    const proofObjectOffset = guardTools.realSandbox.getAddressOf(proofObject);
+    const proofObjectSize = guardTools.realSandbox.getSizeOf(proofObject);
+    const checkObjectOffset = guardTools.realSandbox.getAddressOf(checkObject);
+    const checkObjectSize = guardTools.realSandbox.getSizeOf(checkObject);
+    if (targetOffset === proofObjectOffset || targetOffset === checkObjectOffset) {
+        guardTools.fail("This targets the beginning of an object, not its final 32-bit proof field.");
+    }
+    if (targetOffset === proofObjectOffset + proofObjectSize || targetOffset === checkObjectOffset + checkObjectSize) {
+        guardTools.fail("This points just after an object. The proof field is the final 32-bit field, so subtract 4.");
+    }
+}
+
+function offsetForIndex(index) {
+    requireObjects();
+    const elementIndex = guardTools.normalizeNumber(index, "Wasm array element index");
+    if (elementIndex < 0) {
+        guardTools.fail("Wasm array element indexes must be non-negative.");
+    }
+    const currentLength = wasm.arrayLen(victimArray);
+    if (elementIndex >= currentLength) {
+        guardTools.fail("The victim array is still too short. Corrupt its real length word before using out-of-bounds indexes.");
+    }
+    const targetOffset = victimElementBaseOffset + elementIndex * 4;
+    diagnoseTargetOffset(targetOffset);
+    return targetOffset;
+}
+
+function requireTokenAt(offset, expected, name) {
+    const actual = guardTools.readUint32(offset);
+    if (actual === expected) return;
+    if (actual === byteSwap32(expected)) {
+        guardTools.fail(`${name} has the byte-swapped token. Use 32-bit little-endian values.`);
+    }
+    guardTools.fail(`${name} contains 0x${actual.toString(16)}, not the expected token.`);
+}
+
+const arrayExports = Object.freeze({
+    arrayLen(array) {
+        guardTools.requireSameObject(array, victimArray, "Use the victim Wasm array.");
+        calls.arrayLenReads++;
+        return wasm.arrayLen(array);
+    },
+    arrayGet(array, index) {
+        guardTools.requireSameObject(array, victimArray, "Use the victim Wasm array.");
+        offsetForIndex(index);
+        calls.arrayGets++;
+        return wasm.arrayGet(array, index) >>> 0;
+    },
+    arraySet(array, index, value) {
+        guardTools.requireSameObject(array, victimArray, "Use the victim Wasm array.");
+        offsetForIndex(index);
+        calls.arraySets++;
+        return wasm.arraySet(array, index, value | 0);
+    },
+});
+
+const sandboxRules = Object.freeze({
+    getAddressOf(obj) {
+        requireObjects();
+        if (obj === victimArray) {
+            calls.leakedVictimAddress = true;
+            return guardTools.realSandbox.getAddressOf(obj);
+        }
+        if (obj === proofObject) {
+            calls.leakedProofAddress = true;
+            return guardTools.realSandbox.getAddressOf(obj);
+        }
+        if (obj === checkObject) {
+            calls.leakedCheckAddress = true;
+            return guardTools.realSandbox.getAddressOf(obj);
+        }
+        guardTools.fail("Wrong object: this ramp only exposes the victim array, proof object, and check object.");
+    },
+    getSizeOf(obj) {
+        requireObjects();
+        if (obj === victimArray) {
+            calls.sizedVictim = true;
+            return guardTools.realSandbox.getSizeOf(obj);
+        }
+        if (obj === proofObject) {
+            calls.sizedProof = true;
+            return guardTools.realSandbox.getSizeOf(obj);
+        }
+        if (obj === checkObject) {
+            calls.sizedCheck = true;
+            return guardTools.realSandbox.getSizeOf(obj);
+        }
+        guardTools.fail("Wrong object: this ramp only sizes the victim array, proof object, and check object.");
+    },
+    MemoryView(offset, size) {
+        requireObjects();
+        const viewOffset = guardTools.normalizeNumber(offset, "MemoryView offset");
+        const viewSize = guardTools.normalizeNumber(size, "MemoryView size");
+        if (viewSize !== 4) {
+            guardTools.fail("Use 4-byte MemoryView windows when scanning the victim array object.");
+        }
+        if (viewOffset < victimArrayOffset || viewOffset + viewSize > victimArrayOffset + victimArraySize) {
+            guardTools.fail("This ramp only allows MemoryView access inside the original victim array object.");
+        }
+        calls.memoryViews++;
+        return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+    },
+});
+{% endblock %}
+
+{% block expose %}
+guardTools.exposeConstant("allocateVictimArray", allocateVictimArray);
+guardTools.exposeConstant("allocateProofObject", allocateProofObject);
+guardTools.exposeConstant("allocateCheckObject", allocateCheckObject);
+guardTools.exposeConstant("arrayExports", arrayExports);
+guardTools.exposeConstant("initialLength", initialLength);
+guardTools.exposeConstant("element0Token", element0Token);
+guardTools.exposeConstant("element1Token", element1Token);
+guardTools.exposeConstant("expectedToken", expectedProof.token);
+{% endblock %}
+
+{% block validate %}
+requireObjects();
+ensureLayout();
+if (typeof read32 !== "function" || typeof write32 !== "function") {
+    guardTools.fail("Define read32(offset) and write32(offset, value).");
+}
+if (!calls.leakedVictimAddress || !calls.sizedVictim || !calls.leakedProofAddress || !calls.sizedProof || !calls.leakedCheckAddress || !calls.sizedCheck) {
+    guardTools.fail("Use guarded Sandbox.getAddressOf/getSizeOf to derive the victim element base and object proof fields.");
+}
+if (calls.memoryViews === 0) {
+    guardTools.fail("Use guarded Sandbox.MemoryView on the real victim array object to corrupt its length word.");
+}
+
+const currentLength = wasm.arrayLen(victimArray);
+if (currentLength === initialLength) {
+    guardTools.fail("The victim array length is unchanged. Expand the real length word with Sandbox.MemoryView.");
+}
+if (currentLength < requiredExpandedLength()) {
+    guardTools.fail("The victim array length is still too small to reach both proof fields.");
+}
+if (guardTools.readUint32(victimLengthOffset) !== currentLength) {
+    guardTools.fail("The Wasm array length word and arrayLen() disagree; corrupt the real 32-bit length field.");
+}
+
+write32(proofFieldOffset, expectedProof.token);
+write32(checkFieldOffset, expectedCheck.token);
+
+if (calls.arraySets < 2) {
+    guardTools.fail("Implement write32 with real Wasm array.set calls.");
+}
+if (read32(proofFieldOffset) !== expectedProof.token) {
+    guardTools.fail("read32(proofFieldOffset) did not return the value written with write32.");
+}
+if (read32(checkFieldOffset) !== expectedCheck.token) {
+    guardTools.fail("read32(checkFieldOffset) did not return the value written with write32.");
+}
+if (calls.arrayGets < 2) {
+    guardTools.fail("Implement read32 with real Wasm array.get calls.");
+}
+
+requireTokenAt(proofFieldOffset, expectedProof.token, "proof field");
+requireTokenAt(checkFieldOffset, expectedCheck.token, "check field");
+if (proofObject.proof !== expectedProof.value) {
+    guardTools.fail("The proof object's JavaScript field does not hold the expected Smi value.");
+}
+if (checkObject.proof !== expectedCheck.value) {
+    guardTools.fail("The check object's JavaScript field does not hold the expected Smi value.");
+}
+return true;
+{% endblock %}

@@ -1,0 +1,646 @@
+  name: Talking Web
+  auxiliary:
+    pwnshop:
+      build_image: pwncollege/challenge-legacy:latest
+      verify_image: pwncollege/challenge-legacy:latest
+      binary_name: server
+      variants: 16
+  challenges:
+  - id: http-browser
+    name: "Your First HTTP Request"
+    description: |
+      Obviously, as you're accessing this website in your web browser, this isn't your _first_ HTTP request.
+      But it's your first HTTP request for a pwn.college challenge!
+      Run `/challenge/server`, fire up Firefox in the dojo workspace (you'll need to use the [GUI Desktop](/workspace/desktop) for this!), and visit the URL that it's listening on for the flag!
+    auxiliary:
+      pwnshop:
+        variants: 1
+        challenge: TalkingWeb
+        attributes:
+          useragent_substr: "Firefox"
+          randomize_endpoint: False
+  - id: http-flask
+    name: "Reading Flask"
+    description: |
+      Awesome, you got the hang of the basic process.
+      There's one more thing you need to do, though: you must read and understand the source code of the challenge!
+      Web servers _route_ HTTP requests to different _endpoints_: `http://challenge.localhost/pwn` might go to the endpoint that handles the request path `/pwn`, and `http://challenge.localhost/college` might go to the endpoint that handles the request path `college`.
+      This challenge has a randomly-chosen endpoint name.
+      You must read the code in `/challenge/server`, understand it, and figure out which endpoint to visit in the browser!
+
+      ----
+      Confused?
+      Our web servers are implemented using the [flask](https://flask.palletsprojects.com/en/stable/quickstart/) library.
+      Read their documentation to build up understanding of the code, or experiment with it!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          useragent_substr: "Firefox"
+  - id: http-comment
+    name: "Commented Data"
+    description: |
+      HTTP is the _HyperText_ Transfer Protocol.
+      HyperText, named in the techno-optimism of the late 20th century, is text that carries additional data regarding _how_ it should be understood, not just what it means.
+      In modern times, this is done through a variety of means: HTTP is used to transport lots of different types of resources, and your web browser combines them to construct the websites that you see and interact with.
+      The oldest of these is the HyperText Markup Language, or HTML.
+
+      HTML describes, in a way that the browser can interpret, the elements that should (initially) appear on a web page.
+      We'll dive into HTML subtleties in later modules, but here, we'll practice piercing the veil of the website and looking at the HTML behind it all.
+      You'll need to, as before, find the endpoint and access it in the in-dojo browser.
+      However, the HTML sent over will _hide_ the flag.
+      You'll need to figure out how to view the Page Source of the HTML, rather than the rendered result, to access this hidden data.
+
+      ----
+      **HINT:** click Firefox's Hamburger menu (≡), then go to `More Tools`.
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          useragent_substr: "Firefox"
+          commented_flag: True
+  - id: http-header
+    name: "HTTP Metadata"
+    description: |
+      HTTP facilitates the transfer of both _data_ (e.g., the HTML that `/challenge/server` sends you) and _metadata_ (data about the data).
+      The latter is sent via _headers_: fields in an HTTP request or response that give additional instructions to the server or browser.
+      In this case, the flag is in a header.
+      Can you find it?
+
+      ----
+      **HINT:** you can inspect headers using Firefox's Web Developer Tools (≡, then `More Tools`).
+      The Network tab of the tools displays all of the HTTP connections (you might need to reload the page after opening the Web Developer Tools for the connection to show up).
+      Each of these connections has a `Headers` subtab, which shows headers that your browser sent alongside its request (`Request Headers`) and the headers that it received alongside the response (`Response Headers`).
+      Find the flag header there!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          useragent_substr: "Firefox"
+          flag_in_html: False
+          flag_in_header: True
+  - id: http-nc
+    name: "HTTP (netcat)"
+    description: |
+      You've learned how to HTTP (though, of course, you've probably been HTTPing for most of your life!).
+      Now, let's learn how to _really_ HTTP.
+      The HTTP protocol itself, as in the exact data that is sent over the network, is actually surprisingly human-readable and human-writable.
+      In this challenge, you'll learn to write it.
+      This challenge requires you to use a program called "netcat" (command name: `nc`), which is a simple program that communicates over a network connection.
+      Netcat's basic usage involves two arguments: the _hostname_ (where the server is listening on, such as www.google.com for Google), and the port (the standard HTTP port is 80).
+
+      When it starts up, netcat connects to the server and gives you a raw channel to communicate with it.
+      You'll be talking _directly with the web server_, with no intermediary!
+      How cool is that?
+
+      Recall the lectures, find the format of an HTTP request, and make a GET request to the `/` endpoint (we'll do more endpoints later) to get the flag!
+
+      ----
+      **HINT:**
+      Can't tell if netcat is connecting or not?
+      Use the `-v` flag to turn on some verbosity!
+
+      **HINT:**
+      Typed your GET request and nothing happens after you hit Enter?
+      HTTP requests are terminated by _two_ newlines.
+      Try hitting Enter again!
+
+      **A thought...**
+      Until this moment, have you ever truly HTTPed?
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          allowed_clients: [ "nc" ]
+          randomize_endpoint: False
+          flag_in_html: False
+          flag_in_header: True
+  - id: http-path-nc
+    name: "HTTP Paths (netcat)"
+    description: |
+      Okay, you got the basics of netcat down.
+      Now make a GET request to a specific path!
+      As always, check the `/challenge/server` code to understand more.
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          allowed_clients: [ "nc" ]
+          randomize_flag_location: True
+  - id: http-path-curl
+    name: "HTTP (curl)"
+    description: |
+      Next, we'll practice making HTTP requests with one of the most common commandline tools for HTTP: `curl`.
+      Unlike netcat, curl is made specifically for HTTP, and you don't have to write raw HTTP commands.
+      Instead, you must learn to use the right program options to achieve what you want.
+      Here, you must simply make a GET request to the right endpoint!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          allowed_clients: [ "curl" ]
+          flag_in_html: True
+  - id: http-path-python
+    name: "HTTP (python)"
+    description: |
+      Finally, we'll learn the fourth tool in our HTTP toolbox: Python's [requests library](https://requests.readthedocs.io/en/latest/).
+      This, along with the browser, will likely be the two most heavily used tools in your HTTP toolbox.
+      Requests lets you script complex web interactions, and this will be necessary to pull off tricky hacks later.
+      For now, things are simple: pull up Python, `import requests`, and GET the flag!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          allowed_clients: [ "python3" ]
+          flag_in_html: True
+  - id: http-host-python
+    name: "HTTP Host Header (python)"
+    description: |
+      Unfortunately, most of the modern internet runs on the infrastructure of a handful of companies, and a given server run by these companies might be responsible for serving up websites for dozens of different domain names.
+      How does the server decide which website to serve?
+      The `Host` header.
+
+      The `Host` header is a _request_ header sent by the client (e.g., browser, curl, etc), typically equal to the domain name entered in the HTTP request.
+      When you go to `https://pwn.college`, your browser automatically sets the `Host` header to `pwn.college`, and thus our server knows to give you the `pwn.college` website, rather than something else.
+
+      Until now, the challenges you've been interacting with have been `Host`-agnostic.
+      Now they start checking.
+      Set the right `Host` header and get the flag!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          allowed_clients: [ "python3" ]
+          flag_in_html: True
+          randomize_host: True
+  - id: http-host-curl
+    name: "HTTP Host Header (curl)"
+    description: |
+      Now, let's learn to set the Host header in curl!
+      Read its `man` page to figure out how to set headers.
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          allowed_clients: [ "curl" ]
+          flag_in_html: True
+          randomize_host: True
+  - id: http-host-nc
+    name: "HTTP Host Header (netcat)"
+    description: |
+      And, finally, you can learn how Hosts are _actually_ sent over the network in netcat.
+      This might be a bit trickier.
+      You can actually use `curl` as a source of information here!
+      Curl's `-v` option causes it to print out the exact headers it's sending over (and the ones it receives!).
+      Observe it, copy that with netcat, and get the flag!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          allowed_clients: [ "nc" ]
+          randomize_flag_location: True
+          randomize_host: True
+  - id: url-encoding-nc
+    name: "URL Encoding (netcat)"
+    description: |
+      Recall how HTTP requests contain fields separated by spaces?
+      For example: `GET /solve HTTP/1.1`.
+      What if the path (e.g., instead of `/solve`) has spaces inside it?
+      This is a reasonable thing to happen, as these paths often reference directories, and directories may have spaces in their names!
+
+      Left to their own devices, spaces would mess up the HTTP request.
+      Consider an HTTP server trying to make sense of `GET /solve my challenge HTTP/1.1`.
+      A clever server might be able to deal with it, but it's not impossible that a version that simply reads one word at a time would read `my` instead of `HTTP/1.1` and panic!
+
+      To avoid such situations, URLs are _encoded_ using [URL Encoding](https://en.wikipedia.org/wiki/Percent-encoding).
+      This is a simple encoding compared to what you've seen in [Dealing with Data](/fundamentals/data_dealings).
+      Any tricky characters (such as spaces) are simply hex-encoded, with a `%` plopped in front of them.
+      Of course, because `%` thus becomes a tricky character in itself, it must also be encoded.
+      In the above example, `/solve my challenge` would become `/solve%20my%20challenge`, as the hex value of the ASCII space character is `0x20`.
+
+      Anyways, now we'll practice.
+      We stuck spaces in the endpoints.
+      Can you still get the flag?
+
+      ----
+      **INFO:**
+      You'll find that you need to encode URLs with curl as well (though we won't make you jump through that hoop), in the exact same way.
+      Python's requests library, however, will automatically urlencode things for you.
+      So useful!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          allowed_clients: [ "nc" ]
+          randomize_flag_location: True
+          words_in_endpoint: 3
+          flask_host: "challenge.localhost"
+  - id: http-get-parameters
+    name: "HTTP GET Parameters"
+    description: |
+      Like a function call in a programming language or a command execution on the shell, HTTP requests can include _parameters_.
+      GET requests send parameters alongside the path in the URL, in a part of the URL called the [Query String](https://en.wikipedia.org/wiki/Query_string).
+      In this challenge, you'll learn how to craft this query string.
+      Read the challenge source to understand what parameter you need, and send it over!
+      You can use any client you want: the process is basically the same in all of them.
+
+      ----
+      **SECURITY NOTE:**
+      It's tempting to think of HTTP parameters as similar to parameters to a function call.
+      However, keep in mind: when you're writing C or Python or Java code, an attacker (typically) can't just call random functions in your program with random parameters.
+      But with HTTP, they _can_.
+      They can just make HTTP requests wherever they want!
+      This has caused quite a few security issues...
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_get_params: 1
+  - id: http-get-multiarg-nc
+    name: "Multiple HTTP Parameters (netcat)"
+    description: |
+      Of course, you can pass in multiple parameters; you just need to separate each of them with `&`: `what=pwn&where=college`.
+      Try it now, in netcat.
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_get_params: 3
+          allowed_clients: [ "nc" ]
+  - id: http-get-multiarg-curl
+    name: "Multiple HTTP Parameters (curl)"
+    description: |
+      Specifying multiple HTTP parameters in curl is a bit of a special case, because `&` means something special in the shell (it launches a command in the background), and if you're not careful, the shell will trip over your `&`!
+      Make sure to put the whole URL, including the query string, in quotes to avoid this situation.
+      Try that now.
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_get_params: 3
+          allowed_clients: [ "curl" ]
+  - id: http-form-browser
+    name: "HTTP Forms"
+    description: |
+      HTTP GET requests are typically used for retrieving data, and the parameters typically represent data identifiers and various customizations for its retrieval and display.
+      _Storying_ data is usually done with an HTTP _POST_ request.
+      In the old days, POST requests typically resulted from people filling out and submitting HTML forms.
+      This still occurs, but there are plenty of other ways POST requests are created (some of which we'll cover later).
+
+      For now, let's practice the oldie and goodie.
+      `http://challenge.localhost` has a form for you.
+      Fill it out in the browser and submit it for the flag!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_post_params: 1
+          index_form: True
+          methods: ["POST"]
+          useragent_substr: "Firefox"
+  - id: http-form-curl
+    name: "HTTP Forms (curl)"
+    description: |
+      Now, let's try this with curl.
+      Look at the man page to figure out how to make a post request (HINT: the most relevant option is `-d`).
+
+      ----
+      **NOTE:**
+      Remember what we said about attackers being able to trigger whatever HTTP requests they wanted?
+      Note how this challenge doesn't even have any functionality to make the form, but you can still hit it with the POST request!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_post_params: 1
+          methods: ["POST"]
+          allowed_clients: ["curl"]
+  - id: http-form-nc
+    name: "HTTP Forms (netcat)"
+    description: |
+      Now, we try this with netcat.
+      This is MUCH harder, and is somewhat archaic for historical reasons.
+      Check out the simplest URL-encoded form submission example from [Mozilla](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/POST), and adapt it for your usecase.
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_post_params: 1
+          methods: ["POST"]
+          allowed_clients: ["nc"]
+  - id: http-form-python
+    name: "HTTP Forms (python)"
+    description: |
+      Now let's try this with requests!
+      Look at the documentation to find out how to do this.
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_post_params: 1
+          methods: ["POST"]
+          allowed_clients: ["python3"]
+  - id: http-form-browser-noform
+    name: "HTTP Forms Without Forms"
+    description: |
+      Now, try to make your browser do a POST request without the website providing a form.
+      Hint: can you bring your own form to the table?
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_post_params: 1
+          methods: ["POST"]
+          useragent_substr: "Firefox"
+  - id: http-form-multi-curl
+    name: "Multiple Form Fields (curl)"
+    description: |
+      Let's play around with multiple form fields!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_post_params: 3
+          methods: ["POST"]
+          allowed_clients: ["curl"]
+  - id: http-form-multi-nc
+    name: "Multiple Form Fields (netcat)"
+    description: |
+      ... and with netcat!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          num_post_params: 4
+          methods: ["POST"]
+          allowed_clients: ["nc"]
+  - id: http-redirect-nc
+    name: "HTTP Redirects (netcat)"
+    description: |
+      Sometimes, resources on the web move.
+      A website might get redesigned, we might rename a pwn.college module, etc.
+      In these (and other!) cases, the webserver can _redirect_ clients to the new URL.
+      This is done via a special HTTP request, as you'll discover here.
+      Can you still find the flag?
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          allowed_clients: ["nc"]
+          redirects: 1
+  - id: http-redirect-curl
+    name: "HTTP Redirects (curl)"
+    description: |
+      Now, let's try curl.
+      Curl has a very useful commandline option to _automatically_ follow redirects.
+      It's `-L`.
+      Try it out, and see how easy this becomes!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          allowed_clients: ["curl"]
+          redirects: 1
+  - id: http-redirect-python
+    name: "HTTP Redirects (python)"
+    description: |
+      And now, Python.
+      Python's requests library _automatically_ follows redirects, so this should be _quite_ easy.
+      Give it a try!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWeb
+        attributes:
+          flask_host: "challenge.localhost"
+          allowed_clients: ["python3"]
+          redirects: 1
+  - id: http-cookies-curl
+    name: "HTTP Cookies (curl)"
+    description: Include a cookie from HTTP response using curl
+  - id: http-cookies-netcat
+    name: "HTTP Cookies (netcat)"
+    description: Include a cookie from HTTP response using nc
+  - id: http-cookies-python
+    name: "HTTP Cookies (python)"
+    description: |
+      Include a cookie from HTTP response using python
+      
+      ---
+      **HINT:** If you aren't already using it, check out `requests.Session`!
+  - id: http-multi-request-python
+    name: "Server State (python)"
+    description: Make multiple requests in response to stateful HTTP responses using python
+  - id: http-server
+    name: "Listening Web"
+    description: |
+      You've been staring at web server code all this time and figuring out how to speak to it.
+      Now, let's learn to _listen_.
+
+      In this level, you will write a simple server that'll receive the request for the flag!
+      Simply copy the server code from, say, the very first module, remove anything extra, and build a web server that'll listen on port 1337 (instead of 80 --- you can't listen on port 80 as a non-administrative user) and on hostname `localhost`.
+      When you're ready, run `/challenge/client`, and it will launch an internal web browser and visit `http://localhost:1337/` with the flag!
+    auxiliary:
+      pwnshop:
+        challenge: TalkingWebClient
+        variants: 1
+        binary_name: client
+        attributes:
+          specify_url: False
+          flag_in_query: True
+          port: 1337
+          victim_url: "http://localhost:1337"
+  - id: http-server-redirect
+    name: "Speaking Redirects"
+    description: |
+      You've followed redirects --- now make one happen!
+      Have your webserver redirect `/challenge/client` to the right location in `/challenge/server`.
+      You'll need three terminal windows for this:
+
+      1. The first terminal window runs `/challenge/server`, which listens on port 80 and prepares to give the flag.
+      2. The second terminal window runs your webserver implementation, which listens on port 1337 and prepares to redirect the client.
+      3. The third terminal window runs `/challenge/client`.
+
+      It's complex, but you can do it!
+    auxiliary:
+      pwnshop:
+        challenge: TWRedirectClient
+        variants: 16
+  - id: http-server-redirect-js
+    name: "JavaScript Redirects"
+    description: |
+      In the beginning of the web, HTML, though _Hyper_, was pretty static.
+      It described its layouts, and that was it.
+      Sometime in the 1990s, the movers and shakers of the internet thought "What if web pages could execute logic?", and JavaScript was born.
+
+      JavaScript is a programming language that allows web pages to dynamically make decisions and carry out actions.
+      It is, hands down (and unfortunately, because it's terrible) the most important programming language out there (though luckily not the most used), and try as we might to avoid it (did we mention that it's terrible), we have to account for it in any discussion of web security.
+
+      HTML specifies JavaScript to be executed through the `<script>` tag.
+      This tag tells the browser that what is inside that tag is JavaScript, and the browser executes it.
+      There are many resources online for how to write script tags, and how to write JavaScript, and we'll leave their finding as an exercise for you, the learner.
+      Here, we'll practice something very specific: using JavaScript to redirect the browser to a different web page.
+
+      As previously, the client browser will print out the page it receives, but it will start by going to `http://challenge.localhost/~hacker/solve.html`.
+      Here, we harken back to the olden days of shared servers: `http://challenge.localhost/~hacker/anything` will be served out of the `public_html` subdirectory of your home directory!
+      Create a `/home/hacker/public_html/solve.html`, write the JavaScript you need to redirect the browser, and get the flag!
+
+      ----
+      **HINT:**
+      The JavaScript object you want is `window.location`.
+      You can assign a string to it to redirect the browser to a new location.
+
+      **HINT:**
+      Debugging this can be tricky with the built-in browser.
+      Try it using the dojo's Firefox!
+      You can't get the final flag with it, but you can at least tell if your redirect is working!
+    auxiliary:
+      pwnshop:
+        challenge: TWRedirectJS
+        variants: 16
+  - id: http-server-include-js
+    name: "Including JavaScript"
+    description: |
+      JavaScript can do many things in the context of the web page, and can, thus, lead to unexpected situations and security compromises.
+      You'll explore some of these situations in the Web Security module, but we'll lay the groundwork here.
+
+      In this level, `/challenge/client` will no longer print the web page, and `/challenge/server` will not serve up an HTML page of the flag, but a JavaScript script that sets a global `flag` variable to the value of the flag.
+      You'll need to make a web page to _include_ this script in your page (we'll leave it up to you to find the documentation for this --- hint: `src` is involved) and then create another script to somehow _exfiltrate_ this information.
+      Exfiltration is the art of smuggling sensitive data out right under the nose of its owners: in this case, `/challenge/client` and `/challenge/server`.
+      Your JavaScript running on your page, of course, has acess to the `flag` variable, but you'll need to somehow communicate it out to the world.
+      This can be done in a few different ways, but probably the easiest is to redirect (using your `window.location` trick from before!) the client browser to a URL that contains the flag (similar to how the client leaked it to you a few levels ago), and have that request go to somewhere where you can see the URL log (such as the log of `/challenge/server` or your own webserver!).
+
+      This sounds like a lot, but it's eminently doable.
+      Our reference HTML solution file is just 150 bytes long!
+      As before, remember: you can debug your solutions using your own browser (and can run it as root in practice mode to be able to include the flag script!).
+    auxiliary:
+      pwnshop:
+        challenge: TWRemoteJS
+        variants: 16
+  - id: http-server-fetch
+    name: "HTTP (javascript)"
+    description: |
+      Now, the hard part begins...
+      Oftentimes, what you need to exfiltrate is other data accessible to your JavaScript on the website, but you often have to make HTTP requests to retrieve it.
+      In modern JavaScript, HTTP requests are made using the `fetch()` function.
+      It works roughly as follows:
+
+      ```javascript
+      fetch("http://google.com").then(response => response.text()).then(website_content => ???);
+      ```
+
+      The `???`, of course, is the code that you want to execute on the website contents.
+      This API looks so absolutely insane because JavaScript is insane, but also because it actually has a hard problem to solve.
+      It has to execute logic in an environment where network errors, CPU load, laptop suspending and resuming, firewalls, and other crazy things can interfere with the loading and operation of the resources that it depends on.
+      The above code uses JavaScript "promises", which is a complex programming pattern that lets you write logic that _will_ be executed on data that is not _yet_ available, when that data finally does become available.
+      The `.then()` is the part of the promise that specifies what will be eventually executed.
+      Here, the flow is roughly as follows:
+
+      1. `fetch()` returns a promise and starts to fetch `http://google.com`.
+         This might take a while, might never succeed, or might succeed immediately.
+         At any rate, it initially returns a `promise` object that has a `then()` member function that will run when the response is available.
+      2. The response becomes available and the promised code executes.
+         This code takes the promised response and calls `response.text()`, which retrieves the _full_ text contents returned by `http://google.com`.
+         Because this might take a while to load fully, this _also_ returns a promise, and _that_ promise also has a `.then()` method that we can specify code for.
+      3. Finally, all the content is available and our final promised code runs.
+         This can be anything, but for most of our purposes, this is where we exfiltrate our data like you did in previous challenges.
+
+      This can be insanely hard to understand and debug.
+      Please be ready to debug this in Firefox in practice mode.
+
+      In this level, the flag is no longer nicely wrapped in JavaScript.
+      It's just boring old text.
+      You'll need to fetch it and exfiltrate it to score.
+      Good luck!
+    auxiliary:
+      pwnshop:
+        challenge: TWRemoteFetch
+        variants: 16
+  - id: http-server-fetch-params
+    name: "HTTP Get Parameters (javascript)"
+    description: |
+      Of course, as with any GET request, you can add some parameters.
+      Try that out now!
+    auxiliary:
+      pwnshop:
+        challenge: TWRemoteFetch
+        variants: 16
+        attributes:
+          num_get_params: 3
+  - id: http-server-fetch-post
+    name: "HTTP Forms (javascript)"
+    description: |
+      And, naturally, we can use `fetch()` to make POST requests.
+      This lets our JavaScript pretend to submit forms and so on, which is pretty neat!
+      Let's practice that in this level.
+      You can look up how to pass advanced arguments to `fetch()` on your own, but we'll give you some hints for some things that _should_ appear in your JavaScript verbatim:
+
+      - `{`
+      - `method: "POST"`
+      - `body`
+      - `new URLSearchParams`
+      - `}`
+
+      Good luck!
+
+      ----
+      **NOTE:**
+      There are many ways to send POST parameters.
+      In this module, we covered the sending of form data, but other types exist as well, and all have different ways of accessing them via flask.
+      Make sure you're sending form data in your POST, not something else; otherwise, our server (the way it's implemented) won't see it!
+    auxiliary:
+      pwnshop:
+        challenge: TWRemoteFetch
+        variants: 16
+        attributes:
+          num_post_params: 3
+          methods: ["POST"]
+  resources:
+  - name: "Talking Web: Introduction"
+    type: lecture
+    video: UW13N0CV-4s
+    playlist: PL-ymxv0nOtqpbL9yW55RfoyUDjwotW9gR
+    slides: 1Wdd3z3qSiknvYsETmosSiIFQtnNmeanFeWJz6SMazY8
+  - name: "Talking Web: The Internet"
+    type: lecture
+    video: v64j2WFiJpc
+    playlist: PL-ymxv0nOtqpbL9yW55RfoyUDjwotW9gR
+    slides: 1HrAXQq6CvxOFfEUhuZTQbqEYOYA-FgLE9pL6ji9BcvI
+  - name: "Talking Web: RFC 1945"
+    type: lecture
+    video: bPaY78xpRhQ
+    playlist: PL-ymxv0nOtqpbL9yW55RfoyUDjwotW9gR
+    slides: 1VWNFfmzbeVzQ-J887ngynb-1YdLGJEd4ype69MUWtkI
+  - name: "Talking Web: URLs and Encoding"
+    type: lecture
+    video: yM9VM2DSkBU
+    playlist: PL-ymxv0nOtqpbL9yW55RfoyUDjwotW9gR
+    slides: 1twvI9r1RPZAuka_cABnvwhOnourhbOgu5C1f_NgZx9s
+  - name: "Talking Web: State"
+    type: lecture
+    video: 2TeudjfK-tQ
+    playlist: PL-ymxv0nOtqpbL9yW55RfoyUDjwotW9gR
+    slides: 1O8ff6AdaTQ1eA8lhUo3GjIbtxicpQnKseIc-TSNW5hE
+  - name: "Talking Web: Making HTTP Requests"
+    type: lecture
+    video: WNYaTYOUfZI
+    playlist: PL-ymxv0nOtqpbL9yW55RfoyUDjwotW9gR
+  - name: "Documentation"
+    type: markdown
+    content: |
+      As always, your tools are only as effective as your knowledge of them.
+      Remember your lessons in [Digesting Documentation](/linux-luminarium/man).
+      - `man curl` ([or this online mirror](https://linux.die.net/man/1/curl))
+      - `man netcat` ([or this online mirror](https://linux.die.net/man/1/nc))
+      - a [comprehensive guide to Python's requests library](https://requests.readthedocs.io/en/latest/).

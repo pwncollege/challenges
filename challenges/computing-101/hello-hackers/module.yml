@@ -18,14 +18,8 @@ resources:
     id: read
     name: "Reading Data"
   - type: challenge
-    id: read-exact
-    name: "Reading Exactly"
-  - type: challenge
     id: open-read-write
     name: "Opening Files"
   - type: challenge
     id: open-read-write-hardcode
     name: "Hardcoding the Filename"
-  - type: challenge
-    id: open-read-write-rip-relative
-    name: "RIP-Relative Strings"

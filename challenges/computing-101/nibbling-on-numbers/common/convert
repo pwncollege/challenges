@@ -10,7 +10,6 @@ COUNT = {{ count }}
 SRC_NAME = "{{ src_name }}"
 DST_NAME = "{{ dst_name }}"
 STRICT = {{ strict | default(true) }}  # require the full-width answer (leading zeros and all)
-MAX_ATTEMPTS = 3
 
 WIDTH = NBYTES * 8
 DST_DIGITS = WIDTH if DST == 2 else 2 * NBYTES if DST == 16 else 0
@@ -31,12 +30,6 @@ def show(value, base):
     return str(value)
 
 
-def answer(value, base):
-    if base == 16:
-        return f"0x{show(value, base).replace(' ', '')}"
-    return show(value, base)
-
-
 plural = "s" if COUNT != 1 else ""
 print(f"Binary, hex, and decimal are just different ways to write the same number.")
 print(f"I'll show you {COUNT} value{plural} in {SRC_NAME}; write each one back to me in {DST_NAME}.\n")
@@ -44,27 +37,20 @@ print(f"I'll show you {COUNT} value{plural} in {SRC_NAME}; write each one back t
 for i in range(1, COUNT + 1):
     value = random.randint(1, (1 << WIDTH) - 1)
     print(f"Value {i} of {COUNT} (in {SRC_NAME}):  {show(value, SRC)}")
-    for attempt in range(MAX_ATTEMPTS):
-        try:
-            raw = input(f"  the same value in {DST_NAME} > ").strip().replace(" ", "")
-            digits = raw[2:] if PREFIX and raw[:2].lower() == PREFIX else raw
-            got = int(digits, DST)
-        except (EOFError, ValueError):
-            print(f"  That doesn't look like a {DST_NAME} number.")
-        else:
-            if got != value:
-                print(f"  Not quite --- in {DST_NAME} that value is {answer(value, DST)}.")
-            elif STRICT and DST_DIGITS and len(digits) != DST_DIGITS:
-                print(f"  Right value --- but write all {DST_DIGITS} digits, leading zeros and all: {answer(value, DST)}.")
-            else:
-                print("  Correct!\n")
-                break
-
-        if attempt < MAX_ATTEMPTS - 1:
-            print("  Try this conversion again.")
-    else:
-        print("  Run me again when you're ready.")
+    try:
+        raw = input(f"  the same value in {DST_NAME} > ").strip().replace(" ", "")
+        digits = raw[2:] if PREFIX and raw[:2].lower() == PREFIX else raw
+        got = int(digits, DST)
+    except (EOFError, ValueError):
+        print(f"  That doesn't look like a {DST_NAME} number. Run me again!")
         sys.exit(1)
+    if got != value:
+        print(f"  Not quite --- in {DST_NAME} that value is {show(value, DST)}.")
+        sys.exit(1)
+    if STRICT and DST_DIGITS and len(digits) != DST_DIGITS:
+        print(f"  Right value --- but write all {DST_DIGITS} digits, leading zeros and all: {show(value, DST)}.")
+        sys.exit(1)
+    print("  Correct!\n")
 
 print("All correct --- you can move between the bases! Here is your flag:")
 print(flag)

@@ -1,0 +1,524 @@
+#!/opt/pwn.college/python
+
+import os
+import pathlib
+import random
+import shutil
+import signal
+import string
+import subprocess
+import tempfile
+import textwrap
+
+from typing import List, Tuple
+
+flag_file = "/flag"
+user = "hacker"
+config = (pathlib.Path(__file__).parent / ".config").read_text()
+level = int(config)
+
+def create_users(num):
+    """
+    Create the given num of users.
+
+    return a list of (username, password)
+    """
+    assert(num > 0)
+
+    to_return = []
+    for i in range(num):
+        name = 'user_' + ''.join(random.choices(string.ascii_lowercase, k=8))
+        password = ''.join(random.choices(string.ascii_lowercase, k=8))
+
+        result = subprocess.run(["/usr/bin/openssl", "passwd", "-1", password],
+                                capture_output=True)
+
+        hashed_pass = result.stdout.decode('latin-1')[:-1]
+
+        subprocess.run(["/usr/sbin/useradd",
+                        "-p", hashed_pass,
+                        "-s", "/bin/bash",
+                        name],
+                       capture_output=True)
+
+        print(f"Created user {name} with password {password}")
+
+        to_return.append((name, password))
+
+    return to_return
+
+def flag_seed():
+    flag = open(flag_file, 'r').read()
+    random.seed(flag)
+
+class Level:
+    def __init__(self, name: str, level: int):
+        self.name = name
+        self.level = level
+
+class Category:
+    def __init__(self, name: str, bit: int):
+        self.name = name
+        self.bit = bit
+
+def success():
+    print("Congratulations, you solved this challenge!\nHere's your flag:")
+    with open("/flag", "r") as flag_file:
+        flag_content = flag_file.read()
+        print(flag_content)
+    exit(0)
+
+def category_set_to_str(set_: int, categories: List[Category]) -> str:
+    category_names = []
+    for category in categories:
+        if set_ & category.bit:
+            category_names.append(category.name)
+    return "{" + ", ".join(category_names) + "}"
+
+def is_subset_equal(a: int, b: int) -> bool:
+    return (b | a) == b
+
+LEVELS = [Level("TS", 4),
+        Level("S", 3),
+        Level("C", 2),
+        Level("UC", 1)]
+
+CATEGORIES = [
+        Category("NUC", 1),
+        Category("NATO", 1 << 1),
+        Category("ACE", 1 << 2),
+        Category("UFO", 1 << 3)
+    ]
+
+def mac_challenge(num_questions, timeout_sec, num_levels=None, num_categories=None,  custom_levels=None, custom_categories=None, use_flag_seed=True):
+    if use_flag_seed:
+        flag_seed()
+
+    categories = custom_categories if custom_categories else CATEGORIES
+    levels = custom_levels if custom_levels else LEVELS
+
+    if num_levels is None:
+        num_levels = len(levels)
+
+    if num_categories is None:
+        num_categories = len(categories)
+
+    assert(num_levels <= len(levels))
+    assert(num_categories <= len(categories))
+    assert(num_questions > 0)
+
+    random.shuffle(categories)
+    categories = categories[:num_categories]
+
+    random.shuffle(levels)
+    levels = levels[:num_levels]
+    levels.sort(reverse=True, key=lambda x: x.level)
+
+    max_category_set = 1 << len(categories)
+
+    print(f"In this challenge, your goal is to answer {num_questions} questions correctly in {timeout_sec} seconds about the following Mandatory Access Control (MAC) system:")
+
+    print(f"{len(levels)} Levels (first is highest aka more sensitive):")
+
+    for level in levels:
+        print(f"{level.name}")
+
+    if num_categories != 0:
+        print(f"{len(categories)} Categories:")
+        for category in categories:
+            print(f"{category.name}")
+
+    signal.alarm(timeout_sec)
+
+    for i in range(num_questions):
+        subject_index = random.randint(0, num_levels - 1)
+        subject_set = random.randint(0, max_category_set - 1)
+        subject_set_str = category_set_to_str(subject_set, categories)
+
+        object_index = random.randint(0, num_levels - 1)
+        object_set = random.randint(0, max_category_set - 1)
+        object_set_str = category_set_to_str(object_set, categories)
+
+        is_read = random.choice([True, False])
+        action = "read" if is_read else "write"
+
+        if i % 4 == 0:
+            object_index = subject_index
+
+        subject = levels[subject_index]
+        object = levels[object_index]
+
+        if num_categories:
+            print(f"Q {i+1}. Can a Subject with level {subject.name} and categories {subject_set_str} {action} an Object with level {object.name} and categories {object_set_str}?")
+        else:
+            print(f"Q {i+1}. Can a Subject with level {subject.name} {action} an Object with level {object.name}?")
+
+        answer = input().strip().lower()
+        if answer not in ["yes", "no"]:
+            print(f"Error, did not understand your response {answer}, must be yes or no. Goodbye.")
+            exit(-1)
+
+        answer_allowed = (answer == "yes")
+
+        is_allowed_by_level = subject.level >= object.level if is_read else object.level >= subject.level
+        is_allowed = False
+
+        if is_allowed_by_level:
+            if is_read:
+                is_allowed = is_subset_equal(object_set, subject_set)
+            else:
+                is_allowed = is_subset_equal(subject_set, object_set)
+
+        if is_allowed == answer_allowed:
+            print("Correct!")
+        else:
+            print("Incorrect!")
+            exit(-1)
+
+    success()
+
+def level1():
+    """
+    In this challenge you will work with different UNIX permissions on the flag.
+
+    The flag file will be owned by you and have 400 permissions.
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+    shutil.chown(flag_file, user=user)
+    os.chmod(flag_file, 0o400)
+
+    print("After:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+def level2():
+    """
+    In this challenge you will work with different UNIX permissions on the flag.
+
+    The flag file will be owned by root, group as you, and have 040 permissions.
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+    shutil.chown(flag_file, group=user)
+    os.chmod(flag_file, 0o040)
+
+    print("After:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+
+def level3():
+    """
+    In this challenge you will work with different UNIX permissions on the flag.
+
+    The flag file will be owned by you and have 000 permissions.
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+    shutil.chown(flag_file, user=user)
+    os.chmod(flag_file, 0o000)
+
+    print("After:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+def level4():
+    """
+    In this challenge you will work understand how the SETUID bit for UNIX permissions works.
+
+    What if /bin/cat had the SETUID bit set?
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la /bin/cat")
+
+    os.chmod("/bin/cat", 0o4755)
+
+    print("After:")
+    os.system(f"/bin/ls -la /bin/cat")
+
+def level5():
+    """
+    In this challenge you will work understand how the SETUID bit for UNIX permissions works.
+
+    What if /bin/cp had the SETUID bit set?
+
+    Hint: Look into how cp will deal with different permissions.
+
+    Another Hint: check the man page for cp, any options in there that might help?
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la /bin/cp")
+
+    os.chmod("/bin/cp", 0o4755)
+
+    print("After:")
+    os.system(f"/bin/ls -la /bin/cp")
+
+def level6():
+    """
+    In this challenge you will work with different UNIX permissions on the flag.
+
+    The flag file is owned by root and a new group.
+
+    Hint: Search for how to join a group with a password.
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+    new_group = "group_" + ''.join(random.choices(string.ascii_lowercase, k=8))
+    new_password = ''.join(random.choices(string.ascii_lowercase, k=8))
+
+    # create group with password
+    os.system(f"/usr/sbin/groupadd -p $(/usr/bin/openssl passwd -1 {new_password}) {new_group}")
+
+    shutil.chown(flag_file, group=new_group)
+    os.chmod(flag_file, 0o040)
+
+    print("After:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+    print(f"The password for {new_group} is: {new_password}")
+
+
+def level7():
+    """
+    In this challenge you will work understand how UNIX permissions works with multiple users.
+
+    You'll also be given access to various user accounts, use su to switch between them.
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+    pathlib.Path("/bin/chmod").unlink(missing_ok=True)
+    pathlib.Path("/bin/chown").unlink(missing_ok=True)
+
+    users = create_users(1)
+
+    shutil.chown(flag_file, user=user)
+    os.chmod(flag_file, 0o004)
+
+    print("After:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+def level8():
+    """
+    In this challenge you will work understand how UNIX permissions works with multiple users.
+
+    You'll also be given access to various user accounts, use su to switch between them.
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+    users = create_users(1)
+
+    shutil.chown(flag_file, user=users[0][0])
+    os.chmod(flag_file, 0o400)
+
+    print("After:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+def level9():
+    """
+    In this challenge you will work understand how UNIX permissions works with multiple users.
+
+    You'll also be given access to various user accounts, use su to switch between them.
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+    users = create_users(1)
+
+    shutil.chown(flag_file, group=users[0][0])
+    os.chmod(flag_file, 0o040)
+
+    print("After:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+
+def level10():
+    """
+    In this challenge you will work understand how UNIX permissions works with multiple users.
+
+    You'll also be given access to various user accounts, use su to switch between them.
+
+    Hint: How can you tell which user is in what group?
+    """
+
+    print("Before:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+    # create the target group
+    new_group = "group_" + ''.join(random.choices(string.ascii_lowercase, k=3))
+    subprocess.run(["/usr/sbin/groupadd", new_group], capture_output=True)
+
+    users = create_users(10)
+
+    the_chosen_one = random.choice(users)
+    subprocess.run(["/usr/sbin/usermod", "-a", "-G", new_group, the_chosen_one[0]],
+                   capture_output=True)
+
+    shutil.chown(flag_file, group=new_group)
+    os.chmod(flag_file, 0o040)
+
+    print("After:")
+    os.system(f"/bin/ls -la {flag_file}")
+
+def level11():
+    """
+    In this challenge you will work understand how UNIX permissions for directories work with multiple users.
+
+    You'll be given access to various user accounts, use su to switch between them.
+    """
+
+    outer_temp_file = tempfile.mkdtemp(dir="/tmp")
+    target_flag = tempfile.mkstemp(dir=outer_temp_file)
+
+    target_flag_file = target_flag[1]
+
+    # copy over the flag
+    shutil.copyfile(flag_file, target_flag_file)
+
+    users = create_users(2)
+    random.shuffle(users)
+
+    shutil.chown(target_flag_file, user="root", group=users[1][0])
+    os.chmod(target_flag_file, 0o440)
+
+    shutil.chown(outer_temp_file, user="root", group=users[0][0])
+    os.chmod(outer_temp_file, 0o551)
+
+    print("A copy of the flag has been placed somewhere in /tmp:")
+    os.system(f"/bin/ls -la /tmp")
+
+def level12():
+    """
+    In this challenge you will work understand how UNIX permissions for directories work with multiple users.
+
+    You'll be given access to various user accounts, use su to switch between them.
+    """
+
+    outer_temp_file = tempfile.mkdtemp(dir="/tmp")
+    inner_temp_file = tempfile.mkdtemp(dir=outer_temp_file)
+    target_flag = tempfile.mkstemp(dir=inner_temp_file)
+    target_flag_file = target_flag[1]
+
+    # copy over the flag
+    shutil.copyfile(flag_file, target_flag_file)
+
+    users = create_users(3)
+    random.shuffle(users)
+
+    shutil.chown(target_flag_file, user="root", group=users[1][0])
+    os.chmod(target_flag_file, 0o440)
+
+    shutil.chown(inner_temp_file, user="root", group=users[0][0])
+    os.chmod(inner_temp_file, 0o551)
+
+    shutil.chown(outer_temp_file, user="root", group=users[2][0])
+    os.chmod(outer_temp_file, 0o551)
+
+    print("A copy of the flag has been placed somewhere in /tmp:")
+    os.system(f"/bin/ls -la /tmp")
+
+def level13():
+    """
+    In this challenge you'll be answering questions about the standard Bell–LaPadula model of Mandatory Access Control.
+
+    Answer the question about the model to get the flag.
+    """
+    mac_challenge(1, 120, num_categories=0)
+
+def level14():
+    """
+    In this challenge you'll be answering questions about the standard Bell–LaPadula model of Mandatory Access Control.
+
+    Answer the questions about the model to get the flag.
+    """
+    mac_challenge(5, 120, num_categories=0)
+
+def level15():
+    """
+    In this challenge you'll be answering questions about the category-based Bell–LaPadula model of Mandatory Access Control.
+
+    Answer the question about the model to get the flag.
+    """
+    mac_challenge(1, 120)
+
+def level16():
+    """
+    In this challenge you'll be answering questions about the category-based Bell–LaPadula model of Mandatory Access Control.
+
+    Answer the questions about the model to get the flag.
+    """
+    mac_challenge(5, 120)
+
+def level17():
+    """
+    In this challenge you'll be answering many questions about the category-based Bell–LaPadula model of Mandatory Access Control.
+
+    Hint: Use pwntools to interact with this process and answer the questions.
+    """
+    mac_challenge(20, 1, use_flag_seed=False)
+
+def level18():
+    """
+    In this challenge you'll be answering many more questions about the category-based Bell–LaPadula model of Mandatory Access Control.
+
+    Hint: Use pwntools to interact with this process and answer the questions.
+    """
+    mac_challenge(64, 1, use_flag_seed=False)
+
+def level19():
+    """
+    In this challenge you'll be answering many more questions about a randomly generated category-based Bell–LaPadula model of Mandatory Access Control.
+
+    This is a custom and randomized access control module (it will be different every time you run it).
+
+    Hint: Use pwntools to interact with this process, read in the access control module, and answer the questions.
+    """
+
+    num_levels = 40
+    num_categories = 5
+
+    levels = []
+    names = set()
+    for i in range(num_levels):
+        name = ''.join(random.choices(string.ascii_lowercase + string.ascii_uppercase, k=8))
+        if not name in names:
+            levels.append(Level(name, i+1))
+            names.add(name)
+
+    categories = []
+    cat_names = set()
+    for i in range(num_categories):
+        name = ''.join(random.choices(string.ascii_uppercase, k=3))
+        if not name in cat_names:
+            categories.append(Category(name, 1 << i))
+            cat_names.add(name)
+
+    mac_challenge(128, 1, custom_levels=levels, custom_categories=categories, use_flag_seed=False)
+
+def challenge():
+    challenge_level = globals()[f"level{level}"]
+    description = textwrap.dedent(challenge_level.__doc__)
+
+    print("===== Welcome to Access Control! =====")
+    print("In this series of challenges, you will be working with various access control systems.")
+    print("Break the system to get the flag.")
+    print()
+    print(description)
+    print()
+
+    challenge_level()
+
+challenge()

@@ -1,0 +1,69 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/python -I
+
+import requests
+import random
+import psutil
+import string
+import flask
+import time
+import sys
+import os
+
+from dojjail import Host, Network
+
+flag = open("/flag").read()
+parent_process = psutil.Process(os.getppid())
+admin_pw = "".join(random.sample(string.ascii_letters*10, 8))
+
+def ensure_new_file_fd(path, flags):
+    return os.open(path, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
+
+class ClientHost(Host):
+    def entrypoint(self):
+        sys.stderr = open("/tmp/client-stderr", "w", opener=ensure_new_file_fd)
+
+        time.sleep(2)
+        s = requests.Session()
+        assert s.post("http://10.0.0.2/login", data={"username":"admin", "password":admin_pw}).status_code == 200
+        while True:
+            try:
+                s.get("http://10.0.0.2/ping")
+                time.sleep(1)
+            except (OSError, ConnectionError, TimeoutError, RequestException):
+                continue
+
+class ServerHost(Host):
+    def entrypoint(self):
+        sys.stderr = open("/tmp/server-output", "w", opener=ensure_new_file_fd)
+        sys.stdout = sys.stderr
+
+        app = flask.Flask("server")
+
+        @app.route("/login", methods=["POST"])
+        def login():
+            username = flask.request.form.get("username")
+            password = flask.request.form.get("password")
+            if username == "admin" and password == admin_pw:
+                flask.session["user"] = "admin"
+                return "OK"
+            flask.abort(403, "NOPE")
+
+        @app.route("/ping", methods=["GET"])
+        def ping():
+            return "pong"
+
+        @app.route("/flag", methods=["GET"])
+        def get_flag():
+            if flask.session.get("user", None) != "admin":
+                flask.abort(403, "NOPE")
+            return flag
+
+        app.secret_key = os.urandom(8)
+        app.run("0.0.0.0", 80)
+
+client_host = ClientHost("ip-10-0-0-1", privileged_uid=parent_process.uids().effective)
+server_host = ServerHost("ip-10-0-0-2")
+network = Network(hosts={ client_host: "10.0.0.1", server_host: "10.0.0.2" }, subnet="10.0.0.0/24")
+network.run()
+
+client_host.interactive(environ=parent_process.environ())

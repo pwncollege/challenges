@@ -1,0 +1,4 @@
+#!/bin/sh
+
+head -c16 /dev/urandom > /challenge/.key
+chmod 600 /challenge/.key

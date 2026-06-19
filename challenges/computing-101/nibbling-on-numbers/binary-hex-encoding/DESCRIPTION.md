@@ -10,4 +10,7 @@ To turn a byte from binary into hex, split its 8 bits into two groups of 4 and l
 ->  0xe3     the hex!
 ```
 
-Run `/challenge/convert` and get the flag!
+Run `/challenge/convert`.
+It shows you bytes in binary; write each one back in hexadecimal.
+(You can include the `0x` prefix or leave it off --- both work.)
+Get them all and you'll have the flag.

@@ -74,7 +74,16 @@ def render_challenge(template_directory: pathlib.Path) -> pathlib.Path:
             logger.debug("skipping git-crypt encrypted files: %s", ignored)
         return ignored
 
-    shutil.copytree(template_directory, rendered_directory, dirs_exist_ok=True, ignore=ignore_git_crypt)
+    # Do not preserve source mtimes in rendered build contexts. BuildKit's local
+    # source sync can otherwise confuse same-name, same-size files from different
+    # challenge contexts (for example V8's 41-byte REVISION files).
+    shutil.copytree(
+        template_directory,
+        rendered_directory,
+        dirs_exist_ok=True,
+        ignore=ignore_git_crypt,
+        copy_function=shutil.copy,
+    )
     templates = list(path.relative_to(rendered_directory) for path in rendered_directory.rglob("*.j2"))
     logger.debug("found %d template(s) to render", len(templates))
     for path in templates:

@@ -1,0 +1,65 @@
+{% extends "base/flask.py" %}
+
+{% block imports %}
+{% if challenge.pw_name == "pin" %}
+import random
+{%endif%}
+{% endblock %}
+
+{% block handlers %}
+
+{% include "temporary-db.py" %}
+
+# https://www.sqlite.org/lang_createtable.html
+db.execute("""CREATE TABLE users AS SELECT "admin" AS username, ? as {{challenge.pw_name}}""", [{{challenge.admin_pw_code}}])
+# https://www.sqlite.org/lang_insert.html
+db.execute("""INSERT INTO users SELECT "guest" as username, {{challenge.quote_character}}{{challenge.guest_pw}}{{challenge.quote_character}} as {{challenge.pw_name}}""")
+
+@app.route("/{{challenge.endpoint}}", methods=["POST"])
+def challenge_post():
+    username = flask.request.form.get("{{challenge.username_parameter}}")
+    {{challenge.pw_name}} = flask.request.form.get("{{challenge.password_parameter}}")
+    if not username:
+        flask.abort(400, "Missing `{{challenge.username_parameter}}` form parameter")
+    if not {{challenge.pw_name}}:
+        flask.abort(400, "Missing `{{challenge.password_parameter}}` form parameter")
+    
+    {% if challenge.pw_name == "pin" -%}
+    if {{challenge.pw_name}}[0] not in "0123456789":
+        flask.abort(400, "Invalid {{challenge.password_parameter}}")
+    {% endif %}
+
+    try:
+        # https://www.sqlite.org/lang_select.html
+        query = f"SELECT rowid, * FROM users WHERE username = '{username}' AND {{challenge.pw_name}} = {{challenge.quote_character}}{ {{challenge.pw_name}} }{{challenge.quote_character}}"
+        print(f"DEBUG: {query=}")
+        user = db.execute(query).fetchone()
+    except sqlite3.Error as e:
+        flask.abort(500, f"Query: {query}\nError: {e}")
+
+    if not user:
+        flask.abort(403, "Invalid username or {{challenge.pw_name}}")
+
+    flask.session["user"] = username
+    return flask.redirect(flask.request.path)
+
+@app.route("/{{challenge.endpoint}}", methods=["GET"])
+def challenge_get():
+    if not (username := flask.session.get("user", None)):
+        page = "<html><body>Welcome to the login service! Please log in as admin to get the flag."
+    else:
+        page = f"<html><body>Hello, {username}!"
+        {% if challenge.admin_print_flag -%}
+        if username == "admin":
+            page += "<br>Here is your flag: " + open("/flag").read()
+        {% endif %}
+
+    return page + """
+        <hr>
+        <form method=post>
+        User:<input type=text name={{challenge.username_parameter}}>{{challenge.pw_name.title()}}:<input type=text name={{challenge.password_parameter}}><input type=submit value=Submit>
+        </form>
+        </body></html>
+    """
+
+{% endblock %}

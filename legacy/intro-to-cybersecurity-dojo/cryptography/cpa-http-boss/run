@@ -1,0 +1,61 @@
+#!/opt/pwn.college/python
+
+from base64 import b64encode
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from Crypto.Random import get_random_bytes
+
+import tempfile
+import sqlite3
+import flask
+import os
+
+app = flask.Flask(__name__)
+
+class TemporaryDB:
+    def __init__(self):
+        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
+
+    def execute(self, sql, parameters=()):
+        connection = sqlite3.connect(self.db_file.name)
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        result = cursor.execute(sql, parameters)
+        connection.commit()
+        return result
+
+key = get_random_bytes(16)
+cipher = AES.new(key=key, mode=AES.MODE_ECB)
+
+db = TemporaryDB()
+# https://www.sqlite.org/lang_createtable.html
+db.execute("""CREATE TABLE posts AS SELECT ? AS content""", [open("/flag", "rb").read().strip()])
+
+@app.route("/", methods=["POST"])
+def challenge_post():
+    content = flask.request.form.get("content").encode('latin1')
+    db.execute("INSERT INTO posts VALUES (?)", [content])
+    return flask.redirect(flask.request.path)
+
+@app.route("/reset", methods=["POST"])
+def challenge_reset():
+    db.execute("DELETE FROM posts WHERE ROWID > 1")
+    return flask.redirect("/")
+
+@app.route("/", methods=["GET"])
+def challenge_get():
+    pt = b"|".join(post["content"] for post in db.execute("SELECT content FROM posts ORDER BY ROWID DESC").fetchall())
+    ct = cipher.encrypt(pad(pt, cipher.block_size))
+
+    return f"""
+        <html><body>Welcome to pwn.secret!
+        <form method=post>Post a secret:<input type=text name=content><input type=submit value=Submit></form>
+        <form method=post action=reset><input type=submit value="Reset Database"></form>
+        <hr>
+        <b>Encrypted backup:</b><pre>{b64encode(ct).decode()}</pre>
+        </body></html>
+    """
+
+app.secret_key = os.urandom(8)
+app.config['SERVER_NAME'] = "challenge.localhost:80"
+app.run("challenge.localhost", 80)

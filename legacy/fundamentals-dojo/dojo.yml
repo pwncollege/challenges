@@ -1,0 +1,28 @@
+id: fundamentals
+name: Playing With Programs
+
+award:
+  emoji: 🔤
+
+image: pwncollege/challenge-legacy:latest
+
+description: |
+  Throughout your security adventure, you will need to think outside the box and interact with a lot of different software.
+  This module will walk you through quite a few scenarios of such thinking and such interacting.
+  As you embark on this journey, remember: this is only the beginning.
+
+  This dojo errs heavily on the side of comprehensiveness.
+  However, many students enter the dojo already knowing the intricacies of, for example, scripting interactions.
+  Some others may be fast learners, and though some review of these concepts is good for these hackers, they might not need all nearly-200 challenges in this dojo to drive home the point.
+  For this beginning of your journey, feel free to meander, dig in where you feel compelled to do so, and move on when you are sated.
+
+  Need help? Ask in the [Discord channel](https://discord.com/channels/750635557666816031/1193136640701513778)!
+
+type: welcome
+
+modules:
+
+- id: data-dealings
+- id: talking-web
+- id: program-misuse
+- id: sql-playground

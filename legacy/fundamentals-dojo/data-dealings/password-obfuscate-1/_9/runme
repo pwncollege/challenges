@@ -1,0 +1,30 @@
+#!/usr/bin/exec-suid -- /bin/python3 -I
+
+import sys
+
+import base64
+
+
+def reverse_string(s):
+    return s[::-1]
+
+
+print("Enter the password:")
+entered_password = sys.stdin.buffer.read1()
+correct_password = b"2n\x97\x13\x18\xa5\xd5\xef"
+
+print(f"Read {len(entered_password)} bytes.")
+
+
+correct_password = correct_password[::-1]
+correct_password = base64.b64encode(correct_password)
+correct_password = base64.b64encode(correct_password)
+correct_password = correct_password.hex().encode("l1")
+
+
+if entered_password == correct_password:
+    print("Congrats! Here is your flag:")
+    print(open("/flag").read().strip())
+else:
+    print("Incorrect!")
+    sys.exit(1)

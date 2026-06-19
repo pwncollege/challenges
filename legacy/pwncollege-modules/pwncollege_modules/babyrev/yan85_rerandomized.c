@@ -1,0 +1,82 @@
+unsigned char VALUES[8] = { 1, 2, 4, 8, 16, 32, 64, 128 };
+void shuffle_values()
+{
+  for (int i = 0; i < 65535; i++)
+  {
+    int j = rand() % 8;
+    int k = rand() % 8;
+    WORD_TYPE t = VALUES[j];
+    VALUES[j] = VALUES[k];
+    VALUES[k] = t;
+  }
+}
+
+WORD_TYPE SPEC_REG_A = 1;
+WORD_TYPE SPEC_REG_B = 2;
+WORD_TYPE SPEC_REG_C = 4;
+WORD_TYPE SPEC_REG_D = 8;
+WORD_TYPE SPEC_REG_S = 16;
+WORD_TYPE SPEC_REG_I = 32;
+WORD_TYPE SPEC_REG_F = 64;
+
+WORD_TYPE INST_IMM = 1;
+WORD_TYPE INST_STK = 2;
+WORD_TYPE INST_ADD = 4;
+WORD_TYPE INST_STM = 8;
+WORD_TYPE INST_LDM = 16;
+WORD_TYPE INST_JMP = 32;
+WORD_TYPE INST_CMP = 64;
+WORD_TYPE INST_SYS = 128;
+
+WORD_TYPE SYS_OPEN = 1;
+WORD_TYPE SYS_READ_MEMORY = 2;
+WORD_TYPE SYS_READ_CODE = 4;
+WORD_TYPE SYS_WRITE = 8;
+WORD_TYPE SYS_SLEEP = 16;
+WORD_TYPE SYS_EXIT = 32;
+
+WORD_TYPE FLAG_L = 1;
+WORD_TYPE FLAG_G = 2;
+WORD_TYPE FLAG_E = 4;
+WORD_TYPE FLAG_N = 8;
+WORD_TYPE FLAG_Z = 16;
+
+void rerandomize()
+{
+  shuffle_values();
+  SPEC_REG_A = VALUES[0];
+  SPEC_REG_B = VALUES[1];
+  SPEC_REG_C = VALUES[2];
+  SPEC_REG_D = VALUES[3];
+  SPEC_REG_S = VALUES[4];
+  SPEC_REG_I = VALUES[5];
+  SPEC_REG_F = VALUES[6];
+
+  shuffle_values();
+  INST_IMM = VALUES[0];
+  INST_STK = VALUES[1];
+  INST_ADD = VALUES[2];
+  INST_STM = VALUES[3];
+  INST_LDM = VALUES[4];
+  INST_JMP = VALUES[5];
+  INST_CMP = VALUES[6];
+  INST_SYS = VALUES[7];
+
+  shuffle_values();
+  SYS_OPEN = VALUES[0];
+  SYS_READ_MEMORY = VALUES[1];
+  SYS_READ_CODE = VALUES[2];
+  SYS_WRITE = VALUES[3];
+  SYS_SLEEP = VALUES[4];
+  SYS_EXIT = VALUES[5];
+
+  shuffle_values();
+  FLAG_L = VALUES[1];
+  FLAG_G = VALUES[2];
+  FLAG_E = VALUES[3];
+  FLAG_N = VALUES[4];
+  FLAG_Z = VALUES[5];
+}
+
+#define INST_TYPE { {{ challenge.instruction_layout }} }
+

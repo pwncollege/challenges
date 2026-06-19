@@ -1,9 +1,6 @@
 FROM ubuntu:24.04
 
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    yes | unminimize && \
-    apt-get install --no-install-recommends -yqq \
+RUN apt-get update && apt-get install --no-install-recommends -yqq \
     binutils \
     bsdextrautils \
     bzip2 \
@@ -14,8 +11,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     genisoimage \
     less \
     make \
-    man-db \
-    manpages \
     nano \
     openssh-client \
     python-is-python3 \

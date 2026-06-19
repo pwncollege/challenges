@@ -46,9 +46,7 @@ Primary entry points:
 - `./pwnshop test` — render, build, and run all `test*/test_*` files inside the challenge.
 - `./pwnshop run` — render, build, and drop into an interactive shell inside the challenge container (use `--user=<uid>` to control the interactive user, default `1000`, `--volume <path>` to mount host paths read-only, or append a command after the challenge to run it instead of `/bin/bash`).
 
-Any future automation that renders, builds, runs, or tests challenges should shell out to `./pwnshop ...` rather than reimplementing those pieces of the workflow.
-
-The standalone `discord-feedback` helper is available in `nix develop` for Discord-derived curriculum feedback automation.
+Any future automation (GitHub Actions, local scripts, etc.) should shell out to `./pwnshop ...` rather than reimplementing pieces of the workflow.
 
 # Building and testing
 

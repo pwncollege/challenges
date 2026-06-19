@@ -12,8 +12,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-nix
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          cache-dependency-glob: tools/maintainers/check-maintainers
 
       - name: Check Maintainers
-        shell: 'nix shell nixpkgs#uv nixpkgs#gnupg --command bash --noprofile --norc -euo pipefail {0}'
         run: tools/maintainers/check-maintainers ./maintainers.yml

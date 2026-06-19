@@ -39,7 +39,7 @@ There's also a complementary instruction, `setnz` ("Set if Not Zero"), which doe
 
 But what is `dil`?
 So far, you've worked with 64-bit registers like `rdi`, `rax`, and `rsp`.
-The `setz` instruction, however, only writes a single byte (8 bits).
+The `setnz` instruction, however, only writes a single byte (8 bits).
 Luckily, you can access smaller portions of the full 64-bit registers.
 For `rdi`:
 
@@ -49,7 +49,7 @@ For `rdi`:
 When you write `setz dil`, you're putting a `0` or `1` into just the lowest byte of `rdi`, leaving the upper bytes unchanged.
 Since `rdi` is the register used for the exit code in the `exit` system call, this effectively makes your exit code `1` (equal!) or `0` (not equal!).
 
-One more thing about `cmp`: it can compare a register with an immediate (`cmp rdi, 42`) or even a memory location with an immediate (`cmp QWORD PTR [rsp], 42`).
+One more thing about `cmp`: it can compare a register with an immediate (`cmp rdi, 42`) or even a memory location with an immediate (`cmp BYTE PTR [rsp], 42`).
 But it **cannot** compare two memory locations at once --- at most one operand can be a memory dereference.
 This is a general rule in x86 and, actually, in almost all CPU architectures.
 

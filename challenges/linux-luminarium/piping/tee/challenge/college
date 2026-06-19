@@ -4,7 +4,7 @@ sleep 5
 DIR=$(/bin/dirname ${BASH_SOURCE[0]})
 if ! $DIR/chio.py --check_stdin_pipe tee 2>/dev/null && ! $DIR/chio.py --check_stdin_pipe challenge_shellscript 2>/dev/null
 then
-	fold -s <<< "/challenge/college needs to be on the receiving end of the output of '/challenge/pwn' (or 'tee' for debugging)."
+	fold -s <<< "/challenge/secret needs to the on the receiving end of the output of '/challenge/pwn' (or 'tee' for debugging)."
 	exit 1
 fi
 

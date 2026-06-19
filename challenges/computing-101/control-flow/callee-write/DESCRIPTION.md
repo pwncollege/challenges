@@ -99,14 +99,10 @@ hacker@dojo:~$ gdb ./debug
 Execution stops at your `int3`; step through with the techniques from [Software Introspection](/computing-101/introspecting), watching the registers and the buffer.
 If your `solve` is correct, this prints `AAAA` --- and the same logic will print your real flag when you submit the `.so` to the grader.
 
-You can also debug the native harness directly with stand-in bytes instead of the flag.
-`/challenge/check` is the Python checker script, so do not load it as the executable in `gdb`.
-The native program that loads your `.so` is `/challenge/harness`, and it reads the stand-in bytes from stdin:
+To instead watch the *real* run with the *real* flag: `/challenge/check` is a SUID binary, so launching it under a debugger drops its privileges and it can't read your flag.
+Launch this challenge in **practice mode** (which gives you `sudo`) and debug the whole flow as root, passing your `.so` to `check` via gdb's `run` --- exactly like you did back in the [running-with-arguments](/computing-101/introspecting) level:
 
 ```console
-hacker@dojo:~$ gdb --args /challenge/harness your-solve.so
-(gdb) run
-type-a-placeholder-flag-here
+hacker@dojo:~$ sudo gdb /challenge/check
+(gdb) r your-solve.so
 ```
-
-The checker will run that same harness shape with the real flag when you submit your `.so`.

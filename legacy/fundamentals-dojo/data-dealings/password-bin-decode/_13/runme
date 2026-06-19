@@ -1,0 +1,28 @@
+#!/usr/bin/exec-suid -- /bin/python3 -I
+
+import sys
+
+
+def decode_from_bits(s):
+    s = s.decode("latin1")
+    assert set(s) <= {"0", "1"}, "non-binary characters found in bitstream!"
+    assert len(s) % 8 == 0, "must enter data in complete bytes (each byte is 8 bits)"
+    return int.to_bytes(int(s, 2), length=len(s) // 8, byteorder="big")
+
+
+print("Enter the password:")
+entered_password = sys.stdin.buffer.read1()
+correct_password = b"1101000011010001100100111010000010010100101100111111010011011001"
+
+print(f"Read {len(entered_password)} bytes.")
+
+
+correct_password = decode_from_bits(correct_password)
+
+
+if entered_password == correct_password:
+    print("Congrats! Here is your flag:")
+    print(open("/flag").read().strip())
+else:
+    print("Incorrect!")
+    sys.exit(1)

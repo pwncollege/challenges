@@ -10,7 +10,7 @@ This pattern is called a **switch**, and it's a fundamental building block in pr
 In the disassembly, you'll see something like:
 
 ```asm
-mov    rax, 0                    ; zero out rax
+xor    eax, eax                  ; zero out rax
 mov    al, BYTE PTR [rcx]        ; load the character into the low byte of rax
 mov    rax, [rax*8+0x1234000]    ; load a stored address from the jump table at 0x1234000
 jmp    rax                       ; jump to it
@@ -18,7 +18,7 @@ jmp    rax                       ; jump to it
 
 You've seen `dil` (the low byte of `rdi`) before, and `al` is the same idea for `rax`.
 Writing to `al` only changes the lowest 8 bits, leaving the rest of `rax` intact.
-That's why the code first zeros `rax`: it ensures the upper bytes are `0`, so after `mov al, [rcx]`, `rax` holds just the character's value (0--255).
+That's why the code first zeros `rax` with `xor eax, eax`: it ensures the upper bytes are `0`, so after `mov al, [rcx]`, `rax` holds just the character's value (0--255).
 
 The character's value directly indexes a table of 256 entries (one per possible byte value).
 Each entry is an **8 byte** address pointing to code for that case.
@@ -48,26 +48,13 @@ For example, if you are in gdb at the instruction `mov rax, [rax*8+0x1337000]` (
 (gdb)
 ```
 
-Once you find the table entry that points somewhere different, convert its table position back into the input byte.
-Use the address of that table slot (the address on the left side of the `x/a` output), not the address stored inside it.
-Subtract the table base from that slot address to get its offset into the table.
-Then divide by 8, because each table entry is an 8-byte address.
-In the example above, the unusual entry is at `0x1337310`, so `0x1337310 - 0x1337000 = 0x310`, and `0x310 / 8 = 98`.
-That means the input byte has value `98`, which ASCII represents as `'b'`.
-
 **HINT:**
-You can also print the whole jump table at the same time.
-The output will be long, but it starts like this:
+You can also print out *several* jump table entries at the same time:
 
 ```gdb
-(gdb) x/256a 0x1337000
-0x1337000:  0x400100  0x400100
-0x1337010:  0x400100  0x400100
-...
+(gdb) x/3a 0x1337000
+0x1337000:  0x400100
+0x1337008:  0x400100
+0x1337010:  0x400100
 (gdb)
 ```
-
-The number after `x/` is how many entries gdb should print.
-Since the input byte chooses one of 256 entries, and each entry is one 8-byte code address, this lets you scan the table for the one address that differs.
-If gdb prints multiple entries on one line, the address on the left is the first entry on that line; the next entry is 8 bytes later.
-As in the previous challenge, use gdb to understand the binary, then run `/challenge/reverse-me` directly with the recovered byte to get the flag.

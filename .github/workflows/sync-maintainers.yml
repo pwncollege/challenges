@@ -19,10 +19,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-nix
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          cache-dependency-glob: tools/maintainers/sync-maintainers
+
+      - name: Install git crypt
+        run: sudo apt-get update && sudo apt-get install -y git-crypt
 
       - name: Unlock git-crypt
-        shell: 'nix shell nixpkgs#git nixpkgs#git-crypt nixpkgs#gnupg --command bash --noprofile --norc -euo pipefail {0}'
         env:
           GPG_ROOT_PRIVATE_KEY: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
         run: |
@@ -34,8 +40,9 @@ jobs:
           git crypt unlock
 
       - name: Sync maintainers
-        shell: 'nix shell nixpkgs#uv nixpkgs#git nixpkgs#git-crypt nixpkgs#gnupg --command bash --noprofile --norc -euo pipefail {0}'
         run: |
+          set -eo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 

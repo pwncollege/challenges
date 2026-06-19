@@ -1,0 +1,170 @@
+const PROCESS_BASE = 0x555555554000n;
+
+function createProvidedProcessMemory() {
+    const PT_LOAD = 1;
+    const PT_DYNAMIC = 2;
+    const PF_X = 1;
+    const PF_W = 2;
+    const DT_NULL = 0n;
+    const DT_PLTRELSZ = 2n;
+    const DT_STRTAB = 5n;
+    const DT_SYMTAB = 6n;
+    const DT_RELAENT = 9n;
+    const DT_SYMENT = 11n;
+    const DT_JMPREL = 23n;
+
+    const memory = new Map();
+    const segments = Object.freeze([
+        Object.freeze({ vaddr: 0x0000n, memsz: 0x0400n }),
+        Object.freeze({ vaddr: 0x1000n, memsz: 0x0400n }),
+        Object.freeze({ vaddr: 0x2000n, memsz: 0x4000n }),
+    ]);
+
+    function fail(message) {
+        throw new Error(message);
+    }
+
+    function locate(address) {
+        address = BigInt(address);
+        if (address < PROCESS_BASE) {
+            fail(`process address 0x${address.toString(16)} is below the mapped image base.`);
+        }
+
+        const relative = address - PROCESS_BASE;
+        for (const segment of segments) {
+            if (relative >= segment.vaddr && relative < segment.vaddr + segment.memsz) {
+                return;
+            }
+        }
+        fail(`process address 0x${address.toString(16)} is not mapped in the process image.`);
+    }
+
+    function write8Raw(address, value) {
+        locate(address);
+        memory.set(BigInt(address).toString(), Number(value) & 0xff);
+    }
+
+    function read8(address) {
+        locate(address);
+        return memory.get(BigInt(address).toString()) || 0;
+    }
+
+    function write16Raw(address, value) {
+        address = BigInt(address);
+        for (let i = 0; i < 2; i++) {
+            write8Raw(address + BigInt(i), Number((BigInt(value) >> BigInt(i * 8)) & 0xffn));
+        }
+    }
+
+    function write32Raw(address, value) {
+        address = BigInt(address);
+        for (let i = 0; i < 4; i++) {
+            write8Raw(address + BigInt(i), Number((BigInt(value) >> BigInt(i * 8)) & 0xffn));
+        }
+    }
+
+    function write64Raw(address, value) {
+        address = BigInt(address);
+        value = BigInt.asUintN(64, BigInt(value));
+        for (let i = 0; i < 8; i++) {
+            write8Raw(address + BigInt(i), Number((value >> BigInt(i * 8)) & 0xffn));
+        }
+    }
+
+    function writeCString(address, value) {
+        address = BigInt(address);
+        for (let i = 0; i < value.length; i++) {
+            write8Raw(address + BigInt(i), value.charCodeAt(i));
+        }
+        write8Raw(address + BigInt(value.length), 0);
+    }
+
+    function writeProgramHeader(index, type, flags, offset, vaddr, filesz, memsz) {
+        const ph = PROCESS_BASE + 0x40n + BigInt(index) * 0x38n;
+        write32Raw(ph, type);
+        write32Raw(ph + 0x04n, flags);
+        write64Raw(ph + 0x08n, offset);
+        write64Raw(ph + 0x10n, vaddr);
+        write64Raw(ph + 0x18n, vaddr);
+        write64Raw(ph + 0x20n, filesz);
+        write64Raw(ph + 0x28n, memsz);
+        write64Raw(ph + 0x30n, 0x1000n);
+    }
+
+    function writeDynamicEntry(index, tag, value) {
+        const entry = PROCESS_BASE + 0x3000n + BigInt(index) * 16n;
+        write64Raw(entry, tag);
+        write64Raw(entry + 8n, value);
+    }
+
+    function writeSymbol(index, nameOffset) {
+        write32Raw(PROCESS_BASE + 0x3180n + BigInt(index) * 24n, nameOffset);
+    }
+
+    function writeRela(index, gotOffset, symbolIndex) {
+        const rela = PROCESS_BASE + 0x3200n + BigInt(index) * 24n;
+        write64Raw(rela, gotOffset);
+        write64Raw(rela + 8n, BigInt(symbolIndex) << 32n);
+        write64Raw(rela + 16n, 0n);
+    }
+
+    write64Raw(PROCESS_BASE, 0x00010102464c457fn);
+    write64Raw(PROCESS_BASE + 0x20n, 0x40n);
+    write16Raw(PROCESS_BASE + 0x36n, 0x38);
+    write16Raw(PROCESS_BASE + 0x38n, 4);
+
+    writeProgramHeader(0, PT_LOAD, 0, 0x0000n, 0x0000n, 0x0400n, 0x0400n);
+    writeProgramHeader(1, PT_LOAD, PF_X, 0x1000n, 0x1000n, 0x0400n, 0x0400n);
+    writeProgramHeader(2, PT_LOAD, PF_W, 0x2000n, 0x2000n, 0x2000n, 0x4000n);
+    writeProgramHeader(3, PT_DYNAMIC, PF_W, 0x3000n, 0x3000n, 0x0100n, 0x0100n);
+
+    writeDynamicEntry(0, DT_STRTAB, 0x3100n);
+    writeDynamicEntry(1, DT_SYMTAB, 0x3180n);
+    writeDynamicEntry(2, DT_SYMENT, 24n);
+    writeDynamicEntry(3, DT_JMPREL, 0x3200n);
+    writeDynamicEntry(4, DT_PLTRELSZ, 48n);
+    writeDynamicEntry(5, DT_RELAENT, 24n);
+    writeDynamicEntry(6, DT_NULL, 0n);
+
+    write8Raw(PROCESS_BASE + 0x3100n, 0);
+    writeCString(PROCESS_BASE + 0x3101n, "syscall");
+    writeCString(PROCESS_BASE + 0x3109n, "exit");
+    writeSymbol(1, 1);
+    writeSymbol(2, 9);
+    writeRela(0, 0x3300n, 1);
+    writeRela(1, 0x3308n, 2);
+    write64Raw(PROCESS_BASE + 0x3300n, PROCESS_BASE + 0x4100n);
+    write64Raw(PROCESS_BASE + 0x3308n, PROCESS_BASE + 0x4110n);
+
+    const gadgets = [
+        [0x1010n, [0x5f, 0xc3]],
+        [0x1020n, [0x5e, 0xc3]],
+        [0x1030n, [0x5a, 0xc3]],
+        [0x1040n, [0x59, 0xc3]],
+        [0x1050n, [0xc3]],
+        [0x1060n, [0x58, 0x59, 0x5a, 0x5e, 0x5f, 0x41, 0x58, 0x41, 0x59, 0x41, 0x5a, 0x5d, 0xc3]],
+    ];
+    for (const [offset, bytes] of gadgets) {
+        for (let i = 0; i < bytes.length; i++) {
+            write8Raw(PROCESS_BASE + offset + BigInt(i), bytes[i]);
+        }
+    }
+
+    function read64(address) {
+        address = BigInt(address);
+        let value = 0n;
+        for (let i = 0; i < 8; i++) {
+            value |= BigInt(read8(address + BigInt(i))) << BigInt(i * 8);
+        }
+        return value;
+    }
+
+    function write64(address, value) {
+        write64Raw(address, value);
+    }
+
+    return Object.freeze({
+        read64,
+        write64,
+    });
+}

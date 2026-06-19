@@ -1,0 +1,50 @@
+binary_name_prefix: integration
+build_image: pwncollege/challenge-legacy:latest
+verify_image: pwncollege/challenge-legacy:latest
+challenges:
+- id: decrypt-overflow-ecb-w
+  challenge: ForgedOverflowWin
+  walkthrough: true
+  keep_source: true
+  seed: 13379000
+  variants: 16
+- id: decrypt-overflow-ecb
+  challenge: ForgedOverflowWin
+  walkthrough: false
+  keep_source: false
+  seed: 133715000
+  variants: 16
+- id: decrypt-overflow-sc-ecb-w
+  challenge: ForgedOverflowShellcode
+  walkthrough: true
+  keep_source: true
+  seed: 133721000
+  variants: 16
+- id: decrypt-overflow-sc-ecb
+  challenge: ForgedOverflowShellcode
+  walkthrough: false
+  keep_source: false
+  seed: 133727000
+  variants: 16
+- id: cimg-screenshot-sc
+  challenge: CIMGScreenshotOverflow
+  walkthrough: false
+  keep_source: false
+  seed: 133733000
+- id: cimg-screenshot-win
+  challenge: CIMGScreenshotOverflowWin
+  walkthrough: false
+  keep_source: false
+  seed: 133738000
+- id: web-overflow
+  challenge: WebServerOverflow
+  walkthrough: false
+  keep_source: true
+  seed: 133743000
+  variants: 16
+- id: web-overflow-client
+  challenge: CookieStealingShellcode
+  walkthrough: false
+  keep_source: true
+  seed: 133748000
+  variants: 16

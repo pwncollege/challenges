@@ -1,0 +1,334 @@
+#!/opt/pwn.college/python
+
+import os
+import sys
+import subprocess
+import random
+import pathlib
+import shutil
+import hashlib
+import time
+
+import psutil
+from flask import Flask, request, make_response, redirect, session
+
+
+app = Flask(__name__)
+flag = open("/flag").read()
+config = (pathlib.Path(__file__).parent / ".config").read_text()
+challenge_name, client_name = config.split()
+
+
+def value(n):
+    return "".join(random.choice("0123456789abcdef") for _ in range(n))
+
+
+def validate(name, value, correct):
+    assertion_message = f"Incorrect {name}: value `{value}`, should be `{correct}`\n"
+    assert value == correct, assertion_message
+
+
+def validate_client(name):
+    correct_path = pathlib.Path(shutil.which(name, path=os.getenv("PATH", ""))).resolve()
+    
+    server_connection = next(
+        connection
+        for connection in psutil.Process().connections()
+        if connection.fd == request.input_stream.fileno()
+    )
+    client_connection = next(
+        connection
+        for connection in psutil.net_connections()
+        if connection.raddr == server_connection.laddr
+        and connection.laddr == server_connection.raddr
+    )
+    client_process = psutil.Process(client_connection.pid)
+    client_path = pathlib.Path(client_process.exe())
+    
+    assert client_path.owner() == "root", f"Client `{client_path}` is not owned by root; use `{correct_path}`\n"
+    
+    mounts = pathlib.Path("/proc/mounts").read_text()
+    for mount in reversed(mounts.splitlines()):
+        mount_path = pathlib.Path(mount.split()[1])
+        mount_options = mount.split()[3].split(',')
+        if mount_path not in client_path.parents:
+            continue
+        
+        assert "nosuid" not in mount_options, f"Client `{client_path}` is on a nosuid mount; use `{correct_path}`\n"
+        
+    assert name in client_path.name, f"Incorrect client `{client_path}`; use `{correct_path}`\n"
+
+
+def instructions_client_nc():
+    return "You must make this request using the nc command"
+
+
+def instructions_client_curl():
+    return "You must make this request using the curl command"
+
+
+def instructions_client_python():
+    return "You must make this request using python"
+
+
+# create globals needed to solve
+random.seed(flag)
+rand_32_value = value(32)
+rand_8_values = [value(8), value(8), value(8), value(8), value(8), value(8)]
+
+def challenge_none():
+    return flag
+
+
+def instructions_none():
+    return "Make an HTTP request to 127.0.0.1 on port 80 to get the flag"
+
+
+requested_host_test = rand_32_value
+def challenge_host():
+    validate("host", request.host, requested_host_test)
+    return flag
+
+
+def instructions_host():
+    return f"{instructions_none()}.\nThe Host HTTP header must be {requested_host_test}"
+
+
+requested_path = f"/{rand_32_value}"
+def challenge_path():
+    validate("path", request.path, requested_path)
+    return flag
+
+
+def instructions_path():
+    return f"{instructions_none()}.\nThe path of the HTTP request must be {requested_path}"
+
+
+requested_path_encoded = f"/{rand_8_values[0]} {rand_8_values[1]}/{rand_8_values[2]} {rand_8_values[3]}"
+def challenge_path_encoded():
+    validate("path", request.path, requested_path_encoded)
+    return flag
+
+def instructions_path_encoded():
+    return f"{instructions_none()}.\nThe path of the HTTP request must be {requested_path_encoded}"
+
+requested_arg = rand_32_value
+def challenge_arg():
+    validate("arg `a`", request.args.get("a"), requested_arg)
+    return flag
+
+
+def instructions_arg():
+    return f"{instructions_none()}.\nThe HTTP request must specify HTTP GET parameter `a` as value {requested_arg}"
+
+
+requested_arg_multi_a = rand_32_value
+requested_arg_multi_b = f"{rand_8_values[0]} {rand_8_values[1]}&{rand_8_values[2]}#{rand_8_values[3]}"
+def challenge_arg_multi():
+    validate("arg `a`", request.args.get("a"), requested_arg_multi_a)
+    validate("arg `b`", request.args.get("b"), requested_arg_multi_b)
+    return flag
+
+
+def instructions_arg_multi():
+    return f"{instructions_none()}.\nThe HTTP request must specify HTTP GET parameters:\n`a` as value {requested_arg_multi_a}\n`b` as value {requested_arg_multi_b}"
+
+requested_form = rand_32_value
+def challenge_form():
+    validate("form `a`", request.form.get("a"), requested_form)
+    return flag
+
+
+def instructions_form():
+    return f"{instructions_none()}.\nThe HTTP request must specify HTTP POST parameter `a` as value {requested_form}"
+
+
+requested_form_multi_a = rand_32_value
+requested_form_multi_b = f"{value(8)} {value(8)}&{value(8)}#{value(8)}"
+def challenge_form_multi():
+    validate("form `a`", request.form.get("a"), requested_form_multi_a)
+    validate("form `b`", request.form.get("b"), requested_form_multi_b)
+    return flag
+
+
+def instructions_form_multi():
+    return f"{instructions_none()}.\nThe HTTP request must specify HTTP POST parameters:\n`a` as value {requested_form_multi_a}\n`b` as value {requested_form_multi_b}"
+
+
+requested_json = rand_32_value
+def challenge_json():
+    validate("Content-Type", request.content_type, "application/json")
+    validate("json `a`", request.json.get("a"), requested_json)
+    return flag
+
+
+def instructions_json():
+    return f"{instructions_none()}.\nThe HTTP request must specify a content type HTTP header of 'application/json'\nMust send an HTTP POST with the body as a JSON object that has a pair with name of `a` and a value of {requested_json}"
+
+
+requested_json_multi_a = rand_32_value
+requested_json_multi_c = rand_8_values[0]
+requested_json_multi_d_list = [rand_8_values[1], f"{rand_8_values[2]} {rand_8_values[3]}&{rand_8_values[4]}#{rand_8_values[5]}"]
+def challenge_json_multi():
+    validate("Content-Type", request.content_type, "application/json")
+    validate("json `a`", request.json.get("a"), requested_json_multi_a)
+    validate("json `b`", request.json.get("b"), {
+        "c": requested_json_multi_c,
+        "d": requested_json_multi_d_list,
+    })
+    return flag
+
+def instructions_json_multi():
+    return f"""{instructions_none()}.
+The HTTP request must specify a content type HTTP header of 'application/json'
+Must send an HTTP POST with the body as a JSON object that has:
+\ta pair with name of `a` and a value of {requested_json_multi_a}
+\ta pair with name of `b` and a value of a object that has:
+\t\ta pair with name of `c` and a value of {requested_json_multi_c}
+\t\ta pair with name of `d` and a value that is a list with the following elements:\n\t\t\t""" + "\n\t\t\t".join(requested_json_multi_d_list)
+
+
+required_redirect = f"/{value(32)}"
+def challenge_redirect():
+    redirect_path = required_redirect
+    if request.path != redirect_path:
+        return redirect(redirect_path)
+    return flag
+
+
+def instructions_redirect():
+    return f"{instructions_none()}. Make any HTTP request, and the server will send you an HTTP response that redirects you to the flag."
+
+
+required_cookie = value(32)
+def challenge_cookie():
+    cookie = value(32)
+    if request.cookies.get("cookie") != cookie:
+        response = make_response(redirect(request.path))
+        response.set_cookie("cookie", cookie)
+        return response
+    return flag
+
+
+def instructions_cookie():
+    return f"{instructions_none()}. Make any HTTP request, and the server will ask you to set a cookie. Make another request with that cookie to get the flag."
+
+
+required_state_requests = 4
+def challenge_state():
+    state = session.get("state", 0) + 1
+    session["state"] = state
+    if state < required_state_requests:
+        response = make_response(redirect(request.path))
+        response.set_data(f"state: {state}\n")
+        return response
+    return flag
+
+
+def instructions_state():
+    return f"{instructions_none()}. The server requires that you make {required_state_requests} stateful requests."
+
+
+@app.route("/", methods=["GET", "POST"])
+@app.route("/<path:path>", methods=["GET", "POST"])
+def catch_all(path=""):
+    random.seed(flag)
+    challenge = globals()[f"challenge_{challenge_name}"]
+    if client_name:
+        validate_client(client_name)
+    return challenge()
+
+
+@app.after_request
+def after_request(response):
+    response.headers["Server"] = "pwn.college"
+    del response.headers["Content-Type"]
+    return response
+
+
+@app.errorhandler(AssertionError)
+def assertion_handler(error):
+    return str(error), 400
+
+
+@app.errorhandler(Exception)
+def exception_handler(error):
+    import traceback
+    return traceback.format_exc(), 500
+
+def output_instructions():
+    chall_instructions = globals()[f"instructions_{challenge_name}"]()
+    print(chall_instructions)
+    if client_name:
+        client_instructions = globals()[f"instructions_client_{client_name}"]()
+        print(client_instructions)
+
+    print("\nThe following output is from the server, might be useful in helping you debug:\n------------------------------------------------")
+
+def start_daemon(target):
+    challenge_run_dir = pathlib.Path("/run/challenge")
+    challenge_run_dir.mkdir(exist_ok=True)
+
+    challenge_run_pid_path = challenge_run_dir / "challenge.pid"
+    challenge_run_log_path = challenge_run_dir / "challenge.log"
+
+    stdout_path = pathlib.Path("/proc/self/fd/1").resolve()
+    dev_null_path = pathlib.Path("/dev/null")
+
+    if stdout_path == challenge_run_log_path:
+        return target()
+
+    argv = [
+        "/usr/sbin/start-stop-daemon",
+        "--start",
+        "--pidfile", str(challenge_run_pid_path),
+        "--make-pidfile",
+        "--background",
+        "--no-close",
+        "--quiet",
+        "--oknodo",
+        "--startas", sys.argv[0],
+        "--",
+        *sys.argv[1:],
+    ]
+
+    subprocess.run(argv,
+                   stdin=subprocess.DEVNULL,
+                   stdout=open(challenge_run_log_path, "a"),
+                   stderr=subprocess.STDOUT,
+                   check=True)
+
+    if stdout_path != dev_null_path:
+        argv = [
+            "/usr/bin/tail",
+            "-F",
+            "-n+1",
+            str(challenge_run_log_path),
+        ]
+
+        while True:
+            subprocess.run(argv,
+                           stdin=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+            time.sleep(0.1)
+
+# sanity check that there's instructions defined for all the challenges
+def check_instructions():
+    for g, fun in globals().items():
+        if g.startswith("challenge_") and callable(fun):
+            instruction_name = g.replace("challenge_", "instructions_", 1)
+            assert instruction_name in globals().keys(), f"{instruction_name} not found, expected based on {g}"
+
+
+if __name__ == "__main__":
+    def target():
+        check_instructions()
+        output_instructions()
+
+        app.secret_key = flag
+        app.run("127.0.0.1", 80)
+
+    try:
+        start_daemon(target)
+    except KeyboardInterrupt:
+        pass

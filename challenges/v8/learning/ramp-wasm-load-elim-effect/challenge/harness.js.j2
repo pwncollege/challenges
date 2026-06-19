@@ -1,0 +1,341 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+function u32v(value) {
+    const out = [];
+    value >>>= 0;
+    do {
+        let byte = value & 0x7f;
+        value >>>= 7;
+        if (value) byte |= 0x80;
+        out.push(byte);
+    } while (value);
+    return out;
+}
+
+function str(value) {
+    return [value.length, ...Array.from(value, (c) => c.charCodeAt(0))];
+}
+
+function section(id, body) {
+    return [id, ...u32v(body.length), ...body];
+}
+
+function funcBody(code) {
+    return [...u32v(code.length + 2), 0x00, ...code, 0x0b];
+}
+
+function refType(typeIndex) {
+    return [0x64, ...u32v(typeIndex)];
+}
+
+function makeArrayHolderModule() {
+    const I32 = 0x7f;
+    const FUNC = 0x60;
+    const ARRAY = 0x5e;
+    const STRUCT = 0x5f;
+    const MUTABLE = 0x01;
+    const EXTERNAL_FUNCTION = 0x00;
+    const GC = 0xfb;
+    const LOCAL_GET = 0x20;
+    const ARRAY_NEW_DEFAULT = 0x07;
+    const ARRAY_GET = 0x0b;
+    const ARRAY_SET = 0x0e;
+    const ARRAY_LEN = 0x0f;
+    const STRUCT_NEW = 0x00;
+    const STRUCT_GET = 0x02;
+    const STRUCT_SET = 0x05;
+
+    const arrayType = 0;
+    const holderType = 1;
+    const types = [
+        ...u32v(12),
+        ARRAY, I32, MUTABLE,
+        STRUCT, ...u32v(2), ...refType(arrayType), MUTABLE, I32, MUTABLE,
+        FUNC, ...u32v(1), I32, ...u32v(1), ...refType(arrayType),
+        FUNC, ...u32v(1), ...refType(arrayType), ...u32v(1), I32,
+        FUNC, ...u32v(2), ...refType(arrayType), I32, ...u32v(1), I32,
+        FUNC, ...u32v(3), ...refType(arrayType), I32, I32, ...u32v(0),
+        FUNC, ...u32v(2), ...refType(arrayType), I32, ...u32v(1), ...refType(holderType),
+        FUNC, ...u32v(1), ...refType(holderType), ...u32v(1), I32,
+        FUNC, ...u32v(2), ...refType(holderType), I32, ...u32v(1), I32,
+        FUNC, ...u32v(2), ...refType(holderType), ...refType(arrayType), ...u32v(0),
+        FUNC, ...u32v(1), ...refType(holderType), ...u32v(1), ...refType(arrayType),
+        FUNC, ...u32v(3), ...refType(holderType), I32, I32, ...u32v(0),
+    ];
+
+    const functions = [2, 3, 4, 5, 6, 7, 8, 7, 9, 10, 11];
+    const exports = [
+        ["newArray", 0],
+        ["arrayLen", 1],
+        ["arrayGet", 2],
+        ["arraySet", 3],
+        ["makeHolder", 4],
+        ["holderLen", 5],
+        ["holderGet", 6],
+        ["holderMarker", 7],
+        ["holderSetArray", 8],
+        ["holderArray", 9],
+        ["holderSet", 10],
+    ];
+    const bodies = [
+        [LOCAL_GET, 0, GC, ARRAY_NEW_DEFAULT, ...u32v(arrayType)],
+        [LOCAL_GET, 0, GC, ARRAY_LEN],
+        [LOCAL_GET, 0, LOCAL_GET, 1, GC, ARRAY_GET, ...u32v(arrayType)],
+        [LOCAL_GET, 0, LOCAL_GET, 1, LOCAL_GET, 2, GC, ARRAY_SET, ...u32v(arrayType)],
+        [LOCAL_GET, 0, LOCAL_GET, 1, GC, STRUCT_NEW, ...u32v(holderType)],
+        [LOCAL_GET, 0, GC, STRUCT_GET, ...u32v(holderType), 0, GC, ARRAY_LEN],
+        [LOCAL_GET, 0, GC, STRUCT_GET, ...u32v(holderType), 0, LOCAL_GET, 1, GC, ARRAY_GET, ...u32v(arrayType)],
+        [LOCAL_GET, 0, GC, STRUCT_GET, ...u32v(holderType), 1],
+        [LOCAL_GET, 0, LOCAL_GET, 1, GC, STRUCT_SET, ...u32v(holderType), 0],
+        [LOCAL_GET, 0, GC, STRUCT_GET, ...u32v(holderType), 0],
+        [LOCAL_GET, 0, GC, STRUCT_GET, ...u32v(holderType), 0, LOCAL_GET, 1, LOCAL_GET, 2, GC, ARRAY_SET, ...u32v(arrayType)],
+    ];
+
+    return new Uint8Array([
+        0x00, 0x61, 0x73, 0x6d,
+        0x01, 0x00, 0x00, 0x00,
+        ...section(1, types),
+        ...section(3, [...u32v(functions.length), ...functions.flatMap(u32v)]),
+        ...section(7, [
+            ...u32v(exports.length),
+            ...exports.flatMap(([name, index]) => [...str(name), EXTERNAL_FUNCTION, ...u32v(index)]),
+        ]),
+        ...section(10, [...u32v(bodies.length), ...bodies.flatMap(funcBody)]),
+    ]);
+}
+
+const wasm = new WebAssembly.Instance(new WebAssembly.Module(makeArrayHolderModule())).exports;
+const staleLength = 8;
+const currentLength = 2;
+const probeIndex = 1;
+const initialCurrentValue = (((Math.random() * 0x7fffffff) >>> 0) | 0x1000) | 0;
+const staleWriteValue = (((Math.random() * 0x7fffffff) >>> 0) | 0x2000) | 0;
+const holderMarker = (((Math.random() * 0x7fffffff) >>> 0) | 0x4000) | 0;
+let trackedStaleArray;
+let trackedCurrentArray;
+let trackedHolderObject;
+let holderObjectOffset;
+let holderObjectSize;
+let holderArrayFieldOffset;
+let taggedStaleArray;
+let taggedCurrentArray;
+const calls = {
+    madeStaleArray: false,
+    madeCurrentArray: false,
+    initializedCurrentArray: false,
+    madeHolder: false,
+    leakedStaleAddress: false,
+    leakedCurrentAddress: false,
+    leakedHolderAddress: false,
+    sizedHolder: false,
+    usedHolderWrite: false,
+    holderLengthReads: 0,
+    currentValueReads: 0,
+    staleValueReads: 0,
+    markerReads: 0,
+};
+
+function requireAllocated() {
+    if (trackedStaleArray === undefined || trackedCurrentArray === undefined || trackedHolderObject === undefined) {
+        guardTools.fail("Create the stale array, current array, and holder before using Sandbox.");
+    }
+}
+
+function locateHolderArrayField() {
+    requireAllocated();
+    if (holderArrayFieldOffset !== undefined) return holderArrayFieldOffset;
+
+    for (let offset = 0; offset <= holderObjectSize - 4; offset += 4) {
+        const value = guardTools.readUint32(holderObjectOffset + offset);
+        if (value === taggedCurrentArray || value === taggedStaleArray) {
+            holderArrayFieldOffset = holderObjectOffset + offset;
+            return holderArrayFieldOffset;
+        }
+    }
+
+    guardTools.fail("Harness error: could not locate the holder's array-reference field.");
+}
+
+const exports = Object.freeze({
+    newArray(length) {
+        const array = wasm.newArray(length);
+        if (length === staleLength) {
+            trackedStaleArray = array;
+            taggedStaleArray = guardTools.realSandbox.getAddressOf(array) + 1;
+            calls.madeStaleArray = true;
+        } else if (length === currentLength) {
+            trackedCurrentArray = array;
+            taggedCurrentArray = guardTools.realSandbox.getAddressOf(array) + 1;
+            calls.madeCurrentArray = true;
+        }
+        return array;
+    },
+    arrayLen(array) {
+        return wasm.arrayLen(array);
+    },
+    arrayGet(array, index) {
+        if (array === trackedCurrentArray && index === probeIndex) calls.currentValueReads++;
+        if (array === trackedStaleArray && index === probeIndex) calls.staleValueReads++;
+        return wasm.arrayGet(array, index);
+    },
+    arraySet(array, index, value) {
+        if (array === trackedCurrentArray && index === probeIndex && value === initialCurrentValue) {
+            calls.initializedCurrentArray = true;
+        }
+        return wasm.arraySet(array, index, value);
+    },
+    makeHolder(array, marker) {
+        if (array !== trackedCurrentArray) {
+            guardTools.fail("Create the holder while it points at the current array.");
+        }
+        const holder = wasm.makeHolder(array, marker);
+        if (marker === holderMarker) {
+            trackedHolderObject = holder;
+            holderObjectOffset = guardTools.realSandbox.getAddressOf(holder);
+            holderObjectSize = guardTools.realSandbox.getSizeOf(holder);
+            calls.madeHolder = true;
+        }
+        return holder;
+    },
+    holderLen(holder) {
+        if (holder === trackedHolderObject) calls.holderLengthReads++;
+        return wasm.holderLen(holder);
+    },
+    holderGet(holder, index) {
+        return wasm.holderGet(holder, index);
+    },
+    holderMarker(holder) {
+        if (holder === trackedHolderObject) calls.markerReads++;
+        return wasm.holderMarker(holder);
+    },
+    holderSetArray(holder, array) {
+        return wasm.holderSetArray(holder, array);
+    },
+    holderArray(holder) {
+        return wasm.holderArray(holder);
+    },
+    holderSet(holder, index, value) {
+        if (holder === trackedHolderObject && index === probeIndex && value === staleWriteValue) {
+            calls.usedHolderWrite = true;
+        }
+        return wasm.holderSet(holder, index, value);
+    },
+});
+
+const api = Object.freeze({
+    exports,
+    staleLength,
+    currentLength,
+    probeIndex,
+    initialCurrentValue,
+    staleWriteValue,
+    holderMarker,
+});
+
+const sandboxRules = Object.freeze({
+    getAddressOf(obj) {
+        requireAllocated();
+        if (obj === trackedStaleArray) {
+            calls.leakedStaleAddress = true;
+            return guardTools.realSandbox.getAddressOf(obj);
+        }
+        if (obj === trackedCurrentArray) {
+            calls.leakedCurrentAddress = true;
+            return guardTools.realSandbox.getAddressOf(obj);
+        }
+        if (obj === trackedHolderObject) {
+            calls.leakedHolderAddress = true;
+            return guardTools.realSandbox.getAddressOf(obj);
+        }
+        guardTools.fail("Wrong object: this ramp only exposes the stale array, current array, and holder.");
+    },
+    getSizeOf(obj) {
+        requireAllocated();
+        if (obj !== trackedHolderObject) {
+            guardTools.fail("Only the holder object size is exposed in this ramp.");
+        }
+        calls.sizedHolder = true;
+        return guardTools.realSandbox.getSizeOf(obj);
+    },
+    MemoryView(offset, size) {
+        requireAllocated();
+        if (!calls.sizedHolder) {
+            guardTools.fail("Size the holder before scanning its fields.");
+        }
+
+        const viewOffset = guardTools.normalizeNumber(offset, "MemoryView offset");
+        const viewSize = guardTools.normalizeNumber(size, "MemoryView size");
+        if (viewSize !== 4) {
+            guardTools.fail("Use 4-byte MemoryView windows when scanning the holder.");
+        }
+        if (viewOffset < holderObjectOffset || viewOffset + viewSize > holderObjectOffset + holderObjectSize) {
+            guardTools.fail("This ramp only allows MemoryView access inside the holder object.");
+        }
+        return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+    },
+});
+{% endblock %}
+
+{% block validate %}
+if (typeof solve !== "function") {
+    guardTools.fail("define solve(api)");
+}
+
+const result = solve(api);
+if (!result || typeof result !== "object") {
+    guardTools.fail("solve(api) must return the stale-write observations.");
+}
+if (!calls.madeStaleArray || !calls.madeCurrentArray) {
+    guardTools.fail("Create both the stale and current Wasm arrays.");
+}
+if (!calls.initializedCurrentArray) {
+    guardTools.fail("Store api.initialCurrentValue in the current array.");
+}
+if (!calls.madeHolder) {
+    guardTools.fail("Create the holder while it points at the current array.");
+}
+if (!calls.leakedStaleAddress || !calls.leakedCurrentAddress || !calls.leakedHolderAddress || !calls.sizedHolder) {
+    guardTools.fail("Use guarded Sandbox to derive the holder's array-reference field.");
+}
+
+const fieldOffset = locateHolderArrayField();
+const fieldValue = guardTools.readUint32(fieldOffset);
+if (fieldValue === taggedCurrentArray) {
+    guardTools.fail("The holder still points at the current array. Overwrite that tagged reference with the stale array reference.");
+}
+if (fieldValue === guardTools.realSandbox.getAddressOf(trackedStaleArray)) {
+    guardTools.fail("The holder contains the untagged stale-array offset. Object fields hold tagged references, so write staleArrayOffset + 1.");
+}
+if (fieldValue !== taggedStaleArray) {
+    guardTools.fail(`The holder array-reference field contains 0x${fieldValue.toString(16)}, not the tagged stale-array reference.`);
+}
+if (!calls.usedHolderWrite) {
+    guardTools.fail("Write through api.exports.holderSet(holder, api.probeIndex, api.staleWriteValue).");
+}
+if (calls.holderLengthReads === 0 || calls.currentValueReads === 0 || calls.staleValueReads === 0 || calls.markerReads === 0) {
+    guardTools.fail("Return observations read from the holder, current array, stale array, and holder marker.");
+}
+if (wasm.arrayGet(trackedCurrentArray, probeIndex) !== initialCurrentValue) {
+    guardTools.fail("The current array should not receive the stale write.");
+}
+if (wasm.arrayGet(trackedStaleArray, probeIndex) !== staleWriteValue) {
+    guardTools.fail("The stale array should receive the holder write after the reference-field corruption.");
+}
+if (wasm.holderMarker(trackedHolderObject) !== holderMarker) {
+    guardTools.fail("The real holder marker changed unexpectedly.");
+}
+if (result.holderLength !== staleLength) {
+    guardTools.fail("Return holderLength after the holder reference has been retargeted to the stale array.");
+}
+if (result.currentValue !== initialCurrentValue) {
+    guardTools.fail("Return currentValue from the current array; it should not receive the stale write.");
+}
+if (result.staleValue !== staleWriteValue) {
+    guardTools.fail("Return staleValue from the stale array after the holder write.");
+}
+if (result.marker !== holderMarker) {
+    guardTools.fail("Return marker from the same holder object while changing only its array-reference field.");
+}
+return true;
+{% endblock %}

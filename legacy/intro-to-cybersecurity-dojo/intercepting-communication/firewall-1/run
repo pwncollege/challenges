@@ -1,0 +1,55 @@
+#!/usr/bin/exec-suid --real -- /usr/bin/python -I
+
+import multiprocessing
+import os
+import socket
+import socketserver
+import time
+
+import psutil
+from dojjail import Host, Network
+
+flag = open("/flag").read()
+parent_process = psutil.Process(os.getppid())
+
+class ServerHost(Host):
+    def entrypoint(self):
+        last_connected_time = multiprocessing.Value("d", time.time())
+
+        def watchdog():
+            while True:
+                with last_connected_time.get_lock():
+                    if time.time() - last_connected_time.value > 2:
+                        print(flag, flush=True)
+                        break
+                time.sleep(1)
+
+        watchdog_process = multiprocessing.Process(target=watchdog)
+        watchdog_process.daemon = True
+        watchdog_process.start()
+
+        class ForkingTCPHandler(socketserver.BaseRequestHandler):
+            def handle(self):
+                with last_connected_time.get_lock():
+                    last_connected_time.value = time.time()
+                self.request.recv(1024)
+
+        with socketserver.ForkingTCPServer(("0.0.0.0", 31337), ForkingTCPHandler) as server:
+            server.serve_forever()
+
+class ClientHost(Host):
+    def entrypoint(self):
+        while True:
+            time.sleep(1)
+            try:
+                with socket.create_connection(("10.0.0.1", 31337)) as client_socket:
+                    client_socket.sendall(b"Hello, World!\n")
+            except (OSError, ConnectionError, TimeoutError):
+                continue
+
+user_host = ServerHost("ip-10-0-0-1", privileged_uid=parent_process.uids().effective)
+client_host = ClientHost("ip-10-0-0-2")
+network = Network(hosts={user_host: "10.0.0.1", client_host: "10.0.0.2"}, subnet="10.0.0.0/24")
+network.run()
+
+user_host.interactive(environ=parent_process.environ())
