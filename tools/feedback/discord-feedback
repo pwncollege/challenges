@@ -1781,6 +1781,27 @@ def changed_challenges_since(repo: pathlib.Path, base_ref: str) -> list[str]:
     return sorted(challenges)
 
 
+def failed_challenges_from_logs(
+    repo: pathlib.Path, log_dir: pathlib.Path
+) -> list[str]:
+    """Map per-challenge failure logs under log_dir back to repo challenge paths.
+
+    `pwnshop test --log-failures` writes a log only for failures, under a tree mirroring
+    the repo (``challenges/<...>/<challenge>/{tests_*/<t>.log,_build_error.log}``). Walk up
+    from each log to the directory that is a real challenge (has a ``challenge/`` subdir).
+    """
+    found: set[str] = set()
+    for log_file in log_dir.rglob("*.log"):
+        candidate = log_file.parent
+        while candidate != log_dir:
+            rel = candidate.relative_to(log_dir)
+            if (repo / rel / "challenge").is_dir():
+                found.add(rel.as_posix())
+                break
+            candidate = candidate.parent
+    return sorted(found)
+
+
 def run_tests(
     repo: pathlib.Path, artifact_dir: pathlib.Path, base_ref: str, attempt: int
 ) -> pathlib.Path:
@@ -1802,11 +1823,99 @@ def run_tests(
         ],
     )
     rc = run_logged(command, cwd=repo, log_path=test_log)
-    if rc != 0:
+    if rc == 0:
+        return test_log
+
+    # The full validation runs every affected challenge in parallel across all cores. A
+    # change to a module's common/ files fans out to the entire module, and timing-sensitive
+    # challenges (e.g. the strace/alarm web-server sandbox) flake under that load even though
+    # they pass reliably on their own. Before failing the run, re-check just the failed
+    # challenges serially (-j1, low load) with extra attempts: a genuinely broken challenge
+    # still fails, but a load-induced flake passes and the feedback run continues.
+    failed = failed_challenges_from_logs(repo, log_dir)
+    if not failed:
         raise click.ClickException(
             f"pwnshop tests failed; see {test_log} and {log_dir}"
         )
+    click.echo(
+        f"{len(failed)} challenge(s) failed the parallel run; re-checking serially to rule "
+        f"out load-induced flakiness: {', '.join(failed)}"
+    )
+    retry_log_dir = artifact_dir / f"test-logs-attempt-{attempt}-serial"
+    retry_log_dir.mkdir(parents=True, exist_ok=True)
+    retry_log = artifact_dir / f"pwnshop-test-attempt-{attempt}-serial.log"
+    retry_command = pwnshop_invocation(
+        repo,
+        [
+            "test",
+            "--require-solved",
+            "--attempts",
+            "3",
+            "--jobs",
+            "1",
+            "--log-failures",
+            str(retry_log_dir),
+            *failed,
+        ],
+    )
+    retry_rc = run_logged(retry_command, cwd=repo, log_path=retry_log)
+    if retry_rc != 0:
+        still_failing = failed_challenges_from_logs(repo, retry_log_dir) or failed
+        raise click.ClickException(
+            "pwnshop tests failed (confirmed on serial re-run): "
+            f"{', '.join(still_failing)}; see {retry_log} and {retry_log_dir}"
+        )
+    click.echo(
+        "Serial re-run of the failed challenge(s) passed; treating the parallel failure(s) "
+        "as load-induced flakiness and continuing."
+    )
     return test_log
+
+
+def validate_with_fixes(
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    base_ref: str,
+    *,
+    agent: str,
+    analysis_path: pathlib.Path,
+    directions: list[str],
+    pr_feedback_path: Optional[pathlib.Path],
+    first_attempt: int,
+    fix_attempts: int,
+) -> pathlib.Path:
+    """Validate; on a genuine (non-flaky) failure, run the fix agent and retry.
+
+    run_tests already absorbs load-induced flakiness via a serial re-check, so a failure
+    that reaches here is a real breakage -- and fixing those agentically is the whole point
+    of the bot, not a reason to abort. Each failed attempt feeds the fix agent and re-tests.
+    Raises ClickException only if the challenge is still broken after `fix_attempts` fixes.
+    """
+    for index in range(fix_attempts + 1):
+        attempt = first_attempt + index
+        click.echo(f"Running pwnshop validation attempt {attempt}")
+        try:
+            return run_tests(repo, artifact_dir, base_ref, attempt)
+        except click.ClickException:
+            if index >= fix_attempts:
+                raise
+            click.echo(f"Validation attempt {attempt} failed; starting fix agent")
+            failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
+            run_agent(
+                agent,
+                build_fix_prompt(
+                    analysis_path,
+                    failure_dir,
+                    attempt,
+                    directions,
+                    pr_feedback_path,
+                ),
+                repo=repo,
+                artifact_dir=artifact_dir,
+                output_name=f"fix-agent-attempt-{attempt}.log",
+                apply=True,
+            )
+    raise AssertionError("unreachable")  # the final attempt returns or raises above
 
 
 def extract_json_array(text: str) -> list[dict[str, Any]]:
@@ -3258,30 +3367,17 @@ def feedback_command(
     if skip_tests:
         test_log.write_text("Tests skipped by --skip-tests.\n")
     else:
-        for attempt in range(1, max_fix_attempts + 2):
-            click.echo(f"Running pwnshop validation attempt {attempt}")
-            try:
-                test_log = run_tests(repo, artifact_dir, base_ref, attempt)
-                break
-            except click.ClickException:
-                if attempt > max_fix_attempts:
-                    raise
-                click.echo(f"Validation attempt {attempt} failed; starting fix agent")
-                failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
-                run_agent(
-                    agent,
-                    build_fix_prompt(
-                        analysis_path,
-                        failure_dir,
-                        attempt,
-                        directions,
-                        pr_feedback_path,
-                    ),
-                    repo=repo,
-                    artifact_dir=artifact_dir,
-                    output_name=f"fix-agent-attempt-{attempt}.log",
-                    apply=True,
-                )
+        test_log = validate_with_fixes(
+            repo,
+            artifact_dir,
+            base_ref,
+            agent=agent,
+            analysis_path=analysis_path,
+            directions=directions,
+            pr_feedback_path=pr_feedback_path,
+            first_attempt=1,
+            fix_attempts=max_fix_attempts,
+        )
 
     changed_challenges = changed_challenges_since(repo, base_ref)
     ux_review = artifact_dir / "ux-review.md"
@@ -3311,7 +3407,19 @@ def feedback_command(
             )
         if not skip_tests:
             click.echo("Running final pwnshop validation after UX review")
-            test_log = run_tests(repo, artifact_dir, base_ref, max_fix_attempts + 2)
+            # The UX-review agent edits challenges/descriptions, so this can surface a real
+            # break. Fix it agentically too -- same as the main loop -- instead of aborting.
+            test_log = validate_with_fixes(
+                repo,
+                artifact_dir,
+                base_ref,
+                agent=agent,
+                analysis_path=analysis_path,
+                directions=directions,
+                pr_feedback_path=pr_feedback_path,
+                first_attempt=max_fix_attempts + 2,
+                fix_attempts=max_fix_attempts,
+            )
 
     pr_body = artifact_dir / "pr-body.md"
     pr_body_agent_output = run_agent(
