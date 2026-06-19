@@ -1,9 +1,9 @@
 # pwncollege challenge monorepo
 
-This repository will one day contain all core pwn.college challenges.
+This repository contains pwn.college challenge sources that have been ported to the monorepo, and it is the contribution path for new and ported community dojos.
 
-The basic idea is that challenges are just directories in here, similar to how they're specified in dojos currently.
-They'll be auto-built out of these directories, probably as docker files (though some nix stuff is another possibility), and deployed seamlessly.
+The basic idea is that challenges are directories in here, similar to how they're specified in dojos.
+They are rendered, built as Docker images, tested, and deployed from this repository.
 
 # Repository structure
 
@@ -156,12 +156,20 @@ pip install black click jinja2 pyastyle pwntools rich
 - Web services (if any) should run on `challenge.localhost` port 80 (tests are executed with `--add-host challenge.localhost:127.0.0.1` for proper networking)
 - Not all challenges need templates - use them only when randomization or reuse is important.
 
-# pwn.college DOJO integration
+# Community dojo contributions
 
-**FUTURE WORK.**
-This repository will contain various yamls files for different dojos.
-These dojos will specify modules to include.
-Each module will have its own `module.yml`.
+This repository is the place to propose community dojo and challenge contributions.
+A dojo lives under `challenges/$DOJO_ID/` with a `dojo.yml` that lists its modules, and each module has a `module.yml` that orders its resources and challenges.
+Challenge implementations live beside those YAML files under `challenges/$DOJO_ID/$MODULE_ID/$CHALLENGE_ID/`.
+
+Pull requests can add an individual challenge, a module, or a whole dojo under `challenges/`.
+Use `tools/dojo/parse-dojo-yml` after editing dojo or module YAML, and use `pwnshop test` for the affected challenges.
+
+Private solves and exploit tests belong under `tests_private/` and are encrypted by the per-dojo or per-module `git-crypt` filter configured in that dojo's `.gitattributes`.
+If a new dojo needs new encrypted-test access, add or update the relevant maintainer entry in `maintainers.yml` and validate it with `tools/maintainers/check-maintainers`.
+
+Challenge images are not one giant image per dojo.
+Each challenge builds its own rendered `/challenge` directory, while common Dockerfiles and package layers are shared through the normal Docker build cache.
 
 # Porting legacy templates
 

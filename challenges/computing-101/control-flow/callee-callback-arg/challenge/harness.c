@@ -1,12 +1,15 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <err.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 
 /*
  * Harness for callee-callback-arg. The student's `solve(callback)` must invoke
  * the function pointer it receives in rdi, passing 1337 as the callback's
- * first argument (also in rdi).
+ * first argument (also in rdi). The flag arrives on stdin, not argv, so
+ * /proc/self/cmdline does not expose it.
  *
  * `force_align_arg_pointer` makes gcc emit a prologue that realigns rsp to
  * 16 bytes, so the callback can safely call printf even when the student's
@@ -16,14 +19,31 @@
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
 
 #define EXPECTED 1337
+#define FLAG_CAPACITY 4096
 
-static const char *flag;
+static char flagbuf[FLAG_CAPACITY];
+static size_t flaglen;
 static int called = 0;
+
+static void read_flag_from_stdin(void) {
+    ssize_t n;
+    while (flaglen < sizeof flagbuf && (n = read(0, flagbuf + flaglen, sizeof flagbuf - flaglen)) > 0) {
+        flaglen += n;
+    }
+    if (n < 0) {
+        err(2, "read flag");
+    }
+    if (flaglen == sizeof flagbuf) {
+        errx(2, "flag buffer too small");
+    }
+    close(0);
+}
 
 static void __attribute__((force_align_arg_pointer)) cb(uint64_t arg) {
     called = 1;
     if (arg == EXPECTED) {
-        printf("%s\n", flag);
+        fwrite(flagbuf, 1, flaglen, stdout);
+        fputc('\n', stdout);
     } else {
         printf("You passed %lu (0x%lx) to the callback, but it needs to be %d (0x%x)!\n",
                arg, arg, EXPECTED, EXPECTED);
@@ -37,11 +57,12 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
-    if (argc != 3) {
-        fprintf(stderr, "usage: %s lib.so flag\n", argv[0]);
+    if (argc != 2) {
+        fprintf(stderr, "usage: %s lib.so   (the flag is read from stdin)\n", argv[0]);
         return 2;
     }
-    flag = argv[2];
+
+    read_flag_from_stdin();
 
     LOG("loading shared library %s ...", argv[1]);
     void *h = dlopen(argv[1], RTLD_NOW);
