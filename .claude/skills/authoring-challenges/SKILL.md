@@ -88,6 +88,13 @@ your archetype.
   Disable nondeterminism that would break the intended technique (e.g. ASLR off for a
   fixed-address lesson). What the user objected to was a solve whose *target value was
   random* and whose *flag came through a side channel*, not randomness as such.
+- **Never disable ASLR to make a capstone or full exploit chain pass.** ASLR-off is only
+  acceptable when fixed addresses are the explicit lesson of that level. A capstone must
+  derive live process-image, libc, stack, and control-flow targets through the intended
+  leak or primitive. If a copied practice solve hardcodes values like `0x555555...` for
+  PIE or `0x7fffffff...` for stack, treat the challenge as invalid until the solve is
+  rewritten and `pwnshop test` passes with ASLR enabled. Do not relabel that as
+  "determinism"; it is hiding a missing exploit stage.
 - **Randomness is legitimate and often desirable** — as long as it's *not a coin-flip in
   the solve path*: seeded build-time secrets (endpoint/parameter/table names via
   `random_names.j2`, admin passwords), and per-instance/per-run secret *values the
@@ -199,6 +206,8 @@ your archetype.
 3. Made an unverified factual claim in learner text or to the user.
 4. Made the solve nondeterministic, or gated the flag behind a guess / needless side channel.
    Or assumed a fixed flag length (hardcoded a byte count / too-small pad capacity) — flags vary.
-5. Crammed more than one concept into a level, or mismatched the module's voice.
-6. Didn't consult siblings / `runtime/` before building or before giving up.
-7. Claimed success (tests, push) without verifying, or attributed a change to the user.
+5. Disabled ASLR for a capstone/full chain, or copied a fixed-address practice exploit
+   instead of deriving live ASLR anchors through the intended primitive.
+6. Crammed more than one concept into a level, or mismatched the module's voice.
+7. Didn't consult siblings / `runtime/` before building or before giving up.
+8. Claimed success (tests, push) without verifying, or attributed a change to the user.

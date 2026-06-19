@@ -1,0 +1,187 @@
+{% include "../../../common/provided-process-memory.js.j2" %}
+
+const primitive = createProvidedProcessMemory();
+
+Object.defineProperty(globalThis, "Sandbox", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+});
+
+const PROCESS_IMAGE_BASE = 0x555555554000n;
+const ELF_MAGIC_QWORD = 0x00010102464c457fn;
+const PT_LOAD = 1;
+const PT_DYNAMIC = 2;
+const PF_X = 1;
+const PF_W = 2;
+const DT_NULL = 0n;
+const DT_PLTRELSZ = 2n;
+const DT_STRTAB = 5n;
+const DT_SYMTAB = 6n;
+const DT_RELAENT = 9n;
+const DT_SYMENT = 11n;
+const DT_JMPREL = 23n;
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function read8(address) {
+    address = BigInt(address);
+    const aligned = address & ~7n;
+    return Number((primitive.read64(aligned) >> ((address - aligned) * 8n)) & 0xffn);
+}
+
+function read16(address) {
+    return read8(address) | (read8(BigInt(address) + 1n) << 8);
+}
+
+function read32(address) {
+    return (
+        read8(address) |
+        (read8(BigInt(address) + 1n) << 8) |
+        (read8(BigInt(address) + 2n) << 16) |
+        (read8(BigInt(address) + 3n) << 24)
+    ) >>> 0;
+}
+
+function read64(address) {
+    return primitive.read64(BigInt(address));
+}
+
+let learnerRead64Calls = 0;
+
+function learnerRead64(address) {
+    learnerRead64Calls++;
+    return read64(address);
+}
+
+function ptrFromDynamicValue(value) {
+    value = BigInt(value);
+    return value >= PROCESS_IMAGE_BASE ? value : PROCESS_IMAGE_BASE + value;
+}
+
+function parseProgramHeaders() {
+    if (read64(PROCESS_IMAGE_BASE) !== ELF_MAGIC_QWORD) {
+        fail("Harness error: unexpected process-image ELF base.");
+    }
+
+    const ePhOff = read64(PROCESS_IMAGE_BASE + 0x20n);
+    const ePhEntSize = read16(PROCESS_IMAGE_BASE + 0x36n);
+    const ePhNum = read16(PROCESS_IMAGE_BASE + 0x38n);
+    const result = {
+        execStart: 0n,
+        execSize: 0n,
+        writeStart: 0n,
+        writeSize: 0n,
+        dynamicAddress: 0n,
+        dynamicSize: 0n,
+    };
+
+    for (let i = 0; i < ePhNum; i++) {
+        const ph = PROCESS_IMAGE_BASE + ePhOff + BigInt(i * ePhEntSize);
+        const type = read32(ph);
+        const flags = read32(ph + 4n);
+        const vaddr = read64(ph + 0x10n);
+        const filesz = read64(ph + 0x20n);
+        const memsz = read64(ph + 0x28n);
+        if (type === PT_LOAD && (flags & PF_X) !== 0) {
+            result.execStart = PROCESS_IMAGE_BASE + vaddr;
+            result.execSize = memsz;
+        }
+        if (type === PT_LOAD && (flags & PF_W) !== 0) {
+            result.writeStart = PROCESS_IMAGE_BASE + vaddr;
+            result.writeSize = memsz;
+        }
+        if (type === PT_DYNAMIC) {
+            result.dynamicAddress = PROCESS_IMAGE_BASE + vaddr;
+            result.dynamicSize = filesz;
+        }
+    }
+
+    if (result.dynamicAddress === 0n) {
+        fail("Harness error: failed to locate d8 dynamic table.");
+    }
+    return Object.freeze(result);
+}
+
+function parseDynamicTables(programHeaders) {
+    const result = {
+        strtab: 0n,
+        symtab: 0n,
+        syment: 24n,
+        jmprel: 0n,
+        pltrelsz: 0n,
+        relaent: 24n,
+    };
+
+    for (let entry = programHeaders.dynamicAddress; entry < programHeaders.dynamicAddress + programHeaders.dynamicSize; entry += 16n) {
+        const tag = read64(entry);
+        const value = read64(entry + 8n);
+        if (tag === DT_NULL) break;
+        if (tag === DT_STRTAB) result.strtab = ptrFromDynamicValue(value);
+        else if (tag === DT_SYMTAB) result.symtab = ptrFromDynamicValue(value);
+        else if (tag === DT_SYMENT) result.syment = value;
+        else if (tag === DT_JMPREL) result.jmprel = ptrFromDynamicValue(value);
+        else if (tag === DT_PLTRELSZ) result.pltrelsz = value;
+        else if (tag === DT_RELAENT) result.relaent = value;
+    }
+
+    if (result.strtab === 0n || result.symtab === 0n || result.jmprel === 0n || result.pltrelsz === 0n) {
+        fail("Harness error: failed to parse d8 dynamic entries.");
+    }
+    return Object.freeze(result);
+}
+
+function normalizeBigInt(value, name) {
+    if (typeof value === "bigint") return value;
+    const asNumber = Number(value);
+    if (!Number.isSafeInteger(asNumber)) {
+        fail(`${name} must be returned as a BigInt.`);
+    }
+    return BigInt(asNumber);
+}
+
+function checkField(actual, expected, name) {
+    const value = normalizeBigInt(actual, name);
+    if (value !== expected) {
+        fail(`${name} was 0x${value.toString(16)}; expected 0x${expected.toString(16)}.`);
+    }
+}
+
+const programHeaders = parseProgramHeaders();
+const expected = parseDynamicTables(programHeaders);
+const api = Object.freeze({
+    dynamicAddress: programHeaders.dynamicAddress,
+    dynamicSize: programHeaders.dynamicSize,
+    DT_NULL,
+    DT_PLTRELSZ,
+    DT_STRTAB,
+    DT_SYMTAB,
+    DT_RELAENT,
+    DT_SYMENT,
+    DT_JMPREL,
+    ptrFromDynamicValue,
+    read64: learnerRead64,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+const result = solve(api);
+if (result === null || typeof result !== "object") {
+    fail("Return an object with strtab, symtab, syment, jmprel, pltrelsz, and relaent.");
+}
+
+for (const field of ["strtab", "symtab", "syment", "jmprel", "pltrelsz", "relaent"]) {
+    checkField(result[field], expected[field], field);
+}
+
+if (learnerRead64Calls === 0) {
+    fail("Walk the provided dynamic table with api.read64(address).");
+}
+
+print("__PWN_SUCCESS_MARKER__");

@@ -1,0 +1,100 @@
+const chainAddress = 0x7fffffffe068n;
+const pathAddress = 0x5555572ec040n;
+const argvAddress = 0x5555572ec080n;
+const execveSyscallNumber = 59n;
+const memory = new Map();
+
+const gadgets = Object.freeze({
+    ret: 0x5555555a1051n,
+    popArgs: 0x5555555a1060n,
+});
+
+const targets = Object.freeze({
+    syscall: 0x7ffff7d1b290n,
+    exit: 0x7ffff7d075f0n,
+});
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function normalizeAddress(value, name) {
+    if (typeof value === "bigint") return value;
+    const asNumber = Number(value);
+    if (!Number.isSafeInteger(asNumber)) {
+        fail(`${name} must be a BigInt process address.`);
+    }
+    return BigInt(asNumber);
+}
+
+function write64(address, value) {
+    address = normalizeAddress(address, "write64 address");
+    value = BigInt.asUintN(64, BigInt(value));
+    if (address < chainAddress || address >= chainAddress + 0x100n || (address - chainAddress) % 8n !== 0n) {
+        fail("write64 may only write qwords inside the provided return-chain range.");
+    }
+    memory.set(address, value);
+}
+
+function read64(address) {
+    address = normalizeAddress(address, "read address");
+    return memory.get(address) || 0n;
+}
+
+const expectedChain = Object.freeze([
+    gadgets.ret,
+    gadgets.popArgs,
+    0n,
+    0n,
+    argvAddress,
+    pathAddress,
+    execveSyscallNumber,
+    0n,
+    0n,
+    0n,
+    0n,
+    targets.syscall,
+    gadgets.popArgs,
+    0n,
+    0n,
+    0n,
+    0n,
+    0n,
+    0n,
+    0n,
+    0n,
+    0n,
+    targets.exit,
+]);
+
+const api = Object.freeze({
+    chainAddress,
+    pathAddress,
+    argvAddress,
+    execveSyscallNumber,
+    gadgets,
+    targets,
+    write64,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+solve(api);
+
+for (let i = 0; i < expectedChain.length; i++) {
+    const address = chainAddress + BigInt(i * 8);
+    const actual = read64(address);
+    const expected = expectedChain[i];
+    if (actual !== expected) {
+        if (i === 0 && actual === gadgets.popArgs) {
+            fail("Start the chain with the provided ret gadget before loading the first argument.");
+        }
+        fail(`chain qword ${i} was 0x${actual.toString(16)}; expected 0x${expected.toString(16)}.`);
+    }
+}
+
+print("__PWN_SUCCESS_MARKER__");

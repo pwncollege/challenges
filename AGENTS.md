@@ -52,6 +52,11 @@ per archetype (templated web/service, interpreted checker, compiled SUID binary,
   path. Grant the flag only on a real solve, via the archetype's normal mechanism (SUID
   binary prints it; checker `give_flag`; web app reveals on exploit; `submit-number` for
   read-a-value levels). Don't add wrappers/extra binaries/indirection the spec doesn't need.
+  **Never disable ASLR to make a capstone/full exploit chain pass** — ASLR-off is only for
+  levels whose explicit lesson is fixed-address mechanics. Capstone solves must derive live
+  process-image/libc/stack/control-flow targets through the intended primitive; copied
+  practice exploits with hardcoded `0x555555...` PIE or `0x7fffffff...` stack addresses are
+  invalid until rewritten and tested with ASLR enabled.
   **Never assume the flag's length** — it's a variable-length implementation detail (~57
   bytes today, not a contract). Size buffers/byte-counts dynamically from the real `/flag`,
   or pad to a fixed capacity **≥ 128 bytes** kept in sync across every coupled file; an

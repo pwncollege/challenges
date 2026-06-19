@@ -1,0 +1,116 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+let proofObject;
+let proofObjectOffset;
+let taggedProofReference;
+let proofObjectSize;
+let proofFieldOffset;
+let leakedTaggedReference = false;
+let sizedProofObject = false;
+
+function byteSwap32(value) {
+    return (((value & 0xff) << 24) | ((value & 0xff00) << 8) | ((value >>> 8) & 0xff00) | ((value >>> 24) & 0xff)) >>> 0;
+}
+
+let expectedToken;
+do {
+    expectedToken = (((((Math.random() * 0x1fffffff) >>> 0) + 1) << 1) >>> 0);
+} while (expectedToken === byteSwap32(expectedToken));
+
+function allocateProofObject() {
+    if (proofObject === undefined) {
+        proofObject = Object.freeze({ proof: 4 });
+        proofObjectOffset = guardTools.realSandbox.getAddressOf(proofObject);
+        taggedProofReference = proofObjectOffset + 1;
+        proofObjectSize = guardTools.realSandbox.getSizeOf(proofObject);
+        proofFieldOffset = proofObjectOffset + proofObjectSize - 4;
+    }
+    return proofObject;
+}
+
+function requireProofObject() {
+    if (proofObject === undefined) {
+        guardTools.fail("Call allocateProofObject() before using the guarded Sandbox primitive.");
+    }
+    return proofObject;
+}
+
+function leakTaggedReference(obj) {
+    const expected = requireProofObject();
+    guardTools.requireSameObject(obj, expected, "Wrong object: this ramp only leaks the proofObject reference.");
+    leakedTaggedReference = true;
+    return taggedProofReference;
+}
+
+function diagnoseMemoryViewOffset(viewOffset) {
+    if (viewOffset === taggedProofReference) {
+        guardTools.fail("This is the tagged reference, not the object start. Subtract the heap-object tag first.");
+    }
+    if (viewOffset === proofObjectOffset) {
+        guardTools.fail("This starts at proofObject, not the proof field. Add the field offset inside proofObject.");
+    }
+    if (viewOffset === taggedProofReference + proofObjectSize - 4) {
+        guardTools.fail("You added the field offset to the tagged reference. Subtract the heap-object tag before adding the field offset.");
+    }
+    if (viewOffset === proofObjectOffset + proofObjectSize) {
+        guardTools.fail("This points just past proofObject. The proof field is the final 32-bit field, so subtract 4.");
+    }
+}
+
+function requireExpectedProofValue() {
+    if (proofObject === undefined) {
+        guardTools.fail("Call allocateProofObject(), recover the object start from the tagged reference, and write the proof field.");
+    }
+
+    const actual = guardTools.readUint32(proofFieldOffset);
+    if (actual === expectedToken) {
+        return true;
+    }
+    if (actual === byteSwap32(expectedToken)) {
+        guardTools.fail("The proof field has the byte-swapped token. DataView.setUint32 defaults to big-endian; pass true for little-endian.");
+    }
+    if (actual === 8) {
+        guardTools.fail("The proof field is still unchanged. Create a DataView over the proof field and write expectedToken.");
+    }
+    guardTools.fail(`The proof field contains 0x${actual.toString(16)}, not expectedToken. Write expectedToken with DataView.setUint32(..., true).`);
+}
+
+const sandboxRules = Object.freeze({
+    disabledMessages: Object.freeze({
+        "Sandbox.getAddressOf": "Sandbox.getAddressOf is disabled in this ramp. Use leakTaggedReference(proofObject) to model the CVE-style tagged reference leak.",
+    }),
+    getSizeOf(obj) {
+        const expected = requireProofObject();
+        guardTools.requireSameObject(obj, expected, "Wrong object: this ramp only allows sizing proofObject.");
+        sizedProofObject = true;
+        return guardTools.realSandbox.getSizeOf(obj);
+    },
+    MemoryView(offset, size) {
+        requireProofObject();
+        if (!leakedTaggedReference) {
+            guardTools.fail("First leak proofObject with leakTaggedReference(proofObject).");
+        }
+        if (!sizedProofObject) {
+            guardTools.fail("First derive the proof field with Sandbox.getSizeOf(proofObject).");
+        }
+
+        const viewOffset = guardTools.normalizeNumber(offset, "MemoryView offset");
+        const viewSize = guardTools.normalizeNumber(size, "MemoryView size");
+        diagnoseMemoryViewOffset(viewOffset);
+        guardTools.requireSameNumber(viewOffset, proofFieldOffset, "Wrong MemoryView start: subtract the heap-object tag, then derive the proof field offset.");
+        guardTools.requireSameNumber(viewSize, 4, "Wrong MemoryView size: request exactly the 32-bit proof field.");
+        return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+    },
+});
+{% endblock %}
+
+{% block expose %}
+guardTools.exposeConstant("allocateProofObject", allocateProofObject);
+guardTools.exposeConstant("leakTaggedReference", leakTaggedReference);
+guardTools.exposeConstant("expectedToken", expectedToken);
+{% endblock %}
+
+{% block validate %}
+return requireExpectedProofValue();
+{% endblock %}

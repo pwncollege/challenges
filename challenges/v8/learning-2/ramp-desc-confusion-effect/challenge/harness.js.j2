@@ -1,0 +1,163 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+let value;
+let declaredDescriptor;
+let confusedDescriptor;
+let valueOffset;
+let valueSize;
+let descriptorFieldOffset;
+let taggedDeclaredDescriptor;
+let taggedConfusedDescriptor;
+let sizedValue = false;
+let usedValueProofMethod = false;
+
+const proofObject = Object.freeze({ proof: true });
+const decoyObject = Object.freeze({ proof: false });
+
+function byteSwap32(number) {
+    return (((number & 0xff) << 24) | ((number & 0xff00) << 8) | ((number >>> 8) & 0xff00) | ((number >>> 24) & 0xff)) >>> 0;
+}
+
+function findRawFieldOffset(objectOffset, objectSize, rawValue, label) {
+    const matches = [];
+    for (let offset = 0; offset <= objectSize - 4; offset += 4) {
+        if (guardTools.readUint32(objectOffset + offset) === rawValue) {
+            matches.push(offset);
+        }
+    }
+    if (matches.length !== 1) {
+        guardTools.fail(`Harness error: expected one ${label} field, found ${matches.length}.`);
+    }
+    return matches[0];
+}
+
+const describedValuePrototype = Object.freeze({
+    prove() {
+        if (this !== value) {
+            guardTools.fail("Call prove() on api.value.");
+        }
+        if (this.descriptor !== confusedDescriptor) {
+            guardTools.fail("api.value.descriptor still selects the declared descriptor.");
+        }
+        if (this.descriptor.target !== proofObject) {
+            guardTools.fail("api.value.descriptor does not select the proof target.");
+        }
+        usedValueProofMethod = true;
+    },
+});
+
+function allocateApi() {
+    if (value === undefined) {
+        declaredDescriptor = Object.freeze({
+            name: "declared",
+            target: decoyObject,
+        });
+        confusedDescriptor = Object.freeze({
+            name: "confused",
+            target: proofObject,
+        });
+
+        value = { descriptor: declaredDescriptor };
+        Object.setPrototypeOf(value, describedValuePrototype);
+        Object.freeze(value);
+
+        valueOffset = guardTools.realSandbox.getAddressOf(value);
+        valueSize = guardTools.realSandbox.getSizeOf(value);
+        taggedDeclaredDescriptor = guardTools.realSandbox.getAddressOf(declaredDescriptor) + 1;
+        taggedConfusedDescriptor = guardTools.realSandbox.getAddressOf(confusedDescriptor) + 1;
+        descriptorFieldOffset = findRawFieldOffset(valueOffset, valueSize, taggedDeclaredDescriptor, "value descriptor");
+        if (descriptorFieldOffset !== valueSize - 4) {
+            guardTools.fail("Harness error: api.value.descriptor was not the final 32-bit slot.");
+        }
+    }
+
+    return Object.freeze({
+        value,
+        declaredDescriptor,
+        confusedDescriptor,
+    });
+}
+
+const api = allocateApi();
+
+function isKnownObject(obj) {
+    return obj === value || obj === declaredDescriptor || obj === confusedDescriptor;
+}
+
+function descriptorSlotOffset() {
+    return valueOffset + descriptorFieldOffset;
+}
+
+function descriptorFieldValue() {
+    return guardTools.readUint32(descriptorSlotOffset());
+}
+
+function diagnoseDescriptorField() {
+    const actual = descriptorFieldValue();
+    if (actual === taggedConfusedDescriptor) {
+        return;
+    }
+    if (actual === taggedDeclaredDescriptor) {
+        guardTools.fail("api.value.descriptor still points at the declared descriptor. Overwrite that tagged reference with the tagged confusedDescriptor reference.");
+    }
+    if (actual === taggedConfusedDescriptor - 1) {
+        guardTools.fail("api.value.descriptor contains the untagged confusedDescriptor offset. Object fields hold tagged heap references, so write descriptorOffset + 1.");
+    }
+    if (actual === byteSwap32(taggedConfusedDescriptor)) {
+        guardTools.fail("api.value.descriptor contains the byte-swapped confusedDescriptor reference. DataView.setUint32 defaults to big-endian; pass true for little-endian.");
+    }
+    guardTools.fail(`api.value.descriptor contains 0x${actual.toString(16)}, not the tagged confusedDescriptor reference.`);
+}
+
+function requireSolved() {
+    diagnoseDescriptorField();
+    if (!usedValueProofMethod) {
+        guardTools.fail("After retargeting api.value.descriptor, call api.value.prove().");
+    }
+    return true;
+}
+
+const sandboxRules = Object.freeze({
+    getAddressOf(obj) {
+        if (!isKnownObject(obj)) {
+            guardTools.fail("Wrong object: this ramp only allows api.value and its two descriptors.");
+        }
+        return guardTools.realSandbox.getAddressOf(obj);
+    },
+    getSizeOf(obj) {
+        if (obj !== value) {
+            guardTools.fail("Wrong object: this ramp only allows sizing api.value.");
+        }
+        sizedValue = true;
+        return guardTools.realSandbox.getSizeOf(obj);
+    },
+    MemoryView(offset, size) {
+        const viewOffset = guardTools.normalizeNumber(offset, "MemoryView offset");
+        const viewSize = guardTools.normalizeNumber(size, "MemoryView size");
+        if (!sizedValue) {
+            guardTools.fail("First size api.value with Sandbox.getSizeOf(api.value), then write its descriptor slot.");
+        }
+        if (viewOffset === valueOffset) {
+            guardTools.fail("This starts at the api.value object header. Use the final 32-bit descriptor slot.");
+        }
+        if (viewOffset === valueOffset + valueSize) {
+            guardTools.fail("This points just past api.value. The descriptor slot is the final 32-bit slot, so subtract 4.");
+        }
+        if (viewOffset === descriptorSlotOffset()) {
+            guardTools.requireSameNumber(viewSize, 4, "Request exactly the 32-bit api.value.descriptor slot.");
+            return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+        }
+
+        guardTools.fail("Wrong MemoryView range: this ramp only allows retargeting api.value.descriptor.");
+    },
+});
+{% endblock %}
+
+{% block expose %}
+guardTools.exposeConstant("api", api);
+{% endblock %}
+
+{% block validate %}
+return requireSolved();
+{% endblock %}

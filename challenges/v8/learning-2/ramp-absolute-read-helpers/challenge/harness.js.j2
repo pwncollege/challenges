@@ -1,0 +1,154 @@
+{% include "../../../common/provided-process-memory.js.j2" %}
+
+const primitive = createProvidedProcessMemory();
+
+Object.defineProperty(globalThis, "Sandbox", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+});
+
+const PROCESS_IMAGE_BASE = 0x555555554000n;
+const ELF_MAGIC_QWORD = 0x00010102464c457fn;
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function internalRead8(address) {
+    address = BigInt(address);
+    const aligned = address & ~7n;
+    return Number((primitive.read64(aligned) >> ((address - aligned) * 8n)) & 0xffn);
+}
+
+function internalRead16(address) {
+    return internalRead8(address) | (internalRead8(BigInt(address) + 1n) << 8);
+}
+
+function internalRead32(address) {
+    return (
+        internalRead8(address) |
+        (internalRead8(BigInt(address) + 1n) << 8) |
+        (internalRead8(BigInt(address) + 2n) << 16) |
+        (internalRead8(BigInt(address) + 3n) << 24)
+    ) >>> 0;
+}
+
+function findWritableScratch() {
+    if (primitive.read64(PROCESS_IMAGE_BASE) !== ELF_MAGIC_QWORD) {
+        fail("Harness error: unexpected process-image ELF base.");
+    }
+
+    const ePhOff = primitive.read64(PROCESS_IMAGE_BASE + 0x20n);
+    const ePhEntSize = internalRead16(PROCESS_IMAGE_BASE + 0x36n);
+    const ePhNum = internalRead16(PROCESS_IMAGE_BASE + 0x38n);
+    let writeStart = 0n;
+    let writeSize = 0n;
+
+    for (let i = 0; i < ePhNum; i++) {
+        const ph = PROCESS_IMAGE_BASE + ePhOff + BigInt(i * ePhEntSize);
+        const type = internalRead32(ph);
+        const flags = internalRead32(ph + 4n);
+        const vaddr = primitive.read64(ph + 0x10n);
+        const memsz = primitive.read64(ph + 0x28n);
+        if (type === 1 && (flags & 2) !== 0) {
+            writeStart = PROCESS_IMAGE_BASE + vaddr;
+            writeSize = memsz;
+        }
+    }
+
+    if (writeStart === 0n || writeSize < 0x2000n) {
+        fail("Harness error: failed to locate a writable process-image segment.");
+    }
+    return writeStart + writeSize - 0x1000n;
+}
+
+const scratchAddress = findWritableScratch() + 0x100n;
+primitive.write64(scratchAddress, 0x12345678deadbeefn);
+primitive.write64(scratchAddress + 8n, 0xfedcba9876543210n);
+
+let read64Calls = 0;
+
+function read64(address) {
+    const normalized = BigInt(address);
+    if (normalized < 0n) {
+        fail("read64 address must be nonnegative.");
+    }
+    read64Calls++;
+    return primitive.read64(normalized);
+}
+
+function requireFunction(object, name) {
+    if (object === null || typeof object !== "object" || typeof object[name] !== "function") {
+        fail(`Return an object with a ${name}(address) helper.`);
+    }
+}
+
+function normalizeUnsigned(value, bits, name) {
+    const limit = 1n << BigInt(bits);
+    let asBigInt;
+    if (typeof value === "bigint") {
+        asBigInt = value;
+    } else {
+        const asNumber = Number(value);
+        if (!Number.isInteger(asNumber)) {
+            fail(`${name} must return an integer.`);
+        }
+        asBigInt = BigInt(asNumber);
+    }
+
+    if (asBigInt < 0n) {
+        fail(`${name} returned a signed value. Return the unsigned ${bits}-bit value.`);
+    }
+    if (asBigInt >= limit) {
+        fail(`${name} returned too many bits. Mask the value down to ${bits} bits.`);
+    }
+    return Number(asBigInt);
+}
+
+function byteSwap(value, bytes) {
+    let result = 0;
+    for (let i = 0; i < bytes; i++) {
+        result = (result << 8) | ((value >> (i * 8)) & 0xff);
+    }
+    return result >>> 0;
+}
+
+function checkRead(helpers, name, bits, address) {
+    const expected = bits === 8 ? internalRead8(address) : bits === 16 ? internalRead16(address) : internalRead32(address);
+    const actual = normalizeUnsigned(helpers[name](address), bits, name);
+    if (actual === expected) return;
+
+    const swapped = byteSwap(expected, bits / 8);
+    if (actual === swapped) {
+        fail(`${name} used big-endian byte order. Process memory on this target is little-endian.`);
+    }
+    fail(`${name} returned 0x${actual.toString(16)} for 0x${address.toString(16)}; expected 0x${expected.toString(16)}.`);
+}
+
+const api = Object.freeze({
+    read64,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+const helpers = solve(api);
+for (const name of ["read8", "read16", "read32"]) {
+    requireFunction(helpers, name);
+}
+
+checkRead(helpers, "read8", 8, scratchAddress);
+checkRead(helpers, "read8", 8, scratchAddress + 7n);
+checkRead(helpers, "read16", 16, scratchAddress + 7n);
+checkRead(helpers, "read32", 32, scratchAddress + 5n);
+checkRead(helpers, "read32", 32, scratchAddress + 12n);
+
+if (read64Calls === 0) {
+    fail("Build the helpers on top of api.read64(address).");
+}
+
+print("__PWN_SUCCESS_MARKER__");

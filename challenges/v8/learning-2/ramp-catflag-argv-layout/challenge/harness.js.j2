@@ -1,0 +1,91 @@
+const EXPECTED_PATH = "/challenge/catflag";
+const pathAddress = 0x5555572ec000n;
+const scratchAddress = 0x5555572ec080n;
+const memory = new Map();
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function normalizeAddress(value, name) {
+    if (typeof value === "bigint") return value;
+    const asNumber = Number(value);
+    if (!Number.isSafeInteger(asNumber)) {
+        fail(`${name} must be a BigInt process address.`);
+    }
+    return BigInt(asNumber);
+}
+
+function rawWrite64(address, value) {
+    address = normalizeAddress(address, "write address");
+    value = BigInt.asUintN(64, BigInt(value));
+    for (let i = 0; i < 8; i++) {
+        memory.set(address + BigInt(i), Number((value >> BigInt(i * 8)) & 0xffn));
+    }
+}
+
+const write64Addresses = new Set();
+function write64(address, value) {
+    address = normalizeAddress(address, "write64 address");
+    value = BigInt.asUintN(64, BigInt(value));
+    if (address < scratchAddress || address + 8n > scratchAddress + 0x100n) {
+        fail("write64 may only write inside the provided scratch range.");
+    }
+
+    write64Addresses.add(address.toString());
+    rawWrite64(address, value);
+}
+
+function read8(address) {
+    address = normalizeAddress(address, "read address");
+    return memory.get(address) || 0;
+}
+
+function read64(address) {
+    address = normalizeAddress(address, "read address");
+    let value = 0n;
+    for (let i = 0; i < 8; i++) {
+        value |= BigInt(read8(address + BigInt(i))) << BigInt(i * 8);
+    }
+    return value;
+}
+
+function installCString(address, text) {
+    for (let i = 0; i <= text.length; i++) {
+        const byte = i === text.length ? 0 : text.charCodeAt(i);
+        memory.set(address + BigInt(i), byte);
+    }
+}
+
+installCString(pathAddress, EXPECTED_PATH);
+
+const api = Object.freeze({
+    scratchAddress,
+    pathAddress,
+    write64,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+const result = solve(api);
+if (result === null || typeof result !== "object") {
+    fail("Return an object with argvAddress.");
+}
+
+const argvAddress = normalizeAddress(result.argvAddress, "argvAddress");
+
+if (argvAddress < scratchAddress || argvAddress + 16n > scratchAddress + 0x100n) {
+    fail("Place the argv pointer array inside the provided scratch range.");
+}
+if (!write64Addresses.has(argvAddress.toString()) || !write64Addresses.has((argvAddress + 8n).toString())) {
+    fail("Write both argv[0] and the terminating NULL pointer.");
+}
+if (read64(argvAddress) !== pathAddress || read64(argvAddress + 8n) !== 0n) {
+    fail("argv must be a pointer array: argv[0] = api.pathAddress, argv[1] = NULL.");
+}
+
+print("__PWN_SUCCESS_MARKER__");

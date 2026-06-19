@@ -1,0 +1,176 @@
+{% include "../../../common/provided-process-memory.js.j2" %}
+
+const primitive = createProvidedProcessMemory();
+
+Object.defineProperty(globalThis, "Sandbox", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+});
+
+const PROCESS_IMAGE_BASE = 0x555555554000n;
+const ELF_MAGIC_QWORD = 0x00010102464c457fn;
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function internalRead8(address) {
+    address = BigInt(address);
+    const aligned = address & ~7n;
+    return Number((primitive.read64(aligned) >> ((address - aligned) * 8n)) & 0xffn);
+}
+
+function internalRead16(address) {
+    return internalRead8(address) | (internalRead8(BigInt(address) + 1n) << 8);
+}
+
+function internalRead32(address) {
+    return (
+        internalRead8(address) |
+        (internalRead8(BigInt(address) + 1n) << 8) |
+        (internalRead8(BigInt(address) + 2n) << 16) |
+        (internalRead8(BigInt(address) + 3n) << 24)
+    ) >>> 0;
+}
+
+function internalWrite32(address, value) {
+    address = BigInt(address);
+    value = BigInt(value >>> 0);
+    const aligned = address & ~7n;
+    const byteOffset = address - aligned;
+    if (byteOffset > 4n) {
+        fail("Harness error: internalWrite32 does not support cross-qword writes.");
+    }
+    const shift = byteOffset * 8n;
+    const mask = 0xffffffffn << shift;
+    const oldValue = primitive.read64(aligned);
+    primitive.write64(aligned, (oldValue & ~mask) | (value << shift));
+}
+
+function findWritableScratch() {
+    if (primitive.read64(PROCESS_IMAGE_BASE) !== ELF_MAGIC_QWORD) {
+        fail("Harness error: unexpected process-image ELF base.");
+    }
+
+    const ePhOff = primitive.read64(PROCESS_IMAGE_BASE + 0x20n);
+    const ePhEntSize = internalRead16(PROCESS_IMAGE_BASE + 0x36n);
+    const ePhNum = internalRead16(PROCESS_IMAGE_BASE + 0x38n);
+    let writeStart = 0n;
+    let writeSize = 0n;
+
+    for (let i = 0; i < ePhNum; i++) {
+        const ph = PROCESS_IMAGE_BASE + ePhOff + BigInt(i * ePhEntSize);
+        const type = internalRead32(ph);
+        const flags = internalRead32(ph + 4n);
+        const vaddr = primitive.read64(ph + 0x10n);
+        const memsz = primitive.read64(ph + 0x28n);
+        if (type === 1 && (flags & 2) !== 0) {
+            writeStart = PROCESS_IMAGE_BASE + vaddr;
+            writeSize = memsz;
+        }
+    }
+
+    if (writeStart === 0n || writeSize < 0x2000n) {
+        fail("Harness error: failed to locate a writable process-image segment.");
+    }
+    return writeStart + writeSize - 0x1000n;
+}
+
+const scratchAddress = findWritableScratch() + 0x200n;
+const firstQword = 0x1122334455667788n;
+const secondQword = 0x99aabbccddeeff00n;
+const writeTarget = scratchAddress + 0x20n;
+const writeValue = 0x0102030405060708n;
+
+primitive.write64(scratchAddress, firstQword);
+primitive.write64(scratchAddress + 8n, secondQword);
+primitive.write64(writeTarget, 0n);
+
+let read32Calls = 0;
+let write32Calls = 0;
+
+function read32(address) {
+    const normalized = BigInt(address);
+    if (normalized < 0n) {
+        fail("read32 address must be nonnegative.");
+    }
+    read32Calls++;
+    return internalRead32(normalized);
+}
+
+function write32(address, value) {
+    const normalizedAddress = BigInt(address);
+    if (normalizedAddress < 0n) {
+        fail("write32 address must be nonnegative.");
+    }
+    write32Calls++;
+    internalWrite32(normalizedAddress, value >>> 0);
+}
+
+function requireFunction(object, name) {
+    if (object === null || typeof object !== "object" || typeof object[name] !== "function") {
+        fail(`Return an object with a ${name} helper.`);
+    }
+}
+
+function normalizeQword(value, name) {
+    if (typeof value !== "bigint") {
+        fail(`${name} must return a BigInt qword.`);
+    }
+    if (value < 0n || value >= (1n << 64n)) {
+        fail(`${name} must return an unsigned 64-bit value.`);
+    }
+    return value;
+}
+
+function checkRead64(helpers, address, expected) {
+    const actual = normalizeQword(helpers.read64(address), "read64");
+    if (actual === expected) return;
+
+    const swapped = ((expected & 0xffffffffn) << 32n) | (expected >> 32n);
+    if (actual === swapped) {
+        fail("read64 combined the 32-bit halves in the wrong order.");
+    }
+    fail(`read64 returned 0x${actual.toString(16)} for 0x${address.toString(16)}; expected 0x${expected.toString(16)}.`);
+}
+
+function checkWrite64(helpers, address, value) {
+    helpers.write64(address, value);
+    const actual = primitive.read64(address);
+    if (actual === value) return;
+
+    const swapped = ((value & 0xffffffffn) << 32n) | (value >> 32n);
+    if (actual === swapped) {
+        fail("write64 stored the 32-bit halves in the wrong order.");
+    }
+    fail(`write64 stored 0x${actual.toString(16)}; expected 0x${value.toString(16)}.`);
+}
+
+const api = Object.freeze({
+    read32,
+    write32,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+const helpers = solve(api);
+requireFunction(helpers, "read64");
+requireFunction(helpers, "write64");
+
+checkRead64(helpers, scratchAddress, firstQword);
+checkRead64(helpers, scratchAddress + 4n, 0xddeeff0011223344n);
+checkWrite64(helpers, writeTarget, writeValue);
+
+if (read32Calls === 0) {
+    fail("Build read64 on top of api.read32(address).");
+}
+if (write32Calls === 0) {
+    fail("Build write64 on top of api.write32(address, value).");
+}
+
+print("__PWN_SUCCESS_MARKER__");

@@ -1,0 +1,201 @@
+name: V8 Learning 2
+visibility:
+  start: "2024-08-01T17:00:00-07:00"
+resources:
+  - name: "Reference Material"
+    type: markdown
+    content: |
+      - [V8 Developer Documentation](https://v8.dev)
+      - [The V8 Sandbox](https://v8.dev/blog/sandbox)
+      - [Pointer Compression in V8](https://v8.dev/blog/pointer-compression)
+      - [Turboshaft: leaving the sea of nodes](https://v8.dev/blog/leaving-the-sea-of-nodes)
+  - type: header
+    content: Native Finish From A Provided Primitive
+  - id: ramp-native32-qword-helpers
+    name: Native32 Qword Helpers
+    type: challenge
+    description: "Combine provided absolute read32/write32 callbacks into little-endian read64/write64 helpers."
+  - id: ramp-absolute-read-helpers
+    name: Absolute Read Helpers
+    type: challenge
+    description: "Build unaligned little-endian read8/read16/read32 helpers on top of a provided loaded-ELF fixture read64 primitive."
+  - id: ramp-absolute-write-helpers
+    name: Absolute Write Helpers
+    type: challenge
+    description: "Pack byte arrays into little-endian qwords and write them through a provided loaded-ELF fixture write64 primitive."
+  - id: ramp-elf-program-headers
+    name: ELF Program Headers
+    type: challenge
+    description: "Parse a provided loaded-ELF fixture to find executable, writable, and dynamic segment starts and sizes."
+  - id: ramp-elf-dynamic-tables
+    name: ELF Dynamic Tables
+    type: challenge
+    description: "Walk a provided ELF dynamic table to locate string, symbol, and PLT relocation tables."
+  - id: ramp-elf-plt-imports
+    name: ELF PLT Imports
+    type: challenge
+    description: "Resolve syscall and exit from a provided PLT relocation table."
+  - id: ramp-executable-gadget-scan
+    name: Executable Gadget Scan
+    type: challenge
+    description: "Scan a provided executable segment for the ret and multi-pop 64-bit x86 gadgets used by the capstones."
+  - id: ramp-catflag-path-layout
+    name: Catflag Path Layout
+    type: challenge
+    description: "Write the /challenge/catflag path as a null-terminated C string in an absolute-write-shaped scratch region."
+  - id: ramp-catflag-argv-layout
+    name: Catflag Argv Layout
+    type: challenge
+    description: "Lay out the null-terminated argv pointer array for an existing /challenge/catflag path pointer."
+  - id: ramp-syscall-chain-layout
+    name: Syscall Chain Layout
+    type: challenge
+    description: "Write the ret-aligned qword return chain that calls syscall(59, path, argv, NULL) and then exit(0)."
+  - id: ramp-process-memory-chain
+    name: Dynamic Native Finish
+    type: challenge
+    description: "Rebase live d8 and stack leaks under ASLR, resolve imports, and lay out the validated ret-aligned catflag chain."
+  - type: header
+    content: Dispatch Escape Backward From Its Effect
+  - id: ramp-import-wrapper-sig-state
+    name: Imported Wrapper Signature State
+    type: challenge
+    description: "Copy callback-exposed imported-wrapper signature state and prove the resulting absolute read path."
+  - id: ramp-dispatch-state-aslr-anchors
+    name: Dispatch State ASLR Anchors
+    type: challenge
+    description: "Derive live d8 and stack return-slot anchors from imported-wrapper dispatch state under ASLR."
+  - id: ramp-wasm-table-dispatch-handle
+    name: Wasm Table Dispatch Handle
+    type: challenge
+    description: "Copy a caged trusted_dispatch_table handle between real WebAssembly.Table objects with guarded Sandbox access."
+  - id: ramp-table-grow-target-handle
+    name: Wasm Table Grow Target Handle
+    type: challenge
+    description: "Derive a dispatch-table target handle from nearby table handles and stage it before table growth."
+  - type: header
+    content: Caged Primitive Bedrock
+  - id: ramp-v8-cage-boundary
+    name: V8 Cage Boundary
+    type: challenge
+    description: "Allocate a normal JavaScript object, derive a proof-field cage offset, and mutate it with guarded Sandbox.MemoryView."
+  - id: ramp-tagged-pointers
+    name: Tagged Pointers
+    type: challenge
+    description: "Convert a tagged heap-object reference into an object start, then mutate a proof field with guarded Sandbox.MemoryView."
+  - id: ramp-caged-rw-interface
+    name: Caged Read/Write Interface
+    type: challenge
+    description: "Normalize differently shaped caged primitives behind one cage-offset read32/write32 interface."
+  - type: header
+    content: Wasm And Custom-Descriptor Bedrock
+  - id: ramp-wasm-sectioned-module
+    name: Wasm Sectioned Module
+    type: challenge
+    description: "Wrap provided Wasm section bodies into a complete module that validates and exports answer()."
+  - id: ramp-wasm-leb128-fields
+    name: Wasm LEB128 Fields
+    type: challenge
+    description: "Encode Wasm integer fields with unsigned LEB128 so a generated module validates and returns the expected value."
+  - id: ramp-wasm-gc-struct-fields
+    name: Wasm GC Struct Fields
+    type: challenge
+    description: "Encode the field list of a real Wasm GC struct type."
+  - id: ramp-wasm-gc-ref-fields
+    name: Wasm GC Reference Fields
+    type: challenge
+    description: "Encode a nullable Wasm GC struct field that references an earlier heap type by type index."
+  - id: ramp-wasm-recursive-type-groups
+    name: Wasm Recursive Type Groups
+    type: challenge
+    description: "Wrap two provided mutually referencing struct subtype definitions in a real Wasm recursive type group."
+  - id: ramp-exact-ref-types
+    name: Exact Reference Types
+    type: challenge
+    description: "Route exact and subtype-compatible references through the matching real Wasm API path."
+  - id: ramp-js-values-as-wasm-refs
+    name: JS Values as Wasm Refs
+    type: challenge
+    description: "Store a JavaScript object in a real mutable Wasm externref global."
+  - id: ramp-wasm-externref-table
+    name: Wasm Externref Table
+    type: challenge
+    description: "Store a JavaScript token object in a real WebAssembly externref table slot."
+  - id: ramp-wrapper-directionality
+    name: Wrapper Directionality
+    type: challenge
+    description: "Drive a real Wasm-to-JS import-caller path that passes an externref into JavaScript."
+  - id: ramp-wasm-custom-descriptor-pair
+    name: Wasm Custom Descriptor Pair
+    type: challenge
+    description: "Create a custom descriptor and the value it describes."
+  - id: ramp-custom-desc-subtyping
+    name: Wasm Custom Descriptor Subtyping
+    type: challenge
+    description: "Create a derived descriptor/value pair that passes checks through the base descriptor path."
+  - id: ramp-wasm-custom-descriptor-cast
+    name: Wasm Custom Descriptor Cast
+    type: challenge
+    description: "Classify values with two descriptor-checked cast paths."
+  - type: header
+    content: CVE-2025-13226 First Stage
+  - id: ramp-desc-confusion-effect
+    name: Descriptor Confusion Effect
+    type: challenge
+    description: "Retarget a modeled descriptor with guarded Sandbox.MemoryView and prove that the value follows the wrong descriptor."
+  - id: ramp-desc-confusion-leak
+    name: Descriptor Confusion Leak
+    type: challenge
+    description: "Use a modeled descriptor confusion to leak a tagged heap-object reference and mutate the proof field."
+  - id: ramp-desc-confusion-caged-rw
+    name: Descriptor Confusion Caged RW
+    type: challenge
+    description: "Normalize modeled wrong-field access into cage-offset read32/write32 helpers."
+  - id: ramp-cve-2025-13226-leak
+    name: CVE-2025-13226 Confused Leak
+    type: challenge
+    description: "Trigger the real custom-descriptor subtype-validation bug and return the tagged reference leaked through the wrong-layout view."
+  - id: ramp-cve-2025-13226-caged-rw
+    name: CVE-2025-13226 Caged RW
+    type: challenge
+    description: "Shape the real CVE-2025-13226 wrong-layout view into cage-offset read32/write32 helpers."
+  - type: header
+    content: First Chain Capstone
+  - id: chain-cve-2025-13226-452605803
+    name: CVE-2025-13226 to Issue 452605803
+    type: challenge
+    description: "Chain CVE-2025-13226 custom-descriptor confusion to caged read/write, then b/452605803 dispatch-table corruption with ASLR enabled."
+  - type: header
+    content: Second-Stage Swap
+  - id: ramp-wasm-stale-dispatch-growth
+    name: Stale Dispatch Growth
+    type: challenge
+    description: "Trigger vulnerable table growth and read the stale imported-wrapper signature path."
+  - id: chain-cve-2025-13226-446113730
+    name: CVE-2025-13226 to Issue 446113730
+    type: challenge
+    description: "Keep the CVE-2025-13226 first stage and swap the dispatch escape to b/446113730 with ASLR enabled."
+  - type: header
+    content: First-Stage Swap
+  - id: ramp-ref-get-desc
+    name: Ref Get Desc
+    type: challenge
+    description: "Extract the descriptor associated with a Wasm reference."
+  - id: ramp-ref-get-desc-exactness
+    name: Ref Get Desc Exactness
+    type: challenge
+    description: "Keep exact and generic descriptor-extraction paths separate."
+  - id: ramp-cve-2025-13228-ref-get-desc
+    name: CVE-2025-13228 Ref Get Desc
+    type: challenge
+    description: "Trigger the real ref.get_desc exactness confusion and return the leaked tagged reference."
+  - id: ramp-cve-2025-13228-caged-rw
+    name: CVE-2025-13228 Caged RW
+    type: challenge
+    description: "Shape the CVE-2025-13228 wrong-layout view into cage-offset read32/write32 helpers."
+  - type: header
+    content: Final Chain Capstone
+  - id: chain-cve-2025-13228-446113730
+    name: CVE-2025-13228 to Issue 446113730
+    type: challenge
+    description: "Swap the first stage to CVE-2025-13228 while preserving the b/446113730 dispatch escape with ASLR enabled."

@@ -1,0 +1,97 @@
+const EXPECTED_PATH = "/challenge/catflag";
+const scratchAddress = 0x5555572ec000n;
+const memory = new Map();
+
+function fail(message) {
+    throw new Error(message);
+}
+
+function normalizeAddress(value, name) {
+    if (typeof value === "bigint") return value;
+    const asNumber = Number(value);
+    if (!Number.isSafeInteger(asNumber)) {
+        fail(`${name} must be a BigInt process address.`);
+    }
+    return BigInt(asNumber);
+}
+
+function write64(address, value) {
+    address = normalizeAddress(address, "write64 address");
+    value = BigInt.asUintN(64, BigInt(value));
+    if (address < scratchAddress || address + 8n > scratchAddress + 0x100n) {
+        fail("write64 may only write inside the provided scratch range.");
+    }
+
+    for (let i = 0; i < 8; i++) {
+        memory.set(address + BigInt(i), Number((value >> BigInt(i * 8)) & 0xffn));
+    }
+}
+
+function read8(address) {
+    address = normalizeAddress(address, "read address");
+    return memory.get(address) || 0;
+}
+
+function readCString(address, limit = 96) {
+    let result = "";
+    for (let i = 0; i < limit; i++) {
+        const byte = read8(BigInt(address) + BigInt(i));
+        if (byte === 0) break;
+        result += String.fromCharCode(byte);
+    }
+    return result;
+}
+
+function qwordFromBytes(bytes, start) {
+    let value = 0n;
+    for (let i = 0; i < 8; i++) {
+        value |= BigInt(bytes[start + i] || 0) << BigInt(i * 8);
+    }
+    return value;
+}
+
+let writeBytesCalls = 0;
+function writeBytes(address, bytes) {
+    address = normalizeAddress(address, "writeBytes address");
+    if (!Array.isArray(bytes)) {
+        fail("writeBytes expects an array of byte values.");
+    }
+    writeBytesCalls++;
+    for (let i = 0; i < bytes.length; i += 8) {
+        write64(address + BigInt(i), qwordFromBytes(bytes, i));
+    }
+}
+
+const api = Object.freeze({
+    scratchAddress,
+    expectedPath: EXPECTED_PATH,
+    writeBytes,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+const result = solve(api);
+if (result === null || typeof result !== "object") {
+    fail("Return an object with pathAddress.");
+}
+
+const pathAddress = normalizeAddress(result.pathAddress, "pathAddress");
+
+if (pathAddress < scratchAddress || pathAddress >= scratchAddress + 0x100n) {
+    fail("Place the path string inside the provided scratch range.");
+}
+if (writeBytesCalls === 0) {
+    fail("Use api.writeBytes to write the path bytes into scratch memory.");
+}
+if (readCString(pathAddress) !== EXPECTED_PATH) {
+    fail("Write the null-terminated /challenge/catflag path string at pathAddress.");
+}
+if (read8(pathAddress + BigInt(EXPECTED_PATH.length)) !== 0) {
+    fail("The path string must be null-terminated.");
+}
+
+print("__PWN_SUCCESS_MARKER__");

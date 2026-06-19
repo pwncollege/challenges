@@ -1,0 +1,89 @@
+{% include "../../../common/dispatch-absolute-primitive.js.j2" %}
+
+const staged = createStagedDispatchGrowth();
+
+Object.defineProperty(globalThis, "Sandbox", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+});
+
+function fail(message) {
+    throw new Error(message);
+}
+
+let triggeredGrow = false;
+let readStalePath = false;
+let staleSignature = undefined;
+let helperModulePrepared = false;
+
+function prepareHelperModule() {
+    const instance = new WebAssembly.Instance(new WebAssembly.Module(buildAbsolutePrimitiveModule()), {
+        import: { fn2: (x) => [0n, x - 7n] },
+    });
+    const { called_fn } = instance.exports;
+    for (let i = 0; i < 100; i++) {
+        called_fn(1n, 2n);
+    }
+    helperModulePrepared = true;
+}
+
+function triggerDispatchGrowth() {
+    if (triggeredGrow) {
+        fail("Trigger dispatch-table growth exactly once.");
+    }
+    staged.grow();
+    prepareHelperModule();
+    triggeredGrow = true;
+}
+
+function readStaleSignature() {
+    if (!triggeredGrow) {
+        fail("Trigger dispatch-table growth before reading through the stale imported-wrapper path.");
+    }
+    if (!helperModulePrepared) {
+        fail("Harness error: helper module was not prepared after dispatch-table growth.");
+    }
+
+    const result = staged.staleCall(-1n, 0x30n);
+    if (!Array.isArray(result) || typeof result[0] !== "bigint") {
+        fail("Harness error: the imported-wrapper call did not return the expected multi-value result.");
+    }
+    if (result[0] === 42n) {
+        fail("The call still reached the ordinary JavaScript import result instead of stale dispatch metadata.");
+    }
+
+    readStalePath = true;
+    staleSignature = result[0];
+    return staleSignature;
+}
+
+function normalizeBigInt(value, name) {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
+    fail(`${name} must be returned as a BigInt or safe integer.`);
+}
+
+const api = Object.freeze({
+    triggerDispatchGrowth,
+    readStaleSignature,
+});
+
+__PWN_SOLVE_SOURCE__;
+
+if (typeof solve !== "function") {
+    fail("define solve(api)");
+}
+
+const answer = solve(api);
+if (!triggeredGrow) {
+    fail("Call api.triggerDispatchGrowth().");
+}
+if (!readStalePath) {
+    fail("Call api.readStaleSignature() after growth and return its value.");
+}
+if (normalizeBigInt(answer, "solve(api)") !== staleSignature) {
+    fail("Return the stale signature value read from api.readStaleSignature().");
+}
+
+print("__PWN_SUCCESS_MARKER__");

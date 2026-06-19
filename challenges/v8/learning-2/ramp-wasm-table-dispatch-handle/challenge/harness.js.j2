@@ -1,0 +1,119 @@
+{% extends "../../../common/sandbox-guard-harness.js.j2" %}
+
+{% block setup %}
+const dispatchHandleFieldOffset = 0x1c;
+const donorTable = new WebAssembly.Table({ element: "anyfunc", initial: 1, maximum: 1 });
+const recipientTable = new WebAssembly.Table({ element: "anyfunc", initial: 1, maximum: 1 });
+
+const donorObjectOffset = guardTools.realSandbox.getAddressOf(donorTable);
+const recipientObjectOffset = guardTools.realSandbox.getAddressOf(recipientTable);
+const donorDispatchHandleOffset = donorObjectOffset + dispatchHandleFieldOffset;
+const recipientDispatchHandleOffset = recipientObjectOffset + dispatchHandleFieldOffset;
+const donorDispatchHandle = guardTools.readUint32(donorDispatchHandleOffset);
+const originalRecipientDispatchHandle = guardTools.readUint32(recipientDispatchHandleOffset);
+
+if (donorDispatchHandle === 0 || originalRecipientDispatchHandle === 0) {
+    guardTools.fail("Harness error: table dispatch handles should be nonzero.");
+}
+if (donorDispatchHandle === originalRecipientDispatchHandle) {
+    guardTools.fail("Harness error: donor and recipient tables should have different dispatch handles.");
+}
+
+let leakedDonorTable = false;
+let leakedRecipientTable = false;
+let readDonorDispatchHandle = false;
+let wroteRecipientDispatchHandle = false;
+
+function byteSwap32(value) {
+    return (((value & 0xff) << 24) | ((value & 0xff00) << 8) | ((value >>> 8) & 0xff00) | ((value >>> 24) & 0xff)) >>> 0;
+}
+
+function tableName(obj) {
+    if (obj === donorTable) return "donorTable";
+    if (obj === recipientTable) return "recipientTable";
+    return undefined;
+}
+
+function diagnoseMemoryViewOffset(viewOffset) {
+    if (viewOffset === donorObjectOffset || viewOffset === recipientObjectOffset) {
+        guardTools.fail("This starts at the table object header. Add dispatchHandleFieldOffset to reach the dispatch-handle field.");
+    }
+    if (viewOffset === donorObjectOffset + 1 || viewOffset === recipientObjectOffset + 1) {
+        guardTools.fail("Sandbox.getAddressOf already returns the object start, not a tagged reference. Do not add the heap-object tag.");
+    }
+    if (viewOffset === donorDispatchHandleOffset + 4 || viewOffset === recipientDispatchHandleOffset + 4) {
+        guardTools.fail("This points just past the dispatch-handle field. Use the field start.");
+    }
+}
+
+function guardedDispatchView(offset, size) {
+    const viewOffset = guardTools.normalizeNumber(offset, "MemoryView offset");
+    const viewSize = guardTools.normalizeNumber(size, "MemoryView size");
+    diagnoseMemoryViewOffset(viewOffset);
+    guardTools.requireSameNumber(viewSize, 4, "The trusted dispatch-table handle is a 32-bit field.");
+
+    if (viewOffset === donorDispatchHandleOffset) {
+        if (!leakedDonorTable) {
+            guardTools.fail("First leak donorTable with Sandbox.getAddressOf(donorTable).");
+        }
+        readDonorDispatchHandle = true;
+        return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+    }
+    if (viewOffset === recipientDispatchHandleOffset) {
+        if (!leakedRecipientTable) {
+            guardTools.fail("First leak recipientTable with Sandbox.getAddressOf(recipientTable).");
+        }
+        wroteRecipientDispatchHandle = true;
+        return new guardTools.realSandbox.MemoryView(viewOffset, viewSize);
+    }
+
+    guardTools.fail("This ramp only allows MemoryView access to the donor and recipient dispatch-handle fields.");
+}
+
+function requireHandleTransplant() {
+    if (!readDonorDispatchHandle) {
+        guardTools.fail("Read donorTable's dispatch handle before writing the recipient.");
+    }
+    if (!wroteRecipientDispatchHandle) {
+        guardTools.fail("Write donorTable's dispatch handle into recipientTable.");
+    }
+
+    const donorNow = guardTools.readUint32(donorDispatchHandleOffset);
+    const recipientNow = guardTools.readUint32(recipientDispatchHandleOffset);
+    if (donorNow !== donorDispatchHandle) {
+        guardTools.fail("Do not corrupt donorTable while copying its dispatch handle.");
+    }
+    if (recipientNow === byteSwap32(donorDispatchHandle)) {
+        guardTools.fail("The recipient dispatch handle is byte-swapped. DataView.setUint32 defaults to big-endian; pass true for little-endian.");
+    }
+    if (recipientNow !== donorDispatchHandle) {
+        guardTools.fail("Copy the 32-bit donor dispatch handle into recipientTable's dispatch-handle field.");
+    }
+    return true;
+}
+
+const sandboxRules = Object.freeze({
+    getAddressOf(obj) {
+        const name = tableName(obj);
+        if (name === undefined) {
+            guardTools.fail("This ramp only allows leaking donorTable and recipientTable.");
+        }
+        if (obj === donorTable) leakedDonorTable = true;
+        if (obj === recipientTable) leakedRecipientTable = true;
+        return guardTools.realSandbox.getAddressOf(obj);
+    },
+    MemoryView(offset, size) {
+        return guardedDispatchView(offset, size);
+    },
+});
+{% endblock %}
+
+{% block expose %}
+guardTools.exposeConstant("donorTable", donorTable);
+guardTools.exposeConstant("recipientTable", recipientTable);
+guardTools.exposeConstant("dispatchHandleFieldOffset", dispatchHandleFieldOffset);
+{% endblock %}
+
+{% block validate %}
+return requireHandleTransplant();
+{% endblock %}
