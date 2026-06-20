@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -131,6 +132,32 @@ func (m *serviceManager) definitionLocked(name string) (serviceDefinition, error
 	}
 	m.definitions[name] = definition
 	return definition, nil
+}
+
+func (m *serviceManager) availableDefinitions() ([]serviceDefinition, error) {
+	entries, err := os.ReadDir(workspaceServicesDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	definitions := make([]serviceDefinition, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".toml") {
+			continue
+		}
+		definition, err := loadServiceDefinition(filepath.Join(workspaceServicesDir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		definitions = append(definitions, definition)
+	}
+	sort.Slice(definitions, func(i, j int) bool {
+		return definitions[i].Name < definitions[j].Name
+	})
+	return definitions, nil
 }
 
 func (m *serviceManager) startLocked(ctx context.Context, service *managedService, definition serviceDefinition) error {

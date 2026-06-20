@@ -1,21 +1,20 @@
-{ pkgs }:
+{
+  pkgs,
+  name ? "pwn-workspace-runtime",
+  workspacePackages ? import ./packages { inherit pkgs; },
+  workspaceServices ? import ./services { inherit pkgs; },
+}:
 let
   workspaceAgent = import ./agent { inherit pkgs; };
-
-  workspaceServices = [
-    (import ./services/code { inherit pkgs; })
-    (import ./services/desktop { inherit pkgs; })
-    (import ./services/tty { inherit pkgs; })
-  ];
 in
 pkgs.buildEnv {
-  name = "pwn-workspace-runtime";
+  inherit name;
 
   paths =
     with pkgs;
     [
       workspaceAgent
-      curl
+      workspacePackages
     ]
     ++ workspaceServices;
 }
