@@ -1,13 +1,11 @@
 This module teaches modern two-stage V8 heap-sandbox escape chains.
 The active challenges are one-concept ramp levels followed by a 2026 WasmFX capstone spine.
 
-V8's heap sandbox places many V8 heap objects inside a reserved address range called the heap cage.
-A cage-local primitive can operate on objects inside that range.
-It cannot directly read or write arbitrary process memory outside it.
+The flow starts from the final capability and works backward.
+First, you practice the native process-memory finish from a provided absolute read/write primitive.
+Then, you use guarded access to study the WasmFX imported-tag escape that turns caged corruption into process-memory access.
+After that, you fill in the heap-cage, Wasm reference, Wasm GC array, and optimized-Wasm concepts needed to produce the caged primitive through a real first-stage bug.
 
-The ramp challenges isolate the pieces of those chains one concept at a time.
-They start with cage-local primitives, Wasm byte encoding, recursive type groups, Wasm reference state, and boundary wrappers.
-They then ramp from optimized Wasm execution and stale array effects to a standalone CVE-2026-7899 caged write.
-From there, they teach the issue 514157844 imported-tag escape and the native process-memory finish before the first full chain.
-After that first capstone, the module ramps through the real CVE-2026-9973 trigger, bridge discovery, `addrof`, and caged read/write before using it in the second chain.
-Finally, the module introduces the issue 505751230 continuation escape swap and immediately uses it in the final chain.
+The first full chain uses CVE-2026-7899 for caged read/write and Chromium issue 514157844 for the imported-tag escape.
+The next chain swaps the first stage to CVE-2026-9973 while keeping the imported-tag escape.
+The final chain keeps CVE-2026-9973 and swaps the escape to Chromium issue 505751230's WasmFX continuation path.

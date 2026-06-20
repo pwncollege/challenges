@@ -379,10 +379,10 @@ if (typeof solve !== "function") {
 
 const result = solve(api);
 if (!usedStateRead) {
-    throw new Error("Use stateRead(0x10n) to derive the dispatch-state region.");
+    throw new Error("Use api.stateRead(0x10n) to derive the dispatch-state region.");
 }
 if (!usedRead64) {
-    throw new Error("Use read64 to inspect the dispatch-state native anchors.");
+    throw new Error("Use api.read64 to inspect the dispatch-state native anchors.");
 }
 if (result === null || typeof result !== "object") {
     throw new Error("Return an object with d8Base and stackRet.");

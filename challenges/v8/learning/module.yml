@@ -10,7 +10,75 @@ resources:
       - [Pointer Compression in V8](https://v8.dev/blog/pointer-compression)
       - [Turboshaft: leaving the sea of nodes](https://v8.dev/blog/leaving-the-sea-of-nodes)
   - type: header
-    content: V8 Heap Sandbox Foundations
+    content: Process-Memory Finish From a Provided Primitive
+  - id: ramp-native32-qword-helpers
+    name: Native32 Qword Helpers
+    type: challenge
+    description: "Combine provided fixture read32/write32 into little-endian read64/write64 qword helpers."
+  - id: ramp-absolute-read-helpers
+    name: Absolute Read Helpers
+    type: challenge
+    description: "Build unaligned little-endian unsigned read8/read16/read32 helpers on top of a provided loaded-ELF fixture read64 primitive."
+  - id: ramp-absolute-write-helpers
+    name: Absolute Write Helpers
+    type: challenge
+    description: "Pack byte arrays into little-endian qwords and write them through a provided loaded-ELF fixture write64 primitive."
+  - id: ramp-elf-program-headers
+    name: ELF Program Headers
+    type: challenge
+    description: "Parse a provided loaded-ELF fixture to find executable, writable, and dynamic segment starts and sizes."
+  - id: ramp-elf-dynamic-tables
+    name: ELF Dynamic Tables
+    type: challenge
+    description: "Walk a provided ELF dynamic table to locate string, symbol, and PLT relocation tables."
+  - id: ramp-elf-plt-imports
+    name: ELF PLT Imports
+    type: challenge
+    description: "Resolve syscall and exit from a provided PLT relocation table."
+  - id: ramp-executable-gadget-scan
+    name: Executable Gadget Scan
+    type: challenge
+    description: "Scan a provided executable segment for the ret and multi-pop 64-bit x86 gadgets used by the capstone."
+  - id: ramp-catflag-path-layout
+    name: Catflag Path Layout
+    type: challenge
+    description: "Write the /challenge/catflag path as a null-terminated C string in an absolute-write-shaped scratch region."
+  - id: ramp-catflag-argv-layout
+    name: Catflag Argv Layout
+    type: challenge
+    description: "Lay out the null-terminated argv pointer array for an existing /challenge/catflag path pointer."
+  - id: ramp-syscall-chain-layout
+    name: Syscall Chain Layout
+    type: challenge
+    description: "Write the ret-aligned qword return chain that uses the multi-pop gadget to call imported syscall(59, path, argv, NULL) and then exit(0)."
+  - id: ramp-process-memory-chain
+    name: Dynamic Native Finish
+    type: challenge
+    description: "Rebase live d8 and stack leaks under ASLR, resolve imports, and lay out the validated ret-aligned catflag chain from only native read32/write32."
+  - type: header
+    content: Issue 514157844 Imported-Tag Escape From Guarded Access
+  - id: ramp-wasmfx-tag-identity-field
+    name: WasmFX Tag Identity Field
+    type: challenge
+    description: "Locate the internal identity field of real WebAssembly.Tag wrappers and copy one tag identity into another wrapper."
+  - id: ramp-wasmfx-imported-tag-handler
+    name: WasmFX Imported Tag Handler
+    type: challenge
+    description: "Instantiate a real WasmFX module whose imported tag handler catches a suspend because tag identities were made equal."
+  - id: ramp-wasmfx-tag-native-leak
+    name: WasmFX Imported Tag Native Leak
+    type: challenge
+    description: "Use imported-tag confusion to leak a tagged proof-box pointer."
+  - id: ramp-wasmfx-tag-native-read
+    name: WasmFX Imported Tag Native Read
+    type: challenge
+    description: "Use imported-tag confusion to read a 32-bit proof field after deriving the proof-field address from the leaked tagged pointer."
+  - id: ramp-wasmfx-tag-native-write
+    name: WasmFX Imported Tag Native Write
+    type: challenge
+    description: "Use imported-tag confusion to write a 32-bit proof field after deriving the proof-field address from the leaked tagged pointer."
+  - type: header
+    content: Heap-Cage Primitive Contract
   - id: ramp-v8-cage-boundary
     name: V8 Cage Boundary
     type: challenge
@@ -66,7 +134,7 @@ resources:
     type: challenge
     description: "Drive a real Wasm-to-JS import-caller path that passes an externref into JavaScript."
   - type: header
-    content: CVE-2026-7899 First-Stage Ramps
+    content: Wasm/Turboshaft First-Stage Bedrock
   - id: ramp-wasm-optimized-tiering
     name: Optimized Wasm Tiering
     type: challenge
@@ -91,6 +159,8 @@ resources:
     name: Wasm Array OOB to Caged Read/Write
     type: challenge
     description: "Corrupt a real Wasm array length with guarded Sandbox.MemoryView, then normalize OOB array.get/array.set into cage-offset read32/write32."
+  - type: header
+    content: CVE-2026-7899 First Stage
   - id: ramp-cve-2026-7899-trigger
     name: CVE-2026-7899 Trigger
     type: challenge
@@ -111,74 +181,6 @@ resources:
     name: CVE-2026-7899 Caged Write
     type: challenge
     description: "Compose the CVE-2026-7899 trigger, marker scan, addrof, and reference retargeting into a proof-object write."
-  - type: header
-    content: Issue 514157844 Imported-Tag Escape Ramps
-  - id: ramp-wasmfx-tag-identity-field
-    name: WasmFX Tag Identity Field
-    type: challenge
-    description: "Locate the internal identity field of real WebAssembly.Tag wrappers and copy one tag identity into another wrapper."
-  - id: ramp-wasmfx-imported-tag-handler
-    name: WasmFX Imported Tag Handler
-    type: challenge
-    description: "Instantiate a real WasmFX module whose imported tag handler catches a suspend because tag identities were made equal."
-  - id: ramp-wasmfx-tag-native-leak
-    name: WasmFX Imported Tag Native Leak
-    type: challenge
-    description: "Use imported-tag confusion to leak a tagged proof-box pointer."
-  - id: ramp-wasmfx-tag-native-read
-    name: WasmFX Imported Tag Native Read
-    type: challenge
-    description: "Use imported-tag confusion to read a 32-bit proof field after deriving the proof-field address from the leaked tagged pointer."
-  - id: ramp-wasmfx-tag-native-write
-    name: WasmFX Imported Tag Native Write
-    type: challenge
-    description: "Use imported-tag confusion to write a 32-bit proof field after deriving the proof-field address from the leaked tagged pointer."
-  - type: header
-    content: Process-Memory Escape Ramps
-  - id: ramp-native32-qword-helpers
-    name: Native32 Qword Helpers
-    type: challenge
-    description: "Combine provided fixture read32/write32 into little-endian read64/write64 qword helpers."
-  - id: ramp-absolute-read-helpers
-    name: Absolute Read Helpers
-    type: challenge
-    description: "Build unaligned little-endian unsigned read8/read16/read32 helpers on top of a provided loaded-ELF fixture read64 primitive."
-  - id: ramp-absolute-write-helpers
-    name: Absolute Write Helpers
-    type: challenge
-    description: "Pack byte arrays into little-endian qwords and write them through a provided loaded-ELF fixture write64 primitive."
-  - id: ramp-elf-program-headers
-    name: ELF Program Headers
-    type: challenge
-    description: "Parse a provided loaded-ELF fixture to find executable, writable, and dynamic segment starts and sizes."
-  - id: ramp-elf-dynamic-tables
-    name: ELF Dynamic Tables
-    type: challenge
-    description: "Walk a provided ELF dynamic table to locate string, symbol, and PLT relocation tables."
-  - id: ramp-elf-plt-imports
-    name: ELF PLT Imports
-    type: challenge
-    description: "Resolve syscall and exit from a provided PLT relocation table."
-  - id: ramp-executable-gadget-scan
-    name: Executable Gadget Scan
-    type: challenge
-    description: "Scan a provided executable segment for the ret and multi-pop 64-bit x86 gadgets used by the capstone."
-  - id: ramp-catflag-path-layout
-    name: Catflag Path Layout
-    type: challenge
-    description: "Write the /challenge/catflag path as a null-terminated C string in an absolute-write-shaped scratch region."
-  - id: ramp-catflag-argv-layout
-    name: Catflag Argv Layout
-    type: challenge
-    description: "Lay out the null-terminated argv pointer array for an existing /challenge/catflag path pointer."
-  - id: ramp-syscall-chain-layout
-    name: Syscall Chain Layout
-    type: challenge
-    description: "Write the ret-aligned qword return chain that uses the multi-pop gadget to call imported syscall(59, path, argv, NULL) and then exit(0)."
-  - id: ramp-process-memory-chain
-    name: Dynamic Native Finish
-    type: challenge
-    description: "Rebase live d8 and stack leaks under ASLR, resolve imports, and lay out the validated ret-aligned catflag chain from only native read32/write32."
   - type: header
     content: First Chain Capstone
   - id: chain-cve-2026-7899-514157844
