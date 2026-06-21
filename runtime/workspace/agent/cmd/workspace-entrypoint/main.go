@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -21,8 +22,12 @@ const challengeRunDir = "/run/challenge"
 const challengeRunBin = "/run/challenge/bin"
 const workspaceRunDir = "/run/workspace"
 const workspaceProfile = "/run/workspace/profile"
+const workspaceProfileBin = "/run/workspace/profile/bin"
+const workspaceProfileScript = "/run/workspace/profile/etc/profile.d/99-pwn-workspace.sh"
 const workspaceUserRunDir = "/run/workspace/user"
 const workspaceServicesDir = "/run/workspace/user/services"
+const systemProfileScript = "/etc/profile.d/99-pwn-workspace.sh"
+const userShell = "/run/workspace/profile/bin/bash"
 
 type controlMessage struct {
 	Type    string `json:"type"`
@@ -86,7 +91,7 @@ func startAgent(controlRead *os.File, config workspaceConfig) (*exec.Cmd, error)
 	command.Env = append(os.Environ(),
 		"HOME="+config.home,
 		"LOGNAME="+config.user,
-		"SHELL=/bin/bash",
+		"SHELL="+userShell,
 		"USER="+config.user,
 	)
 	command.SysProcAttr = &syscall.SysProcAttr{
@@ -133,10 +138,13 @@ func loadWorkspaceConfig() (workspaceConfig, error) {
 }
 
 func prepareWorkspace(config workspaceConfig) error {
-	if err := setupUser(config.user, config.home); err != nil {
+	if err := setupRunDirectories(); err != nil {
 		return err
 	}
-	if err := setupRunDirectories(); err != nil {
+	if err := setupSystemEnvironment(); err != nil {
+		return err
+	}
+	if err := setupUsers(config.user, config.home); err != nil {
 		return err
 	}
 	if err := writeFlag(config.flag); err != nil {
@@ -208,6 +216,90 @@ func workspaceProfileTarget() (string, error) {
 	return filepath.Clean(filepath.Join(filepath.Dir(executable), "..")), nil
 }
 
+func setupSystemEnvironment() error {
+	if err := ensureShell("/bin/sh", userShell); err != nil {
+		return err
+	}
+	if err := os.MkdirAll("/etc/profile.d", 0755); err != nil {
+		return err
+	}
+	if err := linkSystemBashrc(); err != nil {
+		return err
+	}
+	os.Setenv("PATH", workspacePath(os.Getenv("PATH")))
+	os.Setenv("LANG", "C.UTF-8")
+	os.Setenv("MANPATH", filepath.Join(workspaceProfile, "share", "man")+":")
+	os.Setenv("SSL_CERT_FILE", filepath.Join(workspaceProfile, "etc", "ssl", "certs", "ca-bundle.crt"))
+	os.Setenv("TERMINFO", filepath.Join(workspaceProfile, "share", "terminfo"))
+	if err := writeEnvironment(); err != nil {
+		return err
+	}
+	return linkProfileScript()
+}
+
+func ensureShell(path string, target string) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	return os.Symlink(target, path)
+}
+
+func linkSystemBashrc() error {
+	if _, err := os.Stat("/etc/bashrc"); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if _, err := os.Stat("/etc/bash.bashrc"); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	return os.Symlink("/etc/bash.bashrc", "/etc/bashrc")
+}
+
+func writeEnvironment() error {
+	keys := []string{"PATH", "LANG", "MANPATH", "SSL_CERT_FILE", "TERMINFO"}
+	var buffer bytes.Buffer
+	for _, key := range keys {
+		value := os.Getenv(key)
+		if value == "" {
+			continue
+		}
+		buffer.WriteString(key)
+		buffer.WriteString("=")
+		buffer.WriteString(strconv.Quote(value))
+		buffer.WriteByte('\n')
+	}
+	return os.WriteFile("/etc/environment", buffer.Bytes(), 0644)
+}
+
+func linkProfileScript() error {
+	if _, err := os.Stat(workspaceProfileScript); err != nil {
+		return err
+	}
+	if err := os.Remove(systemProfileScript); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.Symlink(workspaceProfileScript, systemProfileScript)
+}
+
+func workspacePath(path string) string {
+	prefix := challengeRunBin + ":" + workspaceProfileBin
+	if path == prefix || strings.HasPrefix(path, prefix+":") {
+		return path
+	}
+	if path == "" {
+		return prefix
+	}
+	return prefix + ":" + path
+}
+
 func runChallengeInit() error {
 	if err := runInit(); err != nil {
 		return fmt.Errorf("run .init: %w", err)
@@ -215,27 +307,38 @@ func runChallengeInit() error {
 	return nil
 }
 
-func setupUser(user string, home string) error {
-	if err := upsertPasswdUser(user, home); err != nil {
+func setupUsers(user string, home string) error {
+	if err := upsertPasswdUsers(user, home); err != nil {
 		return err
 	}
-	if err := upsertGroup(user); err != nil {
+	if err := upsertGroups(user); err != nil {
 		return err
 	}
+	if err := setupHome("/root", 0, 0); err != nil {
+		return err
+	}
+	if err := setupHome(home, agentUID, agentGID); err != nil {
+		return err
+	}
+	return remountHomeNosuid(home)
+}
+
+func setupHome(home string, uid int, gid int) error {
 	if _, err := os.Stat(home); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(home, 0755); err != nil {
-			return err
-		}
-		if err := os.Chown(home, agentUID, agentGID); err != nil {
 			return err
 		}
 	} else if err != nil {
 		return err
 	}
-	return nil
+	return os.Chown(home, uid, gid)
 }
 
-func upsertPasswdUser(user string, home string) error {
+type passwdEntry struct {
+	fields []string
+}
+
+func upsertPasswdUsers(user string, home string) error {
 	const passwdPath = "/etc/passwd"
 
 	data, err := os.ReadFile(passwdPath)
@@ -243,40 +346,65 @@ func upsertPasswdUser(user string, home string) error {
 		return err
 	}
 
-	lines := make([]string, 0)
-	found := false
+	entries := make([]passwdEntry, 0)
+	seenRoot := false
+	seenUser := false
 	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
 		if line == "" {
 			continue
 		}
 		fields := strings.Split(line, ":")
 		if len(fields) < 7 {
-			lines = append(lines, line)
 			continue
 		}
-		uid, _ := strconv.Atoi(fields[2])
-		if fields[0] == user || uid == agentUID {
-			if found {
+		uid, validUID := parseID(fields[2])
+		switch {
+		case fields[0] == "root" || validUID && uid == 0:
+			if seenRoot {
+				continue
+			}
+			fields[0] = "root"
+			fields[2] = "0"
+			fields[3] = "0"
+			fields[4] = "root"
+			fields[5] = "/root"
+			fields[6] = userShell
+			seenRoot = true
+		case fields[0] == user || validUID && uid == agentUID:
+			if seenUser {
 				continue
 			}
 			fields[0] = user
 			fields[2] = strconv.Itoa(agentUID)
 			fields[3] = strconv.Itoa(agentGID)
+			fields[4] = user
 			fields[5] = home
-			fields[6] = "/bin/bash"
-			lines = append(lines, strings.Join(fields, ":"))
-			found = true
-			continue
+			fields[6] = userShell
+			seenUser = true
 		}
-		lines = append(lines, line)
+		entries = append(entries, passwdEntry{fields: fields})
 	}
-	if !found {
-		lines = append(lines, fmt.Sprintf("%s:x:%d:%d::%s:/bin/bash", user, agentUID, agentGID, home))
+	if !seenRoot {
+		entries = append(entries, passwdEntry{fields: []string{"root", "x", "0", "0", "root", "/root", userShell}})
+	}
+	if !seenUser {
+		entries = append(entries, passwdEntry{fields: []string{user, "x", strconv.Itoa(agentUID), strconv.Itoa(agentGID), user, home, userShell}})
+	}
+	sort.SliceStable(entries, func(i int, j int) bool {
+		return numericField(entries[i].fields, 2) < numericField(entries[j].fields, 2)
+	})
+	lines := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		lines = append(lines, strings.Join(entry.fields, ":"))
 	}
 	return writeLines(passwdPath, lines, 0644)
 }
 
-func upsertGroup(user string) error {
+type groupEntry struct {
+	fields []string
+}
+
+func upsertGroups(user string) error {
 	const groupPath = "/etc/group"
 
 	data, err := os.ReadFile(groupPath)
@@ -284,34 +412,113 @@ func upsertGroup(user string) error {
 		return err
 	}
 
-	lines := make([]string, 0)
-	found := false
+	entries := make([]groupEntry, 0)
+	seenRoot := false
+	seenUser := false
 	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
 		if line == "" {
 			continue
 		}
 		fields := strings.Split(line, ":")
 		if len(fields) < 4 {
-			lines = append(lines, line)
 			continue
 		}
-		gid, _ := strconv.Atoi(fields[2])
-		if fields[0] == user || gid == agentGID {
-			if found {
+		gid, validGID := parseID(fields[2])
+		switch {
+		case fields[0] == "root" || validGID && gid == 0:
+			if seenRoot {
+				continue
+			}
+			fields[0] = "root"
+			fields[2] = "0"
+			seenRoot = true
+		case fields[0] == user || validGID && gid == agentGID:
+			if seenUser {
 				continue
 			}
 			fields[0] = user
 			fields[2] = strconv.Itoa(agentGID)
-			lines = append(lines, strings.Join(fields, ":"))
-			found = true
-			continue
+			seenUser = true
 		}
-		lines = append(lines, line)
+		entries = append(entries, groupEntry{fields: fields})
 	}
-	if !found {
-		lines = append(lines, fmt.Sprintf("%s:x:%d:", user, agentGID))
+	if !seenRoot {
+		entries = append(entries, groupEntry{fields: []string{"root", "x", "0", ""}})
+	}
+	if !seenUser {
+		entries = append(entries, groupEntry{fields: []string{user, "x", strconv.Itoa(agentGID), ""}})
+	}
+	sort.SliceStable(entries, func(i int, j int) bool {
+		return numericField(entries[i].fields, 2) < numericField(entries[j].fields, 2)
+	})
+	lines := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		lines = append(lines, strings.Join(entry.fields, ":"))
 	}
 	return writeLines(groupPath, lines, 0644)
+}
+
+func numericField(fields []string, index int) int {
+	if index >= len(fields) {
+		return int(^uint(0) >> 1)
+	}
+	value, ok := parseID(fields[index])
+	if !ok {
+		return int(^uint(0) >> 1)
+	}
+	return value
+}
+
+func parseID(value string) (int, bool) {
+	id, err := strconv.Atoi(value)
+	return id, err == nil
+}
+
+func remountHomeNosuid(home string) error {
+	mount, ok, err := findMount(home)
+	if err != nil || !ok {
+		return err
+	}
+	if containsMountOption(mount.options, "nosuid") {
+		return nil
+	}
+	return syscall.Mount("", home, "", syscall.MS_REMOUNT|syscall.MS_NOSUID, "")
+}
+
+type mountInfo struct {
+	mountpoint string
+	options    string
+}
+
+func findMount(path string) (mountInfo, bool, error) {
+	data, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil {
+		return mountInfo{}, false, err
+	}
+	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			continue
+		}
+		if unescapeMountPath(fields[4]) == path {
+			return mountInfo{mountpoint: path, options: fields[5]}, true, nil
+		}
+	}
+	return mountInfo{}, false, nil
+}
+
+func unescapeMountPath(path string) string {
+	replacer := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+	return replacer.Replace(path)
+}
+
+func containsMountOption(options string, option string) bool {
+	for _, current := range strings.Split(options, ",") {
+		if current == option {
+			return true
+		}
+	}
+	return false
 }
 
 func writeLines(path string, lines []string, mode os.FileMode) error {

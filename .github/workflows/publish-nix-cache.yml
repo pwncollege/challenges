@@ -27,14 +27,22 @@ jobs:
     - uses: actions/checkout@v6
     - uses: ./.github/actions/setup-nix
 
-    - name: Build dev shell
+    - name: Build dev shell closures
       id: build-dev-shell
       run: |
-        printf 'path=%s\n' "$(nix build --no-link --print-out-paths .#devShells.x86_64-linux.default)" >> "${GITHUB_OUTPUT}"
+        {
+          echo 'paths<<EOF'
+          nix build --no-link --print-out-paths .#devShells.x86_64-linux.default
+          nix build --no-link --print-out-paths .#devShells.x86_64-linux.full
+          echo EOF
+        } >> "${GITHUB_OUTPUT}"
 
-    - name: Sign dev shell closure
+    - name: Sign dev shell closures
+      env:
+        DEV_SHELL_PATHS: ${{ steps.build-dev-shell.outputs.paths }}
       run: |
-        nix store sign --recursive --key-file <(echo '${{ secrets.NIX_CACHE_PRIVATE_KEY }}') '${{ steps.build-dev-shell.outputs.path }}'
+        mapfile -t paths <<< "${DEV_SHELL_PATHS}"
+        nix store sign --recursive --key-file <(echo '${{ secrets.NIX_CACHE_PRIVATE_KEY }}') "${paths[@]}"
 
     - name: Configure AWS credentials
       shell: 'nix shell nixpkgs#awscli2 --command bash --noprofile --norc -euo pipefail {0}'
@@ -46,13 +54,15 @@ jobs:
         aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
         aws configure set region auto
 
-    - name: Publish dev shell closure to R2 cache
+    - name: Publish dev shell closures to R2 cache
       shell: 'nix shell nixpkgs#awscli2 --command bash --noprofile --norc -euo pipefail {0}'
       env:
+        DEV_SHELL_PATHS: ${{ steps.build-dev-shell.outputs.paths }}
         R2_BUCKET_NAME: challenges-nix-cache
         R2_ENDPOINT: ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
       run: |
-        nix copy --to "s3://${R2_BUCKET_NAME}?endpoint=${R2_ENDPOINT}" '${{ steps.build-dev-shell.outputs.path }}'
+        mapfile -t paths <<< "${DEV_SHELL_PATHS}"
+        nix copy --to "s3://${R2_BUCKET_NAME}?endpoint=${R2_ENDPOINT}" "${paths[@]}"
         printf 'StoreDir: /nix/store\nPriority: 50\n' | aws s3 cp - "s3://${R2_BUCKET_NAME}/nix-cache-info" \
           --content-type text/x-nix-cache-info \
           --endpoint-url "https://${R2_ENDPOINT}" \
@@ -60,6 +70,8 @@ jobs:
 
     - name: Check cache availability from public domain
       env:
+        DEV_SHELL_PATHS: ${{ steps.build-dev-shell.outputs.paths }}
         R2_PUBLIC_CACHE_DOMAIN: nix-cache.challenges.pwn.college
       run: |
-        nix path-info --store "https://${R2_PUBLIC_CACHE_DOMAIN}" '${{ steps.build-dev-shell.outputs.path }}' >/dev/null
+        mapfile -t paths <<< "${DEV_SHELL_PATHS}"
+        nix path-info --store "https://${R2_PUBLIC_CACHE_DOMAIN}" "${paths[@]}" >/dev/null

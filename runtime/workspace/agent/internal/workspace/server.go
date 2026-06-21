@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"errors"
+	"html/template"
 	"log/slog"
 	"net"
 	"net/http"
@@ -92,9 +93,21 @@ func (a *agent) ok(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (a *agent) index(w http.ResponseWriter, _ *http.Request) {
+	services, err := a.services.availableDefinitions()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`<!doctype html>
+	_ = indexTemplate.Execute(w, struct {
+		Services []serviceDefinition
+	}{
+		Services: services,
+	})
+}
+
+var indexTemplate = template.Must(template.New("index").Parse(`<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -109,11 +122,10 @@ func (a *agent) index(w http.ResponseWriter, _ *http.Request) {
 <body>
   <h1>Workspace</h1>
   <ul>
-    <li><a href="/service/tty/">tty</a></li>
-    <li><a href="/service/desktop/">desktop</a></li>
-    <li><a href="/service/code/">code</a></li>
+    {{range .Services -}}
+    <li><a href="/service/{{.Name}}/">{{.Name}}</a></li>
+    {{end -}}
   </ul>
 </body>
 </html>
 `))
-}
