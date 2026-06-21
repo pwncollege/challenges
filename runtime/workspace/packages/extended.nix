@@ -32,6 +32,12 @@ let
     firefox
     geckodriver
     ghidra
+    (lib.hiPrio wireshark)
+  ];
+  desktopPackageLaunchers = [
+    "firefox.desktop"
+    "ghidra.desktop"
+    "org.wireshark.Wireshark.desktop"
   ];
 in
 pkgs.buildEnv {
@@ -127,6 +133,11 @@ pkgs.buildEnv {
     ++ pkgs.lib.optionals desktop desktopPackages;
 
   passthru = {
-    inherit desktopPackages python skippedDojoPackages;
+    inherit
+      desktopPackages
+      desktopPackageLaunchers
+      python
+      skippedDojoPackages
+      ;
   };
 }

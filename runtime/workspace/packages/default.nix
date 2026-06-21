@@ -9,9 +9,18 @@ in
 pkgs.buildEnv {
   name = "workspace-packages";
 
-  paths = [ python ];
+  paths = with pkgs; [
+    bashInteractive
+    cacert
+    glibcLocales
+    man
+    man-pages
+    ncurses
+    python
+  ];
 
   passthru = {
+    desktopPackageLaunchers = [ ];
     inherit python;
   };
 }

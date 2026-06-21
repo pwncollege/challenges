@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Adwaita-dark"/>
+    <property name="IconThemeName" type="string" value="elementary-xfce"/>
+  </property>
+  <property name="Gtk" type="empty">
+    <property name="FontName" type="string" value="Adwaita Sans 11"/>
+    <property name="MonospaceFontName" type="string" value="Hack 11"/>
+    <property name="MenuImages" type="bool" value="true"/>
+  </property>
+</channel>

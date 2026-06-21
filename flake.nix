@@ -44,7 +44,7 @@
 
           workspaceServices = import ./runtime/workspace/services {
             inherit pkgs;
-            inherit code desktop;
+            inherit code desktop workspacePackages;
           };
           serviceNames = [
             "tty"
