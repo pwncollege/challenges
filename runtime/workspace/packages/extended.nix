@@ -14,6 +14,7 @@ let
       flask
       ipython
       jupyter
+      pexpect
       pillow
       psutil
       pwntools

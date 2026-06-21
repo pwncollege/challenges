@@ -2,7 +2,12 @@
 let
   python = pkgs.python3.withPackages (
     ps: with ps; [
+      flask
+      pexpect
       pwntools
+      pycryptodome
+      requests
+      scapy
     ]
   );
 in
