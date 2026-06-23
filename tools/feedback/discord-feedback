@@ -3183,11 +3183,34 @@ def existing_pr_url(repo: pathlib.Path) -> Optional[str]:
     return result.stdout.strip() or None
 
 
+def _run_has_progress(run_dir: pathlib.Path) -> bool:
+    """A run is worth resuming if it got past its scrape -- i.e. it opened a PR or
+    checkpointed at least one phase. A bare directory with neither is an abandoned/botched
+    start (e.g. a mistyped fresh run), and --resume-latest must skip past it rather than
+    re-scrape from scratch."""
+    if (run_dir / "pr-url.txt").exists():
+        return True
+    try:
+        state = json.loads((run_dir / "resume-state.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return bool(state.get("completed_phases"))
+
+
 def latest_run_id(artifact_root_dir: pathlib.Path) -> Optional[str]:
     if not artifact_root_dir.is_dir():
         return None
-    runs = sorted(p.name for p in artifact_root_dir.iterdir() if p.is_dir())
-    return runs[-1] if runs else None
+    runs = sorted(
+        (p for p in artifact_root_dir.iterdir() if p.is_dir()), key=lambda p: p.name
+    )
+    if not runs:
+        return None
+    # Prefer the newest run with actual resumable progress; only if none qualifies do we
+    # fall back to the newest directory (preserving the old behavior for first-time resumes).
+    for run in reversed(runs):
+        if _run_has_progress(run):
+            return run.name
+    return runs[-1].name
 
 
 @click.command("discord-feedback")
