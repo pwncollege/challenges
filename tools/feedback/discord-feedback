@@ -1729,10 +1729,67 @@ def build_fallback_pr_body(
     return "\n".join(body).rstrip() + "\n"
 
 
+# Set once the run id is known, so any abnormal exit (crash, click error, Ctrl-C) can tell
+# the user exactly how to resume. Every phase checkpoints to resume-state.json, so resuming
+# never loses work -- the only thing a death used to cost was *knowing* you could resume.
+_RESUME_HINT: Optional[str] = None
+
+
+def _print_resume_hint() -> None:
+    if _RESUME_HINT:
+        click.echo(_RESUME_HINT, err=True)
+
+
+_PWNSHOP_PREFIX: Optional[list[str]] = None
+
+
+def _pwnshop_prefix(repo: pathlib.Path) -> list[str]:
+    """Decide how to invoke pwnshop, once per run, and cache it.
+
+    `nix develop --command pwnshop` re-evaluates the flake and always resolves the repo's
+    *current* pwnshop, but it's slow, so when we're already inside a dev shell we'd rather
+    call the bare `pwnshop` on PATH. The catch: a long-lived dev shell can go stale -- its
+    PATH still points at an old-generation pwnshop wrapper whose launcher script no longer
+    exists in the checkout, so every `pwnshop ...` exits 127 ("No such file or directory").
+    That looks exactly like "all tests failed with no logs", which sends the fix agent
+    chasing a phantom breakage until the run dies. So preflight the in-shell pwnshop with a
+    cheap `--help`; if it can't even launch, fall back to `nix develop --command` (a fresh
+    flake eval) instead of trusting the stale shell.
+    """
+    global _PWNSHOP_PREFIX
+    if _PWNSHOP_PREFIX is not None:
+        return _PWNSHOP_PREFIX
+    fresh = ["nix", "develop", "--command", "pwnshop"]
+    if not os.environ.get("IN_NIX_SHELL"):
+        _PWNSHOP_PREFIX = fresh
+        return _PWNSHOP_PREFIX
+    try:
+        probe = subprocess.run(
+            ["pwnshop", "--help"],
+            cwd=repo,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=60,
+        )
+        ok = probe.returncode == 0
+        detail = probe.stderr.decode("utf-8", "replace").strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        ok = False
+        detail = str(error)
+    if ok:
+        _PWNSHOP_PREFIX = ["pwnshop"]
+    else:
+        click.echo(
+            "Warning: the in-shell `pwnshop` failed to launch "
+            f"(stale nix dev shell?): {detail or 'exited nonzero'}. "
+            "Falling back to `nix develop --command pwnshop` for this run."
+        )
+        _PWNSHOP_PREFIX = fresh
+    return _PWNSHOP_PREFIX
+
+
 def pwnshop_invocation(repo: pathlib.Path, args: list[str]) -> list[str]:
-    if os.environ.get("IN_NIX_SHELL"):
-        return ["pwnshop", *args]
-    return ["nix", "develop", "--command", "pwnshop", *args]
+    return [*_pwnshop_prefix(repo), *args]
 
 
 def run_logged(
@@ -3336,6 +3393,19 @@ def feedback_command(
         artifact_dir = (repo / artifact_root / run_id).resolve()
         artifact_dir.mkdir(parents=True, exist_ok=True)
 
+    # From here on, every phase is checkpointed; if anything below dies, the run can be
+    # resumed exactly where it stopped. Stash the precise command so the top-level handler
+    # can print it on any abnormal exit instead of leaving the user to guess the run id.
+    global _RESUME_HINT
+    _RESUME_HINT = (
+        "\n================ run did not finish ================\n"
+        "Every completed phase is checkpointed -- nothing is lost.\n"
+        "Resume exactly where it stopped with:\n\n"
+        f"    {pathlib.Path(sys.argv[0]).name} <your original flags> --resume {run_id}\n\n"
+        "(or --resume-latest).\n"
+        "===================================================="
+    )
+
     resume_state_path = artifact_dir / "resume-state.json"
     resume_state = load_resume_state(resume_state_path) if resuming else {"completed_phases": []}
     completed_phases = set(resume_state.get("completed_phases", []))
@@ -3692,4 +3762,14 @@ if __name__ == "__main__":
     try:
         feedback_command()
     except KeyboardInterrupt:
+        _print_resume_hint()
         sys.exit(130)
+    except SystemExit as exit_error:
+        # click turns ClickException/abort into SystemExit after printing the error; show
+        # the resume hint on any nonzero exit so a failed run is one command from continuing.
+        if exit_error.code not in (0, None):
+            _print_resume_hint()
+        raise
+    except BaseException:
+        _print_resume_hint()
+        raise
