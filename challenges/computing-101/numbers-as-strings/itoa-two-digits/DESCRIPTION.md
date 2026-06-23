@@ -19,10 +19,10 @@ Then return the number of characters written (in this case, 2).
 Remember to `.global itoa`.
 
 **Writing characters.**
-Your `itoa_digit` function from the last level returned the result (in `rax`), and you didn't have to deal writh writing it to a buffer.
+Your `itoa_digit` function from the last level returned the result (in `rax`), and you didn't have to deal with writing it to a buffer.
 Now, you do.
 Your actual character is _one byte_ (8 bits), whereas the register you're holding it in is 64 bits (8 bytes) long.
-You just want the last ("least significant") byte, and you can directly access it through _partial register alises_, depending on the register:
+You just want the last ("least significant") byte, and you can directly access it through _partial register aliases_, depending on the register:
 
 | register | least significant byte |
 | -------- | ---------------------- |
@@ -49,11 +49,11 @@ This is tricky, but do it carefully, and the flag is your reward!
 
 ----
 
-**Debugging:**
+**DEBUGGING TIPS:**
 This can get tricky to get right.
 To debug this challenge, our advice is to add a `_start` in your code, as so:
 
-```
+```asm
 .global _start
 _start:
     mov rdi, 42     // you'll pass 42 as the first argument to your function
@@ -76,3 +76,11 @@ hacker@dojo:~$ gdb ./debug
 ```
 
 Execution stops at your `int3`, and from there you can step through with the techniques you learned in [Software Introspection](/computing-101/introspecting), looking at memory on the stack, registers, etc, until things work!
+You can also debug the native harness that loads your `.so`:
+
+```console
+hacker@dojo:~$ gdb --args /challenge/harness your-solve.so 42
+(gdb) run
+```
+
+The first argument after `/challenge/harness` is your library, and the second is the stand-in number passed to `itoa`.

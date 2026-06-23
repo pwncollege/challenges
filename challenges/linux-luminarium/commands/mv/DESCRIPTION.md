@@ -15,4 +15,5 @@ hacker@dojo:~$
 ```
 
 This challenge wants you to move the `/flag` file into `/tmp/hack-the-planet` (do it)!
+Run `mv` directly from your shell, just like in the example above.
 When you're done, run `/challenge/check`, which will check things out and give the flag to you.
