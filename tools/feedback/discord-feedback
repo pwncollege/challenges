@@ -1729,10 +1729,56 @@ def build_fallback_pr_body(
     return "\n".join(body).rstrip() + "\n"
 
 
+_PWNSHOP_PREFIX: Optional[list[str]] = None
+
+
+def _pwnshop_prefix(repo: pathlib.Path) -> list[str]:
+    """Decide how to invoke pwnshop, once per run, and cache it.
+
+    `nix develop --command pwnshop` re-evaluates the flake and always resolves the repo's
+    *current* pwnshop, but it's slow, so when we're already inside a dev shell we'd rather
+    call the bare `pwnshop` on PATH. The catch: a long-lived dev shell can go stale -- its
+    PATH still points at an old-generation pwnshop wrapper whose launcher script no longer
+    exists in the checkout, so every `pwnshop ...` exits 127 ("No such file or directory").
+    That looks exactly like "all tests failed with no logs", which sends the fix agent
+    chasing a phantom breakage until the run dies. So preflight the in-shell pwnshop with a
+    cheap `--help`; if it can't even launch, fall back to `nix develop --command` (a fresh
+    flake eval) instead of trusting the stale shell.
+    """
+    global _PWNSHOP_PREFIX
+    if _PWNSHOP_PREFIX is not None:
+        return _PWNSHOP_PREFIX
+    fresh = ["nix", "develop", "--command", "pwnshop"]
+    if not os.environ.get("IN_NIX_SHELL"):
+        _PWNSHOP_PREFIX = fresh
+        return _PWNSHOP_PREFIX
+    try:
+        probe = subprocess.run(
+            ["pwnshop", "--help"],
+            cwd=repo,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=60,
+        )
+        ok = probe.returncode == 0
+        detail = probe.stderr.decode("utf-8", "replace").strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        ok = False
+        detail = str(error)
+    if ok:
+        _PWNSHOP_PREFIX = ["pwnshop"]
+    else:
+        click.echo(
+            "Warning: the in-shell `pwnshop` failed to launch "
+            f"(stale nix dev shell?): {detail or 'exited nonzero'}. "
+            "Falling back to `nix develop --command pwnshop` for this run."
+        )
+        _PWNSHOP_PREFIX = fresh
+    return _PWNSHOP_PREFIX
+
+
 def pwnshop_invocation(repo: pathlib.Path, args: list[str]) -> list[str]:
-    if os.environ.get("IN_NIX_SHELL"):
-        return ["pwnshop", *args]
-    return ["nix", "develop", "--command", "pwnshop", *args]
+    return [*_pwnshop_prefix(repo), *args]
 
 
 def run_logged(
