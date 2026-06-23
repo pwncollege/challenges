@@ -1,0 +1,62 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+from base64 import b64encode, b64decode
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from Crypto.Random import get_random_bytes
+
+import tempfile
+import sqlite3
+import random
+import flask
+import os
+
+app = flask.Flask(__name__)
+
+class TemporaryDB:
+    def __init__(self):
+        self.db_file = tempfile.NamedTemporaryFile("x", suffix=".db")
+
+    def execute(self, sql, parameters=()):
+        connection = sqlite3.connect(self.db_file.name)
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        result = cursor.execute(sql, parameters)
+        connection.commit()
+        return result
+
+key = get_random_bytes(16)
+cipher = AES.new(key=key, mode=AES.MODE_ECB)
+
+db = TemporaryDB()
+# https://www.sqlite.org/lang_createtable.html
+db.execute("""CREATE TABLE secrets AS SELECT ? AS flag""", [open("/flag").read()])
+
+@app.route("/", methods=["GET"])                                                                                                             
+def challenge_get():
+    query = flask.request.args.get("query") or "'A'"
+
+    try:
+        sql = f'SELECT {query} FROM secrets'
+        print(f"DEBUG: {sql=}")
+        pt = db.execute(sql).fetchone()[0]
+    except sqlite3.Error as e:
+        flask.abort(500, f"Query: {query}\nError: {e}")
+    except TypeError:
+        # no records found
+        pt = "A"
+
+    ct = cipher.encrypt(pad(pt.encode(), cipher.block_size))
+
+    return f"""
+        <html><body>Welcome to pwn.secret!
+        <form>SELECT <input type=text name=query value='{query}'> FROM secrets<br><input type=submit value=Submit></form>
+        <hr>
+        <b>Query:</b> <pre>{sql}</pre><br>
+        <b>Results:</b><pre>{b64encode(ct).decode()}</pre>
+        </body></html>
+    """
+
+app.secret_key = os.urandom(8)
+app.config['SERVER_NAME'] = f"challenge.localhost:80"
+app.run("challenge.localhost", 80)

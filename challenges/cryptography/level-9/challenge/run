@@ -1,0 +1,16 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+import hashlib
+
+
+flag = open("/flag").read()
+prefix_length = 6
+flag_hash = hashlib.sha256(flag.encode("latin")).hexdigest()
+print(f"{flag_hash[:prefix_length]=}")
+
+collision = bytes.fromhex(input("Colliding input? ").strip())
+collision_hash = hashlib.sha256(collision).hexdigest()
+print(f"{collision_hash[:prefix_length]=}")
+if collision_hash[:prefix_length] == flag_hash[:prefix_length]:
+    print("Collided!")
+    print(flag)
