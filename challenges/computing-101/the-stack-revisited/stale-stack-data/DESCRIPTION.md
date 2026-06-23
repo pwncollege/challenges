@@ -31,16 +31,4 @@ hacker@dojo:~$ ld -shared -o solve.so solve.o
 hacker@dojo:~$ /challenge/check solve.so
 ```
 
-----
-
-**DEBUGGING TIPS:**
-For the general shared-library debugging workflow, use [Writing From a Shared Library](/computing-101/control-flow/callee-write).
-If you debug the checker path directly, load the native harness with `gdb`, not `/challenge/check`, and redirect stand-in flag bytes into it:
-
-```console
-hacker@dojo:~$ python3 -c 'import sys; sys.stdout.buffer.write(b"debug-stale-stack-flag\n" * 16)' > fake-flag
-hacker@dojo:~$ gdb --args /challenge/harness solve.so
-(gdb) run < fake-flag
-```
-
-The harness reads stand-in flag bytes from stdin, just as the checker feeds it, and the checker output also prints the exact stale-stack offset for this level.
+For debugging a submitted function inside a shared library, refer back to [Writing From a Shared Library](/computing-101/control-flow/callee-write).

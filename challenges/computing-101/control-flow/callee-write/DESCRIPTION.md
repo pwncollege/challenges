@@ -72,7 +72,7 @@ Get it right, and your `solve` will print your flag for you!
 **Hint:** Keep in mind that `write()` takes arguments in the order of: file descriptor (1 in `rdi` for stdout), buffer (pointer to memory, in `rsi`), and size (in `rdx`).
 This is _different_ from the arguments your function will be called with, so you'll need to move some stuff around!
 
-**DEBUGGING TIPS:**
+**Debugging your solution.**
 Since your code is a function inside a shared library, there's no entry point to launch under `gdb` directly --- but you can *give* it one.
 Add a tiny `_start` to your code that fakes the grader's call: point `rdi` at a stand-in buffer, set `rsi` to its length, and `call solve`.
 Now you can step through your logic in plain `gdb`, with no flag and no privileges needed:
@@ -101,13 +101,12 @@ If your `solve` is correct, this prints `AAAA` --- and the same logic will print
 
 You can also debug the native harness directly with stand-in bytes instead of the flag.
 `/challenge/check` is the Python checker script, so do not load it as the executable in `gdb`.
-The native program that loads your `.so` is `/challenge/harness`, and it reads the stand-in bytes from stdin.
-Put those bytes in a file and redirect it into the harness:
+The native program that loads your `.so` is `/challenge/harness`.
+When it sees that it is running under `gdb`, it automatically uses stand-in flag bytes:
 
 ```console
-hacker@dojo:~$ printf 'type-a-placeholder-flag-here\n' > fake-flag
 hacker@dojo:~$ gdb --args /challenge/harness your-solve.so
-(gdb) run < fake-flag
+(gdb) run
 ```
 
 The checker will run that same harness shape with the real flag when you submit your `.so`.

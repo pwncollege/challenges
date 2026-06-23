@@ -19,7 +19,7 @@ if [ "$OUTPUT" = "$EXPECTED" ]; then
     cat /flag
 else
     echo "Not quite right!"
-    echo "Expected: '$EXPECTED'"
-    echo "Got: '$OUTPUT'"
+    echo "Expected: '$EXPECTED' (${#EXPECTED} bytes)"
+    echo "Got: '$OUTPUT' (${#OUTPUT} bytes)"
     exit 1
 fi

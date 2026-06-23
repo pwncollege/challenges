@@ -39,3 +39,6 @@ resources:
 - type: challenge
   id: gdb-run-args
   name: "Running with Arguments"
+- type: challenge
+  id: gdb-run-stdin
+  name: "Redirecting Input in GDB"

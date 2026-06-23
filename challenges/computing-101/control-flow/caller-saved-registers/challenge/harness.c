@@ -1,7 +1,10 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/random.h>
 #include <unistd.h>
 
@@ -23,6 +26,7 @@
  */
 
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
+#define DEBUG_FLAG "pwn.college{PLACEHOLDER}"
 
 extern uint64_t expected[7];   /* sentinels placed in rax,rcx,rdx,r8,r9,r10,r11 */
 extern uint64_t seen[7];       /* what flag_function observed in those registers */
@@ -37,6 +41,44 @@ extern void flag_function(void);
 static char flagbuf[4096];
 static size_t flaglen;
 static const char *regname[7] = {"rax", "rcx", "rdx", "r8", "r9", "r10", "r11"};
+
+static int is_traced(void) {
+    int fd = open("/proc/self/status", O_RDONLY);
+    if (fd < 0) return 0;
+    char buf[4096];
+    ssize_t n = read(fd, buf, sizeof buf - 1);
+    close(fd);
+    if (n <= 0) return 0;
+    buf[n] = 0;
+    char *p = strstr(buf, "TracerPid:");
+    return p && atoi(p + sizeof("TracerPid:") - 1) != 0;
+}
+
+static int read_flag_from_stdin(void) {
+    if (is_traced()) {
+        flaglen = sizeof(DEBUG_FLAG) - 1;
+        memcpy(flagbuf, DEBUG_FLAG, flaglen);
+        close(0);
+        LOG("debugger detected; using placeholder flag bytes for this harness run.");
+        return 0;
+    }
+
+    /* Receive the flag on stdin, not argv: argv is world-readable via
+     * /proc/self/cmdline, which would let a solve dump the flag without doing
+     * the register work. Consume it now so a solve that read()s fd 0 gets nothing. */
+    ssize_t n;
+    while (flaglen < sizeof flagbuf && (n = read(0, flagbuf + flaglen, sizeof flagbuf - flaglen)) > 0)
+        flaglen += n;
+    if (n < 0) {
+        LOG("read flag failed");
+        return -1;
+    }
+    if (flaglen == sizeof flagbuf) {
+        LOG("flag buffer too small");
+        return -1;
+    }
+    return 0;
+}
 
 /* Called from flag_function (asm) after it snapshots the registers into seen[]. */
 void __attribute__((force_align_arg_pointer)) flag_check(void) {
@@ -66,12 +108,9 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    /* Receive the flag on stdin, not argv: argv is world-readable via
-     * /proc/self/cmdline, which would let a solve dump the flag without doing
-     * the register work. Consume it now so a solve that read()s fd 0 gets nothing. */
-    ssize_t n;
-    while (flaglen < sizeof flagbuf && (n = read(0, flagbuf + flaglen, sizeof flagbuf - flaglen)) > 0)
-        flaglen += n;
+    if (read_flag_from_stdin() != 0) {
+        return 2;
+    }
 
     if (getrandom(expected, sizeof expected, 0) != (ssize_t)sizeof expected) {
         LOG("getrandom failed");

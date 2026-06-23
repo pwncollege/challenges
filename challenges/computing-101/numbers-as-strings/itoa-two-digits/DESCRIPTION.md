@@ -49,7 +49,7 @@ This is tricky, but do it carefully, and the flag is your reward!
 
 ----
 
-**DEBUGGING TIPS:**
+**Debugging:**
 This can get tricky to get right.
 To debug this challenge, our advice is to add a `_start` in your code, as so:
 
