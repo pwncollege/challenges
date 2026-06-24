@@ -101,8 +101,7 @@ If your `solve` is correct, this prints `AAAA` --- and the same logic will print
 
 You can also debug the native harness directly with stand-in bytes instead of the flag.
 `/challenge/check` is the Python checker script, so do not load it as the executable in `gdb`.
-The native program that loads your `.so` is `/challenge/harness`.
-When it sees that it is running under `gdb`, it automatically uses stand-in flag bytes:
+The native program that loads your `.so` is `/challenge/harness`:
 
 ```console
 hacker@dojo:~$ gdb --args /challenge/harness your-solve.so
