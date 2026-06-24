@@ -1,7 +1,10 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <err.h>
+#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 /*
@@ -17,12 +20,37 @@
 
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
 #define FLAG_CAPACITY 4096
+#define DEBUG_FLAG "pwn.college{PLACEHOLDER}"
 
 static char flagbuf[FLAG_CAPACITY];
 static size_t flaglen;
 static int callback_ran = 0;
 
+static int is_traced(void) {
+    int fd = open("/proc/self/status", O_RDONLY);
+    if (fd < 0) return 0;
+    char buf[4096];
+    ssize_t n = read(fd, buf, sizeof buf - 1);
+    close(fd);
+    if (n <= 0) return 0;
+    buf[n] = 0;
+    char *p = strstr(buf, "TracerPid:");
+    return p && atoi(p + sizeof("TracerPid:") - 1) != 0;
+}
+
+static void use_debug_flag(void) {
+    flaglen = sizeof(DEBUG_FLAG) - 1;
+    memcpy(flagbuf, DEBUG_FLAG, flaglen);
+    close(0);
+    LOG("debugger detected; using placeholder flag bytes for this harness run.");
+}
+
 static void read_flag_from_stdin(void) {
+    if (is_traced()) {
+        use_debug_flag();
+        return;
+    }
+
     ssize_t n;
     while (flaglen < sizeof flagbuf && (n = read(0, flagbuf + flaglen, sizeof flagbuf - flaglen)) > 0) {
         flaglen += n;
