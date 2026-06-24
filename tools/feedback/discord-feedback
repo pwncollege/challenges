@@ -3389,11 +3389,10 @@ def feedback_command(
         raise click.ClickException("--create-pr requires --apply.")
     if create_pr and skip_tests:
         raise click.ClickException("--create-pr cannot be combined with --skip-tests.")
+    # The Discord token is only needed to scrape. A resume that skips the scrape (notably the
+    # fast-path that re-attaches to an already-opened PR) must not require it -- otherwise a
+    # fresh shell without the token can't even resume a watch. Validated at point-of-use below.
     token = os.environ.get(token_env)
-    if not token:
-        raise click.ClickException(
-            f"{token_env} is not set. Create a Discord bot token and export it first."
-        )
     resuming = bool(resume_run_id) or resume_latest
     if resume_run_id and resume_latest:
         raise click.ClickException("Use either --resume or --resume-latest, not both.")
@@ -3486,6 +3485,10 @@ def feedback_command(
     until = utc_now()
     since = resolve_scrape_since(repo, until, hours, DEFAULT_FALLBACK_HOURS)
 
+    if not token:
+        raise click.ClickException(
+            f"{token_env} is not set. Create a Discord bot token and export it first."
+        )
     api = DiscordAPI(token)
     click.echo(f"Scraping Discord messages since {since.isoformat()} into {artifact_dir}")
     channels, channels_by_id = discover_channels(
