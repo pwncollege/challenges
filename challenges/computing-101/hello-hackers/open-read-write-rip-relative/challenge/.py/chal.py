@@ -29,10 +29,53 @@ def split_operands(insn):
 def normalize_reg(reg):
 	return checker.SUBREG_TO_64.get(reg, reg)
 
+def instruction_sets_reg(insn, reg, value):
+	if not insn.op_str:
+		return False
+
+	if insn.mnemonic == "mov":
+		dst, src = split_operands(insn)
+		return normalize_reg(dst) == reg and normalize_reg(src) == value
+
+	if value == "0" and insn.mnemonic == "xor":
+		dst, src = split_operands(insn)
+		return normalize_reg(dst) == reg and normalize_reg(src) == reg
+
+	return False
+
 def instruction_writes_reg(insn, reg):
-	if insn.mnemonic not in {"lea", "mov"} or not insn.op_str:
+	if insn.mnemonic not in {"lea", "mov", "xor"} or not insn.op_str:
 		return False
 	return normalize_reg(split_operands(insn)[0]) == reg
+
+def rax_value_before(disas, idx):
+	for insn in reversed(disas[:idx]):
+		if instruction_sets_reg(insn, "rax", "0"):
+			return "0"
+		if insn.mnemonic == "mov" and insn.op_str:
+			dst, src = split_operands(insn)
+			if normalize_reg(dst) == "rax":
+				return normalize_reg(src)
+	return None
+
+def assert_write_count_from_read(disas):
+	syscalls = [i for i, insn in enumerate(disas) if insn.mnemonic == "syscall"]
+	read_i = next((i for i in syscalls if rax_value_before(disas, i) == "0"), None)
+	write_i = next((i for i in syscalls if rax_value_before(disas, i) == "1"), None)
+	assert read_i is not None, "You need to invoke the read syscall (set rax to 0)!"
+	assert write_i is not None, "You need to invoke the write syscall (set rax to 1)!"
+	assert read_i < write_i, "You need to read the data before you write it back out!"
+
+	rdx_writes_after_read = [
+		insn
+		for insn in disas[read_i + 1:write_i]
+		if instruction_writes_reg(insn, "rdx")
+	]
+	assert rdx_writes_after_read and instruction_sets_reg(rdx_writes_after_read[-1], "rdx", "rax"), (
+		"write's length (rdx) must come from read's return value (rax).\n"
+		"read returns how many bytes it actually read, so after your read syscall do\n"
+		"`mov rdx, rax` --- write exactly that many bytes --- rather than hardcoding a length."
+	)
 
 def check_disassembly(disas):
 	mov_operands = checker.mov_operands(disas)
@@ -65,7 +108,7 @@ def check_disassembly(disas):
 		"You need to set rax to 2, the syscall number for open!"
 	)
 
-	assert ['rax', '0'] in mov_operands, (
+	assert any(instruction_sets_reg(insn, "rax", "0") for insn in disas), (
 		"You need to set rax to 0, the syscall number for read!"
 	)
 
@@ -82,7 +125,7 @@ def check_disassembly(disas):
 
 	# Write back exactly what you read: write's length (rdx) must come from read's
 	# return value (rax), the idiom you learned in read-exact --- not a hardcoded count.
-	checker.assert_write_count_from_read(disas)
+	assert_write_count_from_read(disas)
 
 	exit_syscall = syscall_indices[-1]
 	rax_writes_before_exit = [

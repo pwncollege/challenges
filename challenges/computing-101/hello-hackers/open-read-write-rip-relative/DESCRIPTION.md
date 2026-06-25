@@ -70,6 +70,7 @@ path:
 ```
 
 This puts the address of the "/flag" string into `rdi`, rather than loading the contents of the string into `rdi`.
+Think of `path` as the address where the first byte of `"/flag\0"` lives: `mov` copies bytes from there, while `lea` copies the address so the kernel can walk those bytes until the null byte.
 
 Now, a quick note about the math here: though we write `[rip+path]` above, what _actually_ gets added to `rip` is the delta in addresses between `rip` (which, again, is pointing to the instruction after `lea`) and the "/flag" string.
 It's a weird syntax, and yet another little quirk of x86.
