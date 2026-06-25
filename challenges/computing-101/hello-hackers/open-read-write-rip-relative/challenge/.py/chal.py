@@ -66,12 +66,12 @@ def assert_write_count_from_read(disas):
 	assert write_i is not None, "You need to invoke the write syscall (set rax to 1)!"
 	assert read_i < write_i, "You need to read the data before you write it back out!"
 
-	rdx_after_read = [
+	rdx_writes_after_read = [
 		insn
 		for insn in disas[read_i + 1:write_i]
-		if instruction_sets_reg(insn, "rdx", "rax")
+		if instruction_writes_reg(insn, "rdx")
 	]
-	assert rdx_after_read, (
+	assert rdx_writes_after_read and instruction_sets_reg(rdx_writes_after_read[-1], "rdx", "rax"), (
 		"write's length (rdx) must come from read's return value (rax).\n"
 		"read returns how many bytes it actually read, so after your read syscall do\n"
 		"`mov rdx, rax` --- write exactly that many bytes --- rather than hardcoding a length."
