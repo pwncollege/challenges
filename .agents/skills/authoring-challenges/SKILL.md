@@ -44,6 +44,9 @@ your archetype.
   be torn apart.)
 - **Respect sequencing.** Don't introduce advanced topics (e.g. ASLR) early, even as a
   footnote/`NOTE`. They get their own much-later level.
+- **Respect local ordering inside a DESCRIPTION.** Don't use an instruction, term, or
+  comparison before the paragraph that introduces it; move the sentence later or rewrite it
+  using only concepts the learner has already seen.
 - **The phenomenon you teach must be REAL, not manufactured by your own scaffolding.**
   If the lesson only "works" because of a wrapper you added (e.g. faking a tool's
   behavior with `env -i`), the design is wrong — redesign, don't ship the contrivance.
