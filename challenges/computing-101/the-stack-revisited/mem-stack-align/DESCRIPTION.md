@@ -46,5 +46,6 @@ hacker@dojo:~$ env -i /challenge/program
 hacker@dojo:~$ env -i FOO=xxxxxxxx /challenge/program
 ```
 
-Remember that the whole environment string is placed on the stack, so `FOO=` and the trailing null byte count toward the shift too.
+Remember that the whole environment string is placed on the stack, so `FOO=`, the value, and the trailing null byte count toward the shift.
+Count those string bytes, not a separate `envp[]` pointer-table slot.
 You're not modifying the program at all, just changing how it's launched, which influences where its data ends up!

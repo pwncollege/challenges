@@ -32,4 +32,5 @@ hacker@dojo:~$ /challenge/program
 ```
 
 This allows you to have very finegrained control over your environment.
+When you build that one variable, count the bytes in its environment string (`NAME=`, the value, and its trailing null byte), not a separate `envp[]` pointer-table slot.
 In this challenge, you'll use this finegrained control to line up addresses in a slightly more realistic setting, but keep the capability in mind for other situations!

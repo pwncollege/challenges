@@ -56,6 +56,7 @@ path:
 **THIS IS STILL NOT WHAT WE WANT!**
 Why? Because it _reads_ the 8 bytes at `[rip+path]` into `rdi` rather than put the address of those bytes into `rdi`.
 `rdi` would end up holding the values `'f'`, and `'l'`, and so on, but the `open` syscall needs the address and not the values.
+Think of `path` as the address where the first byte of `"/flag\0"` lives: `mov` copies bytes from there, while `lea` copies the address so the kernel can walk those bytes until the null byte.
 
 Luckily, there is an instruction that is _almost_ a read, but instead _does_ put the address that would have been read into `rdi` (or whatever other register).
 That instruction is **l**oad **e**ffective **a**ddress (the word _effective_ here refers to the CPU figuring out all the calculations it needs to do, such as adding an offset to the instruction pointer in this case):
