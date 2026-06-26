@@ -43,6 +43,20 @@ jobs:
     - uses: ./.github/actions/setup-nix
     - uses: ./.github/actions/setup-challenge-runtime
 
+    - name: Build challenge images
+      id: build-challenge-images
+      shell: 'nix develop -c bash -euo pipefail {0}'
+      env:
+        CHALLENGES_DIR: challenges/${{ matrix.challenges }}
+      run: |
+        challenge_images="$RUNNER_TEMP/challenge-images.txt"
+        pwnshop build "$CHALLENGES_DIR" | tee "$challenge_images"
+        if [ ! -s "$challenge_images" ]; then
+          echo "::error::No challenge images were built"
+          exit 1
+        fi
+        echo "challenge_images=$challenge_images" >> "$GITHUB_OUTPUT"
+
     - name: Test challenges
       uses: ./.github/actions/test-challenges
       with:
@@ -62,10 +76,10 @@ jobs:
         containerd_blobs_dir="/mnt/pwn.college/containerd/io.containerd.content.v1.content/blobs"
         publish_blobs_dir="/mnt/publish/blobs"
         publish_manifests_dir="/mnt/publish/manifests"
+        challenge_images="${{ steps.build-challenge-images.outputs.challenge_images }}"
         sudo mkdir -p "$publish_blobs_dir" "$publish_manifests_dir"
-        while IFS= read -r line; do
-          image_id="${line%% *}"
-          challenge_slug="${line#* }"
+        while IFS= read -r image_id; do
+          challenge_slug="$(docker image inspect --format '{{index .Config.Labels "pwncollege.challenge"}}' "$image_id")"
           if [ -n "$REGISTRY_SECRET" ]; then
             challenge_slug="$REGISTRY_SECRET/$challenge_slug"
           fi
@@ -83,10 +97,7 @@ jobs:
           done
           sudo mkdir -p "$publish_manifests_dir/$challenge_slug"
           printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
-        done < <(
-          docker image ls --all --filter "label=pwncollege.challenge" --no-trunc --quiet \
-            | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
-        )
+        done < "$challenge_images"
         {
           echo "publish_blobs_dir=$publish_blobs_dir"
           echo "publish_manifests_dir=$publish_manifests_dir"
