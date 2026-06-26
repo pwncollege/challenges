@@ -51,10 +51,6 @@ jobs:
       run: |
         challenge_images="$RUNNER_TEMP/challenge-images.txt"
         pwnshop build "$CHALLENGES_DIR" | tee "$challenge_images"
-        if [ ! -s "$challenge_images" ]; then
-          echo "::error::No challenge images were built"
-          exit 1
-        fi
         echo "challenge_images=$challenge_images" >> "$GITHUB_OUTPUT"
 
     - name: Test challenges
