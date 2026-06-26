@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+#
+# Supervisor for the discord-feedback bot.
+#
+# Two failure modes have repeatedly left the bot's screen window dead at a shell prompt:
+#
+#   1. It was launched from a plain shell (not `nix develop`), so DOCKER_HOST was unset and
+#      pwnshop fell through to the host docker -- whose docker0 bridge is broken -- making
+#      every challenge "fail" to build with "adding interface veth... to bridge docker0
+#      failed: Device does not exist". Nothing is actually wrong with the challenges.
+#   2. A transient hiccup (docker, a GitHub blip, an OOM) killed the bot mid-run, and it
+#      stayed dead until someone noticed and hand-typed the resume command.
+#
+# This wrapper makes both impossible:
+#
+#   * It runs the bot inside ONE persistent `nix develop` session. The dev shell's shellHook
+#     starts the project-local dockerd and exports DOCKER_HOST at it exactly once, and it
+#     stays up for the whole run -- so the bot always has a correct, stable docker and can
+#     never fall through to the broken host daemon. (It re-execs itself into `nix develop`
+#     if it isn't already inside one.)
+#   * It runs the bot in a loop: on any nonzero exit it waits (capped backoff) and resumes
+#     from the last checkpoint with --resume-latest. A transient failure self-heals on the
+#     next iteration instead of leaving the window dead. It stops only on a clean exit
+#     (the PR merged / work done) or Ctrl-C.
+#
+# Usage:
+#   tools/feedback/run-feedback [bot args...]
+#
+# The bot args are passed verbatim to the FIRST iteration (use --resume <id> to pick up a
+# specific run, or pass fresh-run flags to start one). Every retry afterwards forces
+# --resume-latest so it continues whatever run the first iteration advanced. With no args it
+# defaults to the standard apply/create-pr/watch invocation and resumes the latest run.
+
+set -uo pipefail
+
+REPO="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$REPO"
+
+# Re-exec inside a single persistent dev shell if we aren't already in one. `nix develop
+# --command` runs the shellHook first (starting dockerd + exporting DOCKER_HOST), then this
+# same script with IN_NIX_SHELL set, so the branch below runs the supervised loop with a
+# stable docker for its entire lifetime.
+if [ -z "${IN_NIX_SHELL:-}" ]; then
+    echo "run-feedback: entering nix develop (starts project dockerd, sets DOCKER_HOST)..."
+    exec nix develop --command "$0" "$@"
+fi
+
+BOT="${FEEDBACK_BOT:-$REPO/.discord-feedback/discord-feedback}"
+if [ ! -x "$BOT" ]; then
+    BOT="$REPO/tools/feedback/discord-feedback"
+fi
+
+# Default first-iteration args if the caller passed none.
+DEFAULT_ARGS=(--apply --create-pr --resume-latest)
+if [ "$#" -gt 0 ]; then
+    first_args=("$@")
+else
+    first_args=("${DEFAULT_ARGS[@]}")
+fi
+
+# Retry args: strip any caller-supplied --resume <id> / --resume-latest, then force
+# --resume-latest so every retry continues the run the first iteration advanced.
+retry_args=()
+skip_next=0
+for arg in "${first_args[@]}"; do
+    if [ "$skip_next" = 1 ]; then skip_next=0; continue; fi
+    case "$arg" in
+        --resume) skip_next=1; continue ;;          # drop "--resume <id>"
+        --resume=*) continue ;;
+        --resume-latest) continue ;;
+        *) retry_args+=("$arg") ;;
+    esac
+done
+retry_args+=(--resume-latest)
+
+echo "run-feedback: DOCKER_HOST=${DOCKER_HOST:-<unset>}"
+echo "run-feedback: bot=$BOT"
+
+attempt=0
+args=("${first_args[@]}")
+while true; do
+    attempt=$((attempt + 1))
+    echo "==================== run-feedback iteration $attempt ===================="
+    echo "run-feedback: $BOT ${args[*]}"
+    "$BOT" "${args[@]}"
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+        echo "run-feedback: bot exited cleanly (work done); stopping."
+        break
+    fi
+    if [ "$rc" -eq 130 ]; then
+        echo "run-feedback: interrupted (Ctrl-C); stopping."
+        break
+    fi
+    # Capped linear backoff: 30s, 60s, ... up to 300s. A transient docker/API failure clears
+    # within this window; a persistent one keeps retrying (loudly) rather than dying.
+    delay=$((attempt * 30))
+    [ "$delay" -gt 300 ] && delay=300
+    echo "run-feedback: bot exited $rc; resuming from checkpoint in ${delay}s (next: --resume-latest)."
+    sleep "$delay"
+    args=("${retry_args[@]}")
+done
