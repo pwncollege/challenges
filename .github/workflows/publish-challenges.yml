@@ -84,7 +84,7 @@ jobs:
           sudo mkdir -p "$publish_manifests_dir/$challenge_slug"
           printf '%s\n' "$image_id" | sudo tee "$publish_manifests_dir/$challenge_slug/latest" >/dev/null
         done < <(
-          docker image ls --filter "label=pwncollege.challenge" --no-trunc --quiet \
+          docker image ls --all --filter "label=pwncollege.challenge" --no-trunc --quiet \
             | xargs -r docker image inspect --format '{{.Id}} {{index .Config.Labels "pwncollege.challenge"}}'
         )
         {
