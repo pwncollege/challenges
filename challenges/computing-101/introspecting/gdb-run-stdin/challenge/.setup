@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+# Compile debug-me at build time (NOT in .init): the toolchain is reliably
+# present during `docker build`, and any breakage surfaces at build instead of
+# silently failing to launch the challenge for the learner.
+NUM=$((RANDOM % 90000 + 10000))
+gcc -O2 -DNUM=$NUM -o /challenge/debug-me /challenge/debug-me.c
+rm /challenge/debug-me.c
+
+# submit-number checks this; root-only so the number can't simply be read out.
+printf '%s\n' "$NUM" > /challenge/.correct
+chmod 600 /challenge/.correct
+
+# The file the learner redirects into debug-me's stdin. Its contents don't
+# matter -- debug-me only checks that stdin *is* this file.
+printf '%s\n' "Redirect me into debug-me's stdin with: (gdb) run < /challenge/secret" > /challenge/secret
+chmod 644 /challenge/secret
