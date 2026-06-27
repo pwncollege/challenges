@@ -26,19 +26,19 @@ config = (pathlib.Path(__file__).parent / ".config").read_text()
 level = int(config)
 
 strace_expected_parent = r"""
-1..10   execve(<execve_args>) = 0
-2..10   socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3
-3..10   bind(3, {sa_family=AF_INET, sin_port=htons(<bind_port>), sin_addr=inet_addr("<bind_address>")}, 16) = 0
-4..10   listen(3, 0) = 0
-5..10   accept(3, NULL, NULL) = 4
+1..11   execve(<execve_args>) = 0
+2..11   socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3
+3..11   bind(3, {sa_family=AF_INET, sin_port=htons(<bind_port>), sin_addr=inet_addr("<bind_address>")}, 16) = 0
+4..11   listen(3, 0) = 0
+5..11   accept(3, NULL, NULL) = 4
 6..8    read(4, <read_request>, <read_request_count>) = <read_request_result>
 7..8    open("<open_path>", O_RDONLY) = 5
 7..8    read(5, <read_file>, <read_file_count>) = <read_file_result>
 7..8    close(5) = 0
 6..8    write(4, "HTTP/1.0 200 OK\r\n\r\n", 19) = 19
 7..8    write(4, <write_file>, <write_file_count>) = <write_file_result>
-9..10   fork() = <fork_result>
-6..10   close(4) = 0
+9..11   fork() = <fork_result>
+6..11   close(4) = 0
 8..10   accept(3, NULL, NULL) = ?
 1..7    exit(0) = ?
 """
@@ -226,7 +226,7 @@ def create_secret_dir():
     return secret_dir
 
 
-def validate_strace(level, results, requirements):
+def validate_strace(level, results, requirements, *, print_child_traces=False):
     stdout = results["stdout"].decode("latin")
     stderr = results["stderr"].decode("latin")
 
@@ -301,8 +301,14 @@ def validate_strace(level, results, requirements):
     parent_captured, parent_errors = strace_validate("Parent Process", strace_expected_parent, parent_result, requirements)
     errors.extend(parent_errors)
 
-    child_pid = int(parent_captured.get("fork_result", 0))
-    if child_pid:
+    if print_child_traces:
+        child_index = 0
+        for child_pid, child_result in sorted(results["log"].items()):
+            if child_pid == parent_pid:
+                continue
+            strace_validate(f"Child Process {child_index}", "", child_result, requirements)
+            child_index += 1
+    elif level <= 10 and (child_pid := int(parent_captured.get("fork_result", 0))):
         child_result = results["log"][child_pid]
         child_captured, child_errors = strace_validate("Child Process", strace_expected_child, child_result, requirements)
         errors.extend(child_errors)
@@ -315,6 +321,15 @@ def retry_session():
     retries = requests.adapters.Retry(total=4, backoff_factor=0.1)
     session.mount("http://", requests.adapters.HTTPAdapter(max_retries=retries))
     return session
+
+
+def connection_error(method, exception):
+    message = str(exception)
+    if errno := re.search(r"\[Errno \d+\] [^')]+", message):
+        message = errno.group(0)
+    elif len(message) > 240:
+        message = f"{message[:237]}..."
+    return f"{method}: Failed to connect ({type(exception).__name__}: {message})"
 
 
 def random_data():
@@ -347,8 +362,8 @@ def validate_get(data=None):
         f.flush()
         try:
             response = session.get("http://localhost" + f.name, timeout=1)
-        except requests.exceptions.ConnectionError:
-            return "GET: Failed to connect"
+        except requests.exceptions.ConnectionError as e:
+            return connection_error("GET", e)
         if response.text.encode() != data:
             return "GET: File contents not correct"
 
@@ -361,8 +376,8 @@ def validate_post(data=None):
         pass
     try:
         session.post("http://localhost" + f.name, data=data, timeout=1)
-    except requests.exceptions.ConnectionError:
-        return "POST: Failed to connect"
+    except requests.exceptions.ConnectionError as e:
+        return connection_error("POST", e)
     try:
         if open(f.name, "rb").read() != data:
             return "POST: File contents not correct"
@@ -471,7 +486,8 @@ $ {sys.argv[0]} ./server
                     errors.append(f"Exception: {str(e)}")
         print()
 
-        strace_errors = validate_strace(level, results, requirements)
+        strace_errors = validate_strace(level, results, requirements,
+                                        print_child_traces=level == 11 and bool(errors))
         errors.extend(strace_errors)
 
         print("===== Result =====")
