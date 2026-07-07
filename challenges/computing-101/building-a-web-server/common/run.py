@@ -20,6 +20,7 @@ import shutil
 import atexit
 
 import requests
+import urllib3
 
 
 config = (pathlib.Path(__file__).parent / ".config").read_text()
@@ -317,8 +318,27 @@ def retry_session():
     return session
 
 
+def request_timed_out(exc):
+    if isinstance(exc, requests.exceptions.ConnectTimeout):
+        return False
+    if isinstance(exc, requests.exceptions.Timeout):
+        return True
+    # Retry wraps read timeouts as ConnectionError, so inspect the inner urllib3 reason.
+    for arg in exc.args:
+        reason = getattr(arg, "reason", None)
+        if isinstance(reason, urllib3.exceptions.ReadTimeoutError):
+            return True
+    return False
+
+
 def request_failure(method, exc):
-    return f"{method}: Failed to connect ({type(exc).__name__}: {exc})"
+    if request_timed_out(exc):
+        failure = "Timed out"
+    elif isinstance(exc, requests.exceptions.ConnectionError):
+        failure = "Failed to connect"
+    else:
+        failure = "Request failed"
+    return f"{method}: {failure} ({type(exc).__name__}: {exc})"
 
 
 def random_data():
