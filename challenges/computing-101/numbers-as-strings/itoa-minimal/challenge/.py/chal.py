@@ -15,7 +15,7 @@ def run_one(so_path, value, *, quiet):
         p = subprocess.run(
             ["/challenge/harness", so_path, str(value)],
             stdout=subprocess.PIPE,
-            stderr=(subprocess.DEVNULL if quiet else None),
+            stderr=subprocess.PIPE,
             timeout=5,
         )
     except subprocess.TimeoutExpired:
@@ -24,7 +24,9 @@ def run_one(so_path, value, *, quiet):
             "A function has to reach a `ret`; an accidental loop with no way out spins forever."
         )
     if p.returncode != 0:
-        raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on value {value}.")
+        stderr = p.stderr.decode("utf-8", errors="replace").strip()
+        details = f"\n\nHarness stderr:\n{stderr}" if stderr else ""
+        raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on value {value}.{details}")
     return p.stdout
 
 

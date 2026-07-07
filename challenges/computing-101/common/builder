@@ -3,6 +3,7 @@
 import os
 os.environ["PATH"] = "/challenge/bin:/bin:/usr/bin:/usr/local/bin"
 
+import logging
 import pwnlib.context
 import pwnlib.asm
 import pwnlib.elf
@@ -14,6 +15,7 @@ import magic
 import sys
 
 pwnlib.context.context.arch = "amd64"
+logging.getLogger("pwnlib").setLevel(logging.ERROR)
 cs = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
 
 

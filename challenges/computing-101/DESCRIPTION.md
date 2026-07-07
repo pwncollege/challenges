@@ -15,3 +15,7 @@ If you have questions, comments, feedback, and so on, join us on [the Discord ch
 **NOTE:**
 If you are looking for the old Assembly Crash Course, it has [been archived](https://pwn.college/archive/assembly-crash-course).
 Computing 101 is the current path through that material, with the concepts split across the modules below.
+
+**NOTE:**
+Computing 101 is foundational welcome material, not a belt checkpoint.
+Later belt dojos assume these machine-code and assembly skills, so learners with prior experience can skip around, and this is the place to return when those assumptions feel shaky.

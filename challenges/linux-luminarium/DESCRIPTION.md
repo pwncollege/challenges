@@ -14,6 +14,10 @@ The Linux Luminarium is _very_ introductory.
 If you are already comfortable in Linux, feel free to skip it (unless it's assigned as part of a course, in which case, obviously do not skip it)!
 
 **NOTE:**
+Linux Luminarium is a foundational welcome dojo, not a belt checkpoint.
+Later belt dojos assume these command-line skills, so work through it if Linux is new to you and return to it when a later challenge exposes a gap.
+
+**NOTE:**
 This dojo is NOT meant to be tricky!
 Sometimes, upgrades and architectural challenges in the pwn.college platform itself might break some challenges.
 If a challenge is being weird, please let us know on the discord channel!
