@@ -27,10 +27,6 @@ In this way, the program implements conditional logic _without any conditional c
 This challenge (at `/challenge/reverse-me`) has 256 possible cases, with only one of them (corresponding to an alphanumeric character) being different than the others.
 Look at the jump table (you'll have to look at a lot of entries...), look at the program to understand how to influence the index, and get the flag!
 
-`/challenge/reverse-me` is generated without source-level debug information, so gdb may say that it has no debugging symbols.
-That is expected: use gdb for disassembly and memory inspection, not for source-level debugging.
-As in the previous challenge, use gdb to understand the binary, then run `/challenge/reverse-me` directly with the recovered byte to get the flag.
-
 ----
 **NOTE:**
 Though you should look at the disassembly using `objdump -d -M intel /challenge/reverse-me`, objdump will try to interpret the jump table data as assembly instructions, which will result in garbage.
@@ -74,3 +70,4 @@ The output will be long, but it starts like this:
 The number after `x/` is how many entries gdb should print.
 Since the input byte chooses one of 256 entries, and each entry is one 8-byte code address, this lets you scan the table for the one address that differs.
 If gdb prints multiple entries on one line, the address on the left is the first entry on that line; the next entry is 8 bytes later.
+As in the previous challenge, use gdb to understand the binary, then run `/challenge/reverse-me` directly with the recovered byte to get the flag.
