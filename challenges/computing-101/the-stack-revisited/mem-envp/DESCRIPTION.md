@@ -39,3 +39,12 @@ Two new things to notice:
 
 In this challenge, we will set the `FLAG` environment variable to the actual flag and run your program with no arguments and no other env vars.
 That means `[rsp+24]` will hold a pointer to the `FLAG=...` string, and you can get the flag by `write()`ing it out!
+
+This is a whole-program level, so submit an executable, not a shared library.
+Assemble and link your program, then pass that executable to the checker:
+
+```console
+hacker@dojo:~$ as -o envp.o envp.s
+hacker@dojo:~$ ld -o envp envp.o
+hacker@dojo:~$ /challenge/check envp
+```

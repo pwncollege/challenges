@@ -36,13 +36,13 @@ def check_disassembly(disas):
 	return True
 
 def check_runtime(filename):
-	checker.dramatic_command(filename)
+	checker.dramatic_command("/tmp/assembled-program", actual_command=filename)
 	checker.dramatic_command("")
 
 check_runtime_prologue = """
 \033[92m
 Congratulations, you have written your first program!
-Now let's see what happens when you run it:
+Now let's see what happens when the checker runs the assembled program:
 \033[0m
 """.strip()
 

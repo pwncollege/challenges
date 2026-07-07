@@ -4,13 +4,14 @@ import subprocess
 import sys
 
 give_flag = False
+executable = True
 num_instructions = 8
 
 # envp[0] (the whole "FLAG=<value>" string) is padded to exactly this many
 # bytes so the student can write a constant byte count. It is the 5-byte
 # "FLAG=" name plus a 128-byte flag field, so any real flag up to 128 bytes
 # fits (flags are an implementation detail and DO vary in length -- never
-# assume the current length). The student is told this number in DESCRIPTION.md.
+# assume the current length). The runtime prompt reports the fixed capacity.
 FLAG_VAR_LEN = 5 + 128  # len("FLAG=") + 128-byte flag field = 133
 
 check_disassembly_prologue = "Checking that your assembly reads envp[0] and writes its bytes to stdout..."
@@ -23,6 +24,7 @@ check_runtime_failure = "Hmm, that's not right:\n"
 
 
 def check_disassembly(disas):
+    checker.assert_instruction_count(disas, num_instructions)
     mov_operands = checker.mov_operands(disas)
 
     has_envp_deref = any("[rsp + 0x18]" in src for _, src in mov_operands)

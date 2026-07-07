@@ -20,12 +20,12 @@ give_flag = True
 BINARY = "{{ binary_ops }}".split()
 UNARY = "{{ unary_ops }}".split()
 
-# The complete universe of operators a calculator could be asked to handle. Any
-# op the level didn't opt into is "unsupported": the program must quit on it
-# rather than print a wrong answer. That branch --- recognizing the op and
-# bailing out when it's one you don't handle --- is the whole point of the level.
-ALL_BINARY = ["+", "-", "*", "^", "|", "&", "/", "%"]
-ALL_UNARY = ["-", "~"]
+# Extra later-level operators are allowed: an overachiever can submit a fuller
+# calculator to an earlier level. Still require nonsense operators to be
+# rejected, so a program cannot ignore the dispatch and print an answer for
+# everything.
+INVALID_BINARY = ["?", "@"]
+INVALID_UNARY = ["!", "#"]
 
 MASK = (1 << 64) - 1
 
@@ -125,8 +125,9 @@ def check_unsupported(binary_path, args, *, quiet):
     if crash:
         # A crash technically "quits", but it's not the clean refusal we want.
         raise AssertionError(crash + " An unsupported operator should make it exit nonzero, not crash.")
+    operator = args[1] if len(args) == 3 else args[0]
     assert p.returncode != 0, (
-        f"The operator {args[1]!r} is not one this level supports, "
+        f"The operator {operator!r} is not one this level supports, "
         f"so on the arguments {args!r} your program should quit with a nonzero exit code --- "
         f"but it exited 0 (it printed {p.stdout.decode('latin-1').strip()!r}). "
         "Recognize the operators you handle and bail out on any other."
@@ -164,15 +165,13 @@ def check_runtime(binary_path):
             check_supported(binary_path, [op, str(a)], expected, quiet=not first)
             first = False
 
-    # --- a couple of unsupported operators must make the program quit ---
-    unsupported_binary = [op for op in ALL_BINARY if op not in BINARY]
-    for op in unsupported_binary[:2]:
+    # --- nonsense operators must make the program quit ---
+    for op in INVALID_BINARY:
         check_unsupported(binary_path, ["8", op, "3"], quiet=not first)
         first = False
 
     if UNARY:
-        unsupported_unary = [op for op in ALL_UNARY if op not in UNARY]
-        for op in unsupported_unary[:1]:
+        for op in INVALID_UNARY:
             check_unsupported(binary_path, [op, "8"], quiet=not first)
             first = False
 

@@ -20,6 +20,7 @@ import shutil
 import atexit
 
 import requests
+import urllib3
 
 
 config = (pathlib.Path(__file__).parent / ".config").read_text()
@@ -317,6 +318,29 @@ def retry_session():
     return session
 
 
+def request_timed_out(exc):
+    if isinstance(exc, requests.exceptions.ConnectTimeout):
+        return False
+    if isinstance(exc, requests.exceptions.Timeout):
+        return True
+    # Retry wraps read timeouts as ConnectionError, so inspect the inner urllib3 reason.
+    for arg in exc.args:
+        reason = getattr(arg, "reason", None)
+        if isinstance(reason, urllib3.exceptions.ReadTimeoutError):
+            return True
+    return False
+
+
+def request_failure(method, exc):
+    if request_timed_out(exc):
+        failure = "Timed out"
+    elif isinstance(exc, requests.exceptions.ConnectionError):
+        failure = "Failed to connect"
+    else:
+        failure = "Request failed"
+    return f"{method}: {failure} ({type(exc).__name__}: {exc})"
+
+
 def random_data():
     return ''.join(random.choices(string.ascii_letters + string.digits,
                                   k=random.randrange(32, 256))).encode()
@@ -334,8 +358,8 @@ def validate_connect():
     session = retry_session()
     try:
         session.get("http://localhost", timeout=1)
-    except requests.exceptions.ConnectionError:
-        return "Connect: Failed to connect"
+    except requests.exceptions.RequestException as e:
+        return request_failure("Connect", e)
 
 
 def validate_get(data=None):
@@ -347,8 +371,8 @@ def validate_get(data=None):
         f.flush()
         try:
             response = session.get("http://localhost" + f.name, timeout=1)
-        except requests.exceptions.ConnectionError:
-            return "GET: Failed to connect"
+        except requests.exceptions.RequestException as e:
+            return request_failure("GET", e)
         if response.text.encode() != data:
             return "GET: File contents not correct"
 
@@ -361,8 +385,8 @@ def validate_post(data=None):
         pass
     try:
         session.post("http://localhost" + f.name, data=data, timeout=1)
-    except requests.exceptions.ConnectionError:
-        return "POST: Failed to connect"
+    except requests.exceptions.RequestException as e:
+        return request_failure("POST", e)
     try:
         if open(f.name, "rb").read() != data:
             return "POST: File contents not correct"
@@ -461,18 +485,29 @@ $ {sys.argv[0]} ./server
                     "-e", "inject=brk:signal=SIGKILL",
                     results_dir=results_dir,
                     timeout=timeout) as results:
-            for operation in operations:
-                print(f"Performing operation: {operation_names[operation]}")
+            for operation_index, operation in enumerate(operations, 1):
+                operation_name = operation_names[operation]
+                operation_label = f"operation {operation_index}/{len(operations)} ({operation_name})"
+                print(f"Performing {operation_label}")
                 try:
                     error = operation()
                     if error:
-                        errors.append(error)
+                        errors.append(f"{operation_label}: {error}")
                 except Exception as e:
-                    errors.append(f"Exception: {str(e)}")
+                    errors.append(f"{operation_label}: Exception ({type(e).__name__}: {e})")
         print()
 
         strace_errors = validate_strace(level, results, requirements)
         errors.extend(strace_errors)
+
+        request_operations = [op for op in operations if op in (validate_get, validate_post)]
+        connection_failures = [e for e in errors if "Failed to connect" in e]
+        if level >= 9 and request_operations and len(connection_failures) >= len(request_operations):
+            errors.append(
+                "Every checked HTTP request failed to connect. "
+                "For the concurrent levels, the parent should keep accepting after fork, "
+                "while each child handles one accepted client and exits."
+            )
 
         print("===== Result =====")
         if not errors:
