@@ -71,10 +71,11 @@ def check_disassembly(disas):
 
 
 def check_runtime(filename):
-	cases = ["", "p", "pwn", "loops"]
+	cases = ["", "p", "pwn", "loops", "pwn123", "two words", "symbols!?"]
+	characters = string.ascii_letters + string.digits + string.punctuation + " "
 	for _ in range(3):
 		length = random.randint(2, 12)
-		cases.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
+		cases.append("".join(random.choice(characters) for _ in range(length)))
 
 	for arg in cases:
 		print("")
