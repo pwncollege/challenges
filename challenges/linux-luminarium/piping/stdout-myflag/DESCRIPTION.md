@@ -4,6 +4,3 @@ Your flag will, of course, end up in the `myflag` file!
 
 You'll notice that `/challenge/run` will still happily print to your terminal, despite you redirecting stdout.
 That's because it communicates its instructions and feedback over standard error, and only prints the flag over standard out!
-
-----
-**WARNING:** If a previous experiment left a file, directory, or symlink named `myflag` in your current directory, remove it first so the shell can create a normal writable file there.

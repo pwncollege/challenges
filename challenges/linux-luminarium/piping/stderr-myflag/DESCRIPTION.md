@@ -38,6 +38,3 @@ Let's put this into practice!
 In this challenge, you will need to redirect the output of `/challenge/run`, like before, to `myflag`, and the "errors" (in our case, the instructions) to `instructions`.
 You'll notice that nothing will be printed to the terminal, because you have redirected everything!
 You can find the instructions/feedback in `instructions` and the flag in `myflag` when you successfully pull this off!
-
-----
-**WARNING:** If a previous experiment left a file, directory, or symlink named `myflag` or `instructions` in your current directory, remove it first so the shell can create normal writable files there.
