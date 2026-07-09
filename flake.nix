@@ -170,30 +170,6 @@
                   elif [ "$(readlink -f "$hook" 2>/dev/null)" != "$(readlink -f "$target" 2>/dev/null)" ]; then
                     echo "note: $hook already exists; not overwriting (encryption hook: tools/git-hooks/pre-commit)" >&2
                   fi
-
-                  # Keep git-crypt filters portable across host/container/Nix
-                  # environments. Some older clones pin these to /usr/bin/git-crypt,
-                  # which breaks inside DSB containers even though nix develop provides
-                  # git-crypt on PATH.
-                  git config filter.git-crypt.clean "git-crypt clean"
-                  git config filter.git-crypt.smudge "git-crypt smudge"
-                  git config filter.git-crypt.required true
-                  for attributes in "$root"/challenges/*/.gitattributes; do
-                    [ -f "$attributes" ] || continue
-                    while IFS= read -r line; do
-                      for attribute in $line; do
-                        case "$attribute" in
-                          filter=git-crypt-*)
-                            filter="''${attribute#filter=}"
-                            key="''${filter#git-crypt-}"
-                            git config "filter.$filter.clean" "git-crypt clean --key-name=$key"
-                            git config "filter.$filter.smudge" "git-crypt smudge --key-name=$key"
-                            git config "filter.$filter.required" true
-                            ;;
-                        esac
-                      done
-                    done < "$attributes"
-                  done
                 fi
 
                 sudo=
