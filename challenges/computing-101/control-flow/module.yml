@@ -32,6 +32,9 @@ resources:
   id: loop
   name: "Looping"
 - type: challenge
+  id: loop-write
+  name: "Writing Loops"
+- type: challenge
   id: callee-write
   name: "Writing From a Shared Library"
 - type: challenge

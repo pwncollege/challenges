@@ -20,7 +20,7 @@ That clears the case bit of one letter.
 This time, though, you'll do it to a whole string.
 
 A string is a run of bytes in memory, one after another, ending in a `0` byte --- the NUL terminator --- that marks where it stops.
-To walk it you need a loop: the same `jmp`-back-to-the-top shape you took apart in the [Looping](/computing-101/control-flow/loop) challenge, now written by hand.
+To walk it you need a loop: the same `jmp`-back-to-the-top shape you practiced in [Writing Loops](/computing-101/control-flow/loop-write).
 
 So your loop is: look at the next byte; if it's the NUL (`0`), jump past the loop and you're done; otherwise clear its case bit, store the byte back, advance to the next one, and jump back to the top.
 The high-level of the loop would be:
