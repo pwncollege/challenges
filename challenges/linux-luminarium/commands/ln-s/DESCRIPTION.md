@@ -16,7 +16,9 @@ In most cases, both situations result in accessing the original data, but the me
 Hard links sound simpler to most people (case in point, I explained it in one sentence above, versus two for soft links), but they have various downsides and implementation gotchas that make soft/symbolic links, by far, the more popular alternative.
 
 In this challenge, we will learn about symbolic links (also known as _symlinks_).
-Symbolic links are created with the `ln` command with the `-s` argument, like so:
+Symbolic links are created with the `ln` command using the syntax `ln -s TARGET LINK_NAME`.
+`TARGET` is the path that the link will point to, and `LINK_NAME` is the new path you are creating.
+For example:
 
 ```console
 hacker@dojo:~$ cat /tmp/myfile
@@ -28,8 +30,7 @@ hacker@dojo:~$
 ```
 
 You can see that accessing the symlink results in getting the original file contents!
-Also, you can see the usage of `ln -s`.
-Note that the original file path comes _before_ the link path in the command!
+In this example, `/tmp/myfile` is the target and `/home/hacker/ourfile` is the link name.
 
 A symlink can be identified as such with a few methods.
 For example, the `file` command, which takes a filename and tells you what type of file it is, will recognize symlinks:
@@ -44,4 +45,8 @@ hacker@dojo:~$
 
 Okay, now you try it!
 In this level the flag is, as always, in `/flag`, but `/challenge/catflag` will instead read out `/home/hacker/not-the-flag`.
-Use the symlink, and fool it into giving you the flag!
+The path `/home/hacker/not-the-flag` is the link name in this challenge.
+Choose the target that will fool `/challenge/catflag` into giving you the flag!
+
+----
+**WARNING:** If a previous experiment left something at `/home/hacker/not-the-flag`, remove it first so `ln` can create the symbolic link there.

@@ -1,24 +1,6 @@
-The shift instructions slide the bits of a value sideways.
-`shl` (**sh**ift **l**eft) moves every bit toward the high end, dropping bits off the top and feeding in zeros at the bottom:
+Now put the left shift you just studied into code.
 
-```
-  0000 0011   (3)
-shl by 2
-  0000 1100   (12)
-```
-
-Each position you shift left doubles the value, so shifting left by `n` multiplies by 2ⁿ (here, `3 << 2 == 3 * 4 == 12`).
-Shifting left is also how you slide a small value up into a higher byte to make room for other values beside it.
-
-The instruction takes the value and a shift amount:
-
-```
-shl rax, 2
-```
-
-Write a function called `solve`.
-It takes one input in `rdi`.
-Compute `input << 4` (the original value times 16), and return the result in `rax`.
+Write a function called `solve` that takes a 64-bit value in `rdi`, shifts it left by 4 positions (multiplying it by 16), and returns the result in `rax`.
 
 Build it into a shared library and hand it to the grader:
 

@@ -19,4 +19,5 @@ The following relative paths are also all identical to each other:
 Of course, if your current working directory is `/`, the above relative paths are equivalent to the above absolute paths.
 
 This challenge will get you using `.` in your relative paths.
+Your current working directory must be `/`, and the relative path you use to invoke the challenge must begin with `.`.
 Get ready!

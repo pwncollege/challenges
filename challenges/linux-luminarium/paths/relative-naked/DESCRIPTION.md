@@ -15,7 +15,20 @@ Imagine we want to access some file located at `/tmp/a/b/my_file`.
 - If my `cwd` is `/tmp`, then a relative path to the file is `a/b/my_file`.
 - If my `cwd` is `/tmp/a/b/c`, then a relative path to the file is `../my_file`.  The `..` refers to the parent directory.
 
+Changing directories and invoking a program are two separate actions.
+For example:
+
+```console
+hacker@dojo:~$ cd /
+hacker@dojo:/$ bin/echo Hello
+Hello
+```
+
+The first command changes the current working directory to `/`.
+The second command invokes `/bin/echo` using the relative path `bin/echo`.
+
 Let's try it here!
-You'll need to run `/challenge/run` using a relative path while having a current working directory of `/`.
+First, change your current working directory to `/`.
+Then invoke `/challenge/run` using a relative path.
 For this level, I'll give you a hint.
 Your relative path starts with the letter `c` 😊

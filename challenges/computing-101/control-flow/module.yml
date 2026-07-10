@@ -30,7 +30,7 @@ resources:
   name: "Conditionals Without Conditionals"
 - type: challenge
   id: loop
-  name: "Looping"
+  name: "Recognizing Loops"
 - type: challenge
   id: loop-write
   name: "Writing Loops"
