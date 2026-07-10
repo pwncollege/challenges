@@ -36,7 +36,8 @@ The process:
 
 ----
 **Why two stages?**
-Your home directory persists across challenge instances.
+For local runs, this challenge gives you a temporary, size-limited home directory for the exercise.
+On pwn.college, your home directory persists across challenge instances.
 If we let you keep it full, your pwn.college will stop working.
 This is _by far_ the most common cause of weird issues on pwn.college!
 
