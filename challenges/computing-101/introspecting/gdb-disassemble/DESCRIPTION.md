@@ -16,3 +16,8 @@ End of assembler dump.
 ```
 
 Read the output to find the secret number, then submit it with `/challenge/submit-number`.
+
+----
+**NOTE:**
+If GDB says `No debugging symbols found`, it means that optional debugging information is absent, not that GDB cannot debug the program.
+You can still use `starti` and `disassemble` to inspect its instructions.

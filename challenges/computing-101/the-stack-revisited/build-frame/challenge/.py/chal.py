@@ -81,7 +81,9 @@ def check_runtime(so_path):
         want = len(set(data))
         assert got == want, (
             f"solve() on {len(data)} bytes should be {want} distinct, "
-            f"but your solve returned {as_signed(got)}." + diagnose(data, got)
+            f"but your solve returned {as_signed(got)}.{diagnose(data, got)}\n"
+            f"Input bytes (hex): {data.hex()}\n"
+            f"Reproduce with: /challenge/harness /tmp/your-program.so {data.hex()}"
         )
         suffix = "" if len(data) == 1 else "s"
         print(f"  ok: {len(data)} byte{suffix} -> {got} distinct")
