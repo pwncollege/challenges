@@ -139,12 +139,29 @@ def check_challenge_shellscript(process):
     assert os.path.basename(process.exe()) in [ 'sh', 'bash' ], f"Process interpreter must be 'sh' or 'bash'. Yours is: {os.path.basename(process.exe())}"
     assert len(process.cmdline()) > 1, "The shell must be running in non-interactive mode (with a script)!"
 
-    script_path = process.cmdline()[1]
-    if script_path == "-c":
-        script_path = process.cmdline()[3]
+    command_line = process.cmdline()
+    script_index = 1
+    options_with_arguments = { "-O", "+O", "-o", "+o", "--init-file", "--rcfile" }
+    while script_index < len(command_line):
+        argument = command_line[script_index]
+        if argument == "--":
+            script_index += 1
+            break
+        if argument == "-c" or (argument.startswith("-") and not argument.startswith("--") and "c" in argument[1:]):
+            script_index += 2
+            break
+        if argument in options_with_arguments:
+            script_index += 2
+            continue
+        if argument.startswith(("-", "+")):
+            script_index += 1
+            continue
+        break
 
-    if not script_path.startswith("/"):
-        script_path = os.path.abspath(script_path)
+    assert script_index < len(command_line), "The shell must be running in non-interactive mode with a script under /challenge!"
+    script_path = command_line[script_index]
+
+    script_path = os.path.abspath(os.path.join(process.cwd(), script_path))
 
     assert script_path.startswith("/challenge/"), f"The shell process must be executing a shell script under /challenge! Yours is: {script_path}"
 

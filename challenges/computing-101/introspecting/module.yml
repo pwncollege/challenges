@@ -25,6 +25,9 @@ resources:
   id: gdb-print
   name: "Reading Register Values"
 - type: challenge
+  id: gdb-set-register
+  name: "Setting Register Values"
+- type: challenge
   id: gdb-pop
   name: "Popping Stack Values"
 - type: challenge

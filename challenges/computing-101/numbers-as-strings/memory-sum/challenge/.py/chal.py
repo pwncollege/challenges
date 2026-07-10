@@ -32,7 +32,7 @@ def diagnose(total, got):
 
 def check_runtime(binary_path):
     checker.print_prompt()
-    checker.slow_print(f"{binary_path} <num0> <num1> ...")
+    checker.slow_print(f"{binary_path} [num0 ...]")
     print("")
     cases = [[], [0], [42], [-42], [3, -5, 10], [100, -200, 50], [10**6, -(10**6)]]
     cases += [gen_case() for _ in range(5)]

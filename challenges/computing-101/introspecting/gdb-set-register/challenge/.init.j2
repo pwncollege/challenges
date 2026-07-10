@@ -1,0 +1,12 @@
+{%- set num_expr = "$((RANDOM + 4096))" -%}
+{%- set asm = "main: mov rdi, 0; add rdi, $((NUM - 1337)); mov rdi, 0; mov rax, 60; syscall" -%}
+{%- include "../../common/init-target" %}
+
+# Generate GDB-style censored disassembly with an arrow at each instruction.
+OFFSET=$((NUM - 1337))
+HEX=$(printf '0x%x' "$OFFSET")
+DISAS=$(/usr/bin/gdb -batch -ex 'set disassembly-flavor intel' -ex starti -ex disassemble /challenge/debug-me 2>/dev/null | sed -n '/^Dump/,/^End/p')
+CLEAN=$(echo "$DISAS" | sed "s/${HEX}/CENSORED/" | sed 's/^=> /   /')
+for i in 0 1 2 3 4; do
+  echo "$CLEAN" | sed "$((i + 2))s/^   /=> /" > "/challenge/.censored-disas-$i"
+done

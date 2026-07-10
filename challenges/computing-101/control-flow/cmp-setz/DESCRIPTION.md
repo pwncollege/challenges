@@ -47,11 +47,11 @@ For `rdi`:
 - `dil` is just the lowest 8 bits --- the **l**ow byte of r**di**
 
 When you write `setz dil`, you're putting a `0` or `1` into just the lowest byte of `rdi`, leaving the upper bytes unchanged.
-Since `rdi` is the register used for the exit code in the `exit` system call, this effectively makes your exit code `1` (equal!) or `0` (not equal!).
+`rdi` is the value passed to the `exit` system call, but Linux reports only that value's low 8 bits as the process's exit status.
+That is why changing only `dil` is enough here: the visible status becomes `1` (equal!) or `0` (not equal!), regardless of the upper bytes of `rdi`.
 
 One more thing about `cmp`: it can compare a register with an immediate (`cmp rdi, 42`) or even a memory location with an immediate (`cmp QWORD PTR [rsp], 42`).
 But it **cannot** compare two memory locations at once --- at most one operand can be a memory dereference.
-This is a general rule in x86 and, actually, in almost all CPU architectures.
 
 Now, your challenge: recall from the [Stack](/computing-101/the-stack) module that `[rsp]` contains `argc` --- the number of command-line arguments passed to your program, including the program name.
 Write a program that:

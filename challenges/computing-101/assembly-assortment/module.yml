@@ -29,6 +29,42 @@ resources:
 - type: challenge
   id: case-swap
   name: "Swap Case"
+- type: markdown
+  name: "Bit Shifting"
+  content: |
+    A **bit shift** moves every bit in a fixed-width value the same number of positions.
+    A left shift moves bits toward the high end, drops the bits that leave that end, and inserts zeros at the low end.
+    Here is a two-position left shift shown in one byte:
+
+    ```text
+    before:                    1011 0010  (178)
+    dropped from high end:     10.. ....
+    inserted at low end:       .... ..00
+    after shifting left by 2:  1100 1000  (200)
+    ```
+
+    A logical right shift does the mirror image: it moves bits toward the low end, drops the low bits, and inserts zeros at the high end.
+
+    ```text
+    before:                     1101 1011  (219)
+    dropped from low end:       .... ..11
+    inserted at high end:       00.. ....
+    after shifting right by 2:  0011 0110  (54)
+    ```
+
+    Each binary position is worth twice the position to its right.
+    Moving every bit left by one therefore doubles an unsigned value, and shifting left by `n` multiplies by `2^n` as long as no `1` bit is lost past the high end.
+    Moving every bit right by one halves an unsigned value, discarding any remainder, so shifting right by `n` divides by `2^n`.
+
+    On 64-bit x86, `shl` shifts left and `shr` performs the zero-filling right shift.
+    They use the same destination-first form as instructions such as `add`:
+
+    ```asm
+    shl rax, 2
+    shr rax, 2
+    ```
+
+    These examples use a byte so every bit fits on screen, but the same movement happens across all 64 bits of `rax`.
 - type: challenge
   id: shift-left
   name: "Shifting Left"
@@ -36,7 +72,7 @@ resources:
   id: shift-right
   name: "Shifting Right"
 - type: markdown
-  name: "Reading Stored Data in GDB"
+  name: "Guide: Reading Stored Data in GDB"
   content: |
     Back in [Opening the Flag, with RIP](/computing-101/hello-hackers/open-read-write-rip-relative), you used a label and `lea` to pass the address of stored bytes to `open`.
     In [Examining Memory with GDB](/computing-101/introspecting/gdb-examine-argv1), you used `x/s` to display the string at an address.

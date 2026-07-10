@@ -16,3 +16,9 @@ Once you load it in gdb, the rest will happen magically: we'll handle the analys
 In later levels, you'll learn how to get that number on your own!
 
 Again, once you have the number, exchange it for the flag with `/challenge/submit-number`.
+
+----
+
+**NOTE:**
+Without debugging symbols, GDB lacks information such as source-line mappings and local variable names, but it can still debug machine instructions.
+Use instruction-level commands such as `starti` and `stepi` in that situation.

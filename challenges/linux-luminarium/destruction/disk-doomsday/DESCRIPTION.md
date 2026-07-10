@@ -1,4 +1,4 @@
-The available space in `/home/hacker` in this container is a measly **1 gigabyte**.
+The available space in `/home/hacker` in this container is deliberately limited.
 In this level you will clog up `/home/hacker` with so much junk that even a tiny 1 megabyte file can't be created.
 When this happens, your workspace becomes unusable.
 We'll practice inducing this in this challenge, and then expand on it a bit later.
@@ -24,7 +24,7 @@ hacker@dojo:~$
 
 The `yes` outputs `y` over and over forever.
 The typical usage is to automate confirmation prompts ("Are you sure you want to delete this file?") using piping, but we'll use it here to make a massive file full of "y" lines.
-Just redirect `yes` to a file in your home directory, and you'll fill your disk in a minute or two!
+Just redirect `yes` to a file in your home directory, and you'll fill your disk!
 
 This challenge forces you to fill the disk and then clean up.
 The process:

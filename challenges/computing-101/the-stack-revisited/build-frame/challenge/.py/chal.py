@@ -83,6 +83,6 @@ def check_runtime(so_path):
             f"solve() on {len(data)} bytes should be {want} distinct, "
             f"but your solve returned {as_signed(got)}." + diagnose(data, got)
         )
-        if i != 0:
-            print(f"  ok: {len(data)} bytes -> {got} distinct")
+        suffix = "" if len(data) == 1 else "s"
+        print(f"  ok: {len(data)} byte{suffix} -> {got} distinct")
     return True

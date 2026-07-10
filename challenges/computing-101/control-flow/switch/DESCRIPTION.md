@@ -28,6 +28,9 @@ This challenge (at `/challenge/reverse-me`) has 256 possible cases, with only on
 Look at the jump table (you'll have to look at a lot of entries...), look at the program to understand how to influence the index, and get the flag!
 
 ----
+
+When using gdb, give `starti` or `run` a one-byte placeholder argument (for example, `starti A`) so the program has an `argv[1]` to read.
+
 **NOTE:**
 Though you should look at the disassembly using `objdump -d -M intel /challenge/reverse-me`, objdump will try to interpret the jump table data as assembly instructions, which will result in garbage.
 Ignore that section of the disassembly; you'll need to look at that data in gdb, instead.
