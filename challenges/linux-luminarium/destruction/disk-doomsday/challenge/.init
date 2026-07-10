@@ -1,8 +1,0 @@
-#!/bin/bash
-set -e
-
-# Bound the disposable pwnshop home without hiding a deployed persistent home.
-if [ "$(findmnt -n -o TARGET -T /home/hacker)" = "/" ]; then
-    mount -t tmpfs -o size=64M,mode=0755,nosuid,nodev tmpfs /home/hacker
-    chown hacker:hacker /home/hacker
-fi
