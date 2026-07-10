@@ -1,35 +1,25 @@
 #!/usr/bin/exec-suid -- /usr/bin/python3 -I
 
 import errno
-import os
 import sys
-import tempfile
+import os
 
-MARKER = "/run/disk_doomsday_phase1"
+MARKER = "/tmp/disk_doomsday_phase1"
+TEST_FILE = "/home/hacker/.space_test"
 TEST_SIZE = 1 * 1024 * 1024
 
-
 def try_create():
-    fd = None
-    path = None
     try:
-        fd, path = tempfile.mkstemp(prefix=".space_test.", dir="/home/hacker")
-        os.posix_fallocate(fd, 0, TEST_SIZE)
-    except OSError as error:
-        if error.errno in (errno.EDQUOT, errno.ENOSPC):
+        with open(TEST_FILE, "wb") as fh:
+            fh.truncate(TEST_SIZE)
+    except OSError as e:
+        if "quota" in str(e):
             return False
         print("Unexpected failure creating temporary file.")
         sys.exit(1)
-    finally:
-        if fd is not None:
-            os.close(fd)
-        if path is not None:
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
-    return True
-
+    else:
+        os.remove(TEST_FILE)
+        return True
 
 can_create = try_create()
 
