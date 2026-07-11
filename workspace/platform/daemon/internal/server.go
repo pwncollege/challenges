@@ -40,13 +40,39 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	if err := os.MkdirAll(s.config.logDirectory, 0o711); err != nil {
 		return err
 	}
-	if err := s.validateWorkspaceRoutes(); err != nil {
-		return err
-	}
-	if _, err := s.runtime.Version(ctx, &runtimeapi.VersionRequest{Version: "0.1.0"}); err != nil {
+	if err := s.checkRuntimeReady(ctx, true); err != nil {
 		return err
 	}
 	return s.rebuildProxyState(ctx)
+}
+
+func (s *Server) checkRuntimeReady(ctx context.Context, requireKata bool) error {
+	response, err := s.runtime.Status(ctx, &runtimeapi.StatusRequest{})
+	if err != nil {
+		return err
+	}
+	runtimeReady := false
+	networkReady := false
+	for _, condition := range response.Status.GetConditions() {
+		switch condition.Type {
+		case "RuntimeReady":
+			runtimeReady = condition.Status
+		case "NetworkReady":
+			networkReady = condition.Status
+		}
+	}
+	if !runtimeReady || !networkReady {
+		return fmt.Errorf("container runtime is not ready")
+	}
+	if !requireKata {
+		return nil
+	}
+	for _, handler := range response.RuntimeHandlers {
+		if handler.Name == kataRuntime {
+			return nil
+		}
+	}
+	return fmt.Errorf("Kata runtime is unavailable")
 }
 
 func assertWorkspacePath(path string) error {

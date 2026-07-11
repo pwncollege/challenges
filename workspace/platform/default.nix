@@ -40,11 +40,10 @@ let
       workspaceRuntime
       daemonListenAddress
       runDir
-      workspaceSubnet
       publicKey
       volumeBasePath
       ;
-    inherit (container) containerdSockPath seccompProfile workspaceBridge;
+    inherit (container) containerdSockPath seccompProfile;
     inherit (store) nixStorePath;
   };
 in

@@ -20,11 +20,9 @@ Required environment variables:
 
 - `PWN_WORKSPACE_NIX_STORE_PATH` (host closure store mounted at `/nix/store` in workspaces)
 - `PWN_WORKSPACE_PATH`
-- `PWN_WORKSPACE_BRIDGE`
 - `PWN_WORKSPACE_CONTAINERD_ADDRESS`
 - `PWN_WORKSPACE_LOG_DIRECTORY`
 - `PWN_WORKSPACE_SECCOMP_PROFILE`
-- `PWN_WORKSPACE_SUBNET`
 
 Optional environment variables:
 
@@ -38,9 +36,9 @@ If volume storage is configured, the path must be on a Btrfs filesystem mounted
 does not yet use persistent homes.
 
 The platform generates a CNI bridge configuration. CNI `host-local` IPAM assigns
-addresses from `PWN_WORKSPACE_SUBNET`; the daemon reads the assigned address from
-CRI sandbox status. Startup fails if that subnet overlaps a host route on any
-interface other than the platform's own bridge.
+addresses from the platform's configured workspace subnet; the daemon reads the
+assigned address from CRI sandbox status and does not know about the bridge or
+subnet itself.
 
 `PWN_WORKSPACE_NIX_STORE_PATH` contains only the Nix closure of
 `PWN_WORKSPACE_PATH`. The host prepares this shared view once per runtime
@@ -71,3 +69,5 @@ generation, and every workspace receives it as one read-only bind at
 `volume` is optional. `entrypoint` is an initialization command; when omitted,
 the workspace runtime runs `/challenge/.init` if present. All workspaces receive
 `CAP_SYS_PTRACE`, `CAP_SYS_ADMIN`, and `CAP_NET_ADMIN` inside their Kata VM.
+Environment variables are opaque runtime configuration. `PWN_FLAG` is optional;
+when present, the workspace runtime writes it to `/flag`.

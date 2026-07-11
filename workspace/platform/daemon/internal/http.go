@@ -8,17 +8,15 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 const maxAPIRequestBody = 1 << 20
@@ -64,6 +62,7 @@ func (s *Server) Handler() http.Handler {
 	if len(s.config.publicKey) > 0 {
 		apiHandler = s.withSignatureVerification(apiHandler)
 	}
+	apiHandler = withRequestBodyLimit(apiHandler)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ping", handlePing)
@@ -71,6 +70,19 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/w/{workspaceUUID}", s.withUUID("workspaceUUID", http.HandlerFunc(s.handleWorkspaceProxy)))
 	mux.Handle("/w/{workspaceUUID}/{proxyPath...}", s.withUUID("workspaceUUID", http.HandlerFunc(s.handleWorkspaceProxy)))
 	return mux
+}
+
+func withRequestBodyLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ContentLength > maxAPIRequestBody {
+			jsonError(w, http.StatusRequestEntityTooLarge, "request_too_large", "Request body is too large")
+			return
+		}
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, maxAPIRequestBody)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func handlePing(w http.ResponseWriter, _ *http.Request) {
@@ -93,10 +105,9 @@ func (s *Server) withSignatureVerification(next http.Handler) http.Handler {
 
 		body := []byte{}
 		if r.Body != nil && r.Method != http.MethodGet && r.Method != http.MethodHead {
-			r.Body = http.MaxBytesReader(w, r.Body, maxAPIRequestBody)
 			body, err = io.ReadAll(r.Body)
 			if err != nil {
-				jsonError(w, http.StatusBadRequest, "invalid_request", "Invalid body")
+				requestBodyError(w, err)
 				return
 			}
 			_ = r.Body.Close()
@@ -141,48 +152,7 @@ func (s *Server) withVolumeStorage(next http.Handler) http.Handler {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	status, err := s.runtime.Status(ctx, &runtimeapi.StatusRequest{})
-	if err != nil {
-		jsonError(w, http.StatusServiceUnavailable, "unhealthy", err.Error())
-		return
-	}
-	runtimeReady := false
-	networkReady := false
-	for _, condition := range status.Status.GetConditions() {
-		switch condition.Type {
-		case "RuntimeReady":
-			runtimeReady = condition.Status
-		case "NetworkReady":
-			networkReady = condition.Status
-		}
-	}
-	if !runtimeReady || !networkReady {
-		jsonError(w, http.StatusServiceUnavailable, "unhealthy", "Container runtime is not ready")
-		return
-	}
-	kataAvailable := false
-	for _, handler := range status.RuntimeHandlers {
-		if handler.Name == kataRuntime {
-			kataAvailable = true
-			break
-		}
-	}
-	if !kataAvailable {
-		jsonError(w, http.StatusServiceUnavailable, "unhealthy", "Kata runtime unavailable")
-		return
-	}
-	if err := s.validateWorkspaceRoutes(); err != nil {
-		jsonError(w, http.StatusServiceUnavailable, "unhealthy", err.Error())
-		return
-	}
-	if s.config.volumeBasePath != "" {
-		if err := assertBtrfsPath(s.config.volumeBasePath); err != nil {
-			jsonError(w, http.StatusServiceUnavailable, "unhealthy", err.Error())
-			return
-		}
-	}
-	entrypoint := filepath.Join(s.config.hostWorkspacePath(), "bin", "workspace-entrypoint")
-	if _, err := os.Stat(entrypoint); err != nil {
+	if err := s.checkRuntimeReady(ctx, false); err != nil {
 		jsonError(w, http.StatusServiceUnavailable, "unhealthy", err.Error())
 		return
 	}
@@ -200,10 +170,19 @@ func decodeJSON[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	defer r.Body.Close()
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil && err != io.EOF {
-		jsonError(w, http.StatusBadRequest, "invalid_request", "Invalid request")
+		requestBodyError(w, err)
 		return body, false
 	}
 	return body, true
+}
+
+func requestBodyError(w http.ResponseWriter, err error) {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		jsonError(w, http.StatusRequestEntityTooLarge, "request_too_large", "Request body is too large")
+		return
+	}
+	jsonError(w, http.StatusBadRequest, "invalid_request", "Invalid request")
 }
 
 func jsonError(w http.ResponseWriter, status int, code, message string) {

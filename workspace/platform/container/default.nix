@@ -86,7 +86,6 @@ in
     containerdRunDir
     containerdSockPath
     seccompProfile
-    workspaceBridge
     ;
 
   services = {

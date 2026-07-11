@@ -37,3 +37,12 @@ func TestWorkspaceVolumeContainerConfig(t *testing.T) {
 		t.Fatalf("mounts = %#v", container.Mounts)
 	}
 }
+
+func TestWorkspaceStartDoesNotRequireFlag(t *testing.T) {
+	err := validateWorkspaceStart(workspaceStartRequest{
+		RuntimeConfig: runtimeConfig{ContainerImageRef: "test-workspace:latest"},
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+}

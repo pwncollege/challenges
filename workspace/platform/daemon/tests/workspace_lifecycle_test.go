@@ -46,15 +46,6 @@ type imageService struct {
 	runtimeapi.UnimplementedImageServiceServer
 }
 
-func (s *runtimeService) Version(context.Context, *runtimeapi.VersionRequest) (*runtimeapi.VersionResponse, error) {
-	return &runtimeapi.VersionResponse{
-		Version:           "0.1.0",
-		RuntimeName:       "containerd",
-		RuntimeVersion:    "2.3.0",
-		RuntimeApiVersion: "v1",
-	}, nil
-}
-
 func (s *runtimeService) Status(context.Context, *runtimeapi.StatusRequest) (*runtimeapi.StatusResponse, error) {
 	return &runtimeapi.StatusResponse{
 		Status: &runtimeapi.RuntimeStatus{Conditions: []*runtimeapi.RuntimeCondition{
@@ -232,12 +223,10 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PWN_WORKSPACE_CONTAINERD_ADDRESS", "unix:///test/containerd.sock")
-	t.Setenv("PWN_WORKSPACE_BRIDGE", "pwn-workspace0")
 	t.Setenv("PWN_WORKSPACE_LOG_DIRECTORY", filepath.Join(t.TempDir(), "logs"))
 	t.Setenv("PWN_WORKSPACE_NIX_STORE_PATH", nixStorePath)
 	t.Setenv("PWN_WORKSPACE_PATH", workspacePath)
 	t.Setenv("PWN_WORKSPACE_SECCOMP_PROFILE", filepath.Join(t.TempDir(), "seccomp.json"))
-	t.Setenv("PWN_WORKSPACE_SUBNET", "127.0.0.0/29")
 	t.Setenv("PWN_WORKSPACE_AGENT_PORT", strconv.Itoa(int(agentPort)))
 	t.Setenv("PWN_WORKSPACE_VOLUME_BASE_PATH", "")
 	cfg, err := daemon.LoadConfig()

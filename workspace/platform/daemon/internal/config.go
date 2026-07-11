@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,8 +20,6 @@ type Config struct {
 	seccompProfile    string
 	volumeBasePath    string
 	workspacePath     string
-	workspaceBridge   string
-	workspaceSubnet   netip.Prefix
 	agentPort         uint16
 }
 
@@ -32,9 +29,7 @@ func LoadConfig() (Config, error) {
 	logDirectory := env.required("PWN_WORKSPACE_LOG_DIRECTORY")
 	nixStorePath := env.required("PWN_WORKSPACE_NIX_STORE_PATH")
 	seccompProfile := env.required("PWN_WORKSPACE_SECCOMP_PROFILE")
-	workspaceBridge := env.required("PWN_WORKSPACE_BRIDGE")
 	workspacePath := env.required("PWN_WORKSPACE_PATH")
-	workspaceSubnetValue := env.required("PWN_WORKSPACE_SUBNET")
 	if err := env.err(); err != nil {
 		return Config{}, err
 	}
@@ -59,11 +54,6 @@ func LoadConfig() (Config, error) {
 	if !filepath.IsAbs(seccompProfile) {
 		return Config{}, errors.New("PWN_WORKSPACE_SECCOMP_PROFILE must be absolute")
 	}
-	workspaceSubnet, err := netip.ParsePrefix(workspaceSubnetValue)
-	if err != nil || !workspaceSubnet.Addr().Is4() {
-		return Config{}, errors.New("PWN_WORKSPACE_SUBNET must be an IPv4 prefix")
-	}
-	workspaceSubnet = workspaceSubnet.Masked()
 	cleanWorkspacePath := filepath.Clean(workspacePath)
 	relativeWorkspacePath, err := filepath.Rel("/nix/store", cleanWorkspacePath)
 	if err != nil || relativeWorkspacePath == "." || relativeWorkspacePath == ".." || strings.HasPrefix(relativeWorkspacePath, ".."+string(filepath.Separator)) {
@@ -90,8 +80,6 @@ func LoadConfig() (Config, error) {
 		seccompProfile:    filepath.Clean(seccompProfile),
 		volumeBasePath:    cleanVolumeBasePath,
 		workspacePath:     cleanWorkspacePath,
-		workspaceBridge:   workspaceBridge,
-		workspaceSubnet:   workspaceSubnet,
 		agentPort:         agentPort,
 	}, nil
 }

@@ -121,9 +121,6 @@ func execSupervisor(agentPID int) {
 func loadWorkspaceConfig() (workspaceConfig, error) {
 	flag := os.Getenv("PWN_FLAG")
 	os.Unsetenv("PWN_FLAG")
-	if flag == "" {
-		return workspaceConfig{}, errors.New("PWN_FLAG is not set")
-	}
 
 	user := os.Getenv("PWN_USER")
 	if user == "" {
@@ -152,8 +149,10 @@ func prepareWorkspace(config workspaceConfig) error {
 	if err := setupUsers(config.user, config.home); err != nil {
 		return err
 	}
-	if err := writeFlag(config.flag); err != nil {
-		return fmt.Errorf("write flag: %w", err)
+	if config.flag != "" {
+		if err := writeFlag(config.flag); err != nil {
+			return fmt.Errorf("write flag: %w", err)
+		}
 	}
 	return nil
 }

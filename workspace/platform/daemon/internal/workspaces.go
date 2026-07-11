@@ -241,9 +241,6 @@ func validateWorkspaceStart(body workspaceStartRequest, volumeStorageEnabled boo
 	if body.RuntimeConfig.ContainerImageRef == "" {
 		return errors.New("container_image_ref is required")
 	}
-	if flag, ok := body.RuntimeConfig.Env["PWN_FLAG"]; !ok || flag == "" {
-		return errors.New("runtime_config.env.PWN_FLAG is required")
-	}
 	for name, value := range body.RuntimeConfig.Env {
 		if name == "" || strings.ContainsAny(name, "=\x00") || strings.ContainsRune(value, '\x00') {
 			return errors.New("runtime_config.env contains an invalid environment variable")

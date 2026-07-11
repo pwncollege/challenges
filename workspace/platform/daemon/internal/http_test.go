@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -48,6 +49,20 @@ func TestAPIWithoutPublicKeyDoesNotRequireSignature(t *testing.T) {
 	s.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusNotFound, response.Body.String())
+	}
+}
+
+func TestAPIBodyLimitWithoutPublicKey(t *testing.T) {
+	s := &Server{}
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/container_images/pull",
+		strings.NewReader(strings.Repeat("x", maxAPIRequestBody+1)),
+	)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusRequestEntityTooLarge, response.Body.String())
 	}
 }
 
