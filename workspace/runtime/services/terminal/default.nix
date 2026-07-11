@@ -33,15 +33,15 @@ let
         cp index.html $out/share/workspace/ttyd/index.html
       '';
 
-  ttyService = pkgs.writeShellApplication {
-    name = "workspace-tty";
+  terminalService = pkgs.writeShellApplication {
+    name = "workspace-terminal";
     runtimeInputs = [
       pkgs.ttyd
     ];
     text = ''
       exec ttyd \
         --index ${ttydIndex}/share/workspace/ttyd/index.html \
-        --interface /run/workspace/user/services/tty/ttyd.sock \
+        --interface /run/workspace/user/services/terminal/ttyd.sock \
         --writable \
         -t disableLeaveAlert=true \
         -t disableResizeOverlay=true \
@@ -51,24 +51,24 @@ let
     '';
   };
 
-  serviceConfig = pkgs.writeText "tty.toml" ''
-    name = "tty"
-    socket_path = "/run/workspace/user/services/tty/ttyd.sock"
+  serviceConfig = pkgs.writeText "terminal.toml" ''
+    name = "terminal"
+    socket_path = "/run/workspace/user/services/terminal/ttyd.sock"
     start_timeout = "5s"
     ready_path = "/"
 
     command = [
-      "workspace-tty",
+      "workspace-terminal",
     ]
   '';
 in
 pkgs.symlinkJoin {
-  name = "workspace-tty";
+  name = "workspace-terminal";
   paths = [
-    ttyService
+    terminalService
   ];
   postBuild = ''
     mkdir -p $out/share/workspace/services
-    cp ${serviceConfig} $out/share/workspace/services/tty.toml
+    cp ${serviceConfig} $out/share/workspace/services/terminal.toml
   '';
 }

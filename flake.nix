@@ -13,65 +13,27 @@
   };
 
   outputs =
-    {
-      self,
-      nixpkgs,
-    }:
+    { nixpkgs, ... }:
     let
       lib = nixpkgs.lib;
       systems = [ "x86_64-linux" ];
       forAllSystems = f: lib.genAttrs systems (system: f system);
-      workspaceFor =
-        pkgs:
-        {
-          packageProfile ? (
-            let
-              packageProfileEnv = builtins.getEnv "PWN_WORKSPACE_PACKAGES";
-            in
-            if packageProfileEnv == "" then "minimal" else packageProfileEnv
-          ),
-          code ? builtins.getEnv "PWN_WORKSPACE_SERVICE_CODE" == "1",
-          desktop ? builtins.getEnv "PWN_WORKSPACE_SERVICE_DESKTOP" == "1",
-        }:
-        let
-          workspacePackages =
-            if packageProfile == "minimal" then
-              import ./runtime/workspace/packages { inherit pkgs; }
-            else if packageProfile == "extended" then
-              import ./runtime/workspace/packages/extended.nix { inherit pkgs desktop; }
-            else
-              throw "unsupported PWN_WORKSPACE_PACKAGES=${packageProfile}; expected minimal or extended";
-
-          workspaceServices = import ./runtime/workspace/services {
-            inherit pkgs;
-            inherit code desktop workspacePackages;
-          };
-          serviceNames = [
-            "tty"
-          ]
-          ++ lib.optional code "code"
-          ++ lib.optional desktop "desktop";
-          serviceProfile = lib.concatStringsSep "-" serviceNames;
-          name =
-            if packageProfile == "minimal" && serviceProfile == "tty" then
-              "pwn-workspace-runtime"
-            else
-              "pwn-workspace-runtime-${packageProfile}-${serviceProfile}";
-          runtime = import ./runtime/workspace {
-            inherit
-              pkgs
-              name
-              workspacePackages
-              workspaceServices
-              ;
-          };
-        in
-        {
-          inherit runtime;
-          summary = "packages=${packageProfile} services=${lib.concatStringsSep "," serviceNames}";
-        };
+      workspaceConfig = {
+        packageProfile =
+          let
+            value = builtins.getEnv "PWN_WORKSPACE_PACKAGES";
+          in
+          if value == "" then "minimal" else value;
+        code = builtins.getEnv "PWN_WORKSPACE_SERVICE_CODE" == "1";
+        desktop = builtins.getEnv "PWN_WORKSPACE_SERVICE_DESKTOP" == "1";
+      };
     in
     {
+      nixosModules = {
+        default = import ./workspace/module.nix;
+        workspace = import ./workspace/module.nix;
+      };
+
       formatter = forAllSystems (
         system:
         let
@@ -96,12 +58,14 @@
         let
           pkgs = import nixpkgs { inherit system; };
 
-          workspace = workspaceFor pkgs { };
-          pwn-platform-runtime = import ./runtime/platform { inherit pkgs lib; };
+          workspaceSystem = import ./workspace { inherit pkgs lib; };
+          runtime = workspaceSystem.mkRuntime workspaceConfig;
+          workspace-daemon = workspaceSystem.workspaceDaemon;
+          pwn-workspace = workspaceSystem.mkActivator runtime;
 
           pwnshop = import ./tools/pwnshop {
             inherit pkgs;
-            pwn-workspace-runtime = workspace.runtime;
+            pwn-workspace-runtime = runtime.runtime;
           };
           discord-feedback = import ./tools/feedback { inherit pkgs; };
         in
@@ -109,8 +73,9 @@
           default = pwnshop;
           inherit
             discord-feedback
-            pwn-platform-runtime
+            pwn-workspace
             pwnshop
+            workspace-daemon
             ;
         }
       );
@@ -120,21 +85,23 @@
         let
           pkgs = import nixpkgs { inherit system; };
 
-          workspace = workspaceFor pkgs { };
-          fullWorkspace = workspaceFor pkgs {
+          workspaceSystem = import ./workspace { inherit pkgs lib; };
+          runtime = workspaceSystem.mkRuntime workspaceConfig;
+          fullRuntime = workspaceSystem.mkRuntime {
             packageProfile = "extended";
             code = true;
             desktop = true;
           };
-          pwn-platform-runtime = import ./runtime/platform { inherit pkgs lib; };
-
           pwnshop = import ./tools/pwnshop {
             inherit pkgs;
-            pwn-workspace-runtime = workspace.runtime;
+            pwn-workspace-runtime = runtime.runtime;
           };
           discord-feedback = import ./tools/feedback { inherit pkgs; };
           mkDevShell =
-            selectedWorkspace:
+            selectedRuntime:
+            let
+              pwn-workspace = workspaceSystem.mkActivator selectedRuntime;
+            in
             pkgs.mkShell {
               packages = with pkgs; [
                 asciinema
@@ -143,15 +110,15 @@
                 git
                 git-crypt
                 jq
-                pwn-platform-runtime
+                pwn-workspace
                 pwnshop
                 tomlq
                 uv
-                selectedWorkspace.runtime
+                selectedRuntime.runtime
               ];
               shellHook = ''
-                export PWN_WORKSPACE="${selectedWorkspace.runtime}"
-                echo "workspace: ${selectedWorkspace.summary}" >&2
+                export PWN_WORKSPACE="${selectedRuntime.runtime}"
+                echo "workspace: ${selectedRuntime.summary}" >&2
 
                 # Install the secret-test encryption pre-commit hook (idempotent,
                 # non-destructive). Resolve the path Git actually runs the hook from
@@ -182,7 +149,7 @@
                   fi
                 fi
 
-                if ! runtime_environment="$($sudo ${lib.getExe pwn-platform-runtime})"; then
+                if ! runtime_environment="$($sudo ${lib.getExe pwn-workspace})"; then
                   echo "error: failed to start the challenge runtime" >&2
                   return 1
                 fi
@@ -191,8 +158,8 @@
             };
         in
         {
-          default = mkDevShell workspace;
-          full = mkDevShell fullWorkspace;
+          default = mkDevShell runtime;
+          full = mkDevShell fullRuntime;
         }
       );
     };

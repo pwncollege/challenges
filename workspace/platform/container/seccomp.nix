@@ -1,11 +1,11 @@
-{ pkgs, name }:
+{ pkgs }:
 let
   seccompBaseProfile = pkgs.fetchurl {
     url = "https://raw.githubusercontent.com/moby/profiles/9fb516320ad275f544b4995f424dfa8b6261cffa/seccomp/default.json";
     hash = "sha256-AVNvHR35OK5hHrog1jSeDeepm27N7hVJQnoLAbgwHig=";
   };
 
-  seccompProfileScript = pkgs.writeText "${name}-seccomp.py" ''
+  seccompProfileScript = pkgs.writeText "pwn-workspace-seccomp.py" ''
     import json
     import sys
 
@@ -49,6 +49,6 @@ let
         json.dump(seccomp, out_file)
   '';
 in
-pkgs.runCommand "${name}-seccomp.json" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+pkgs.runCommand "pwn-workspace-seccomp.json" { nativeBuildInputs = [ pkgs.python3 ]; } ''
   python ${seccompProfileScript} ${seccompBaseProfile} "$out"
 ''

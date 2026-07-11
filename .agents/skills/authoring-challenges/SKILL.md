@@ -35,7 +35,7 @@ your archetype.
   and tests. The pattern you need almost always already exists.
 - **Never declare a mechanism impossible until you've checked how siblings do it.** The
   blessed pattern (a `bin/gdb` exec-suid wrapper, a `submit-number`, a victim script, a
-  seccomp allowance in `runtime/`) is in the repo, not a blank slate or the user's head.
+  seccomp allowance in `workspace/`) is in the repo, not a blank slate or the user's head.
 
 ## 1. Pedagogy — the most-corrected area (universal)
 - **One new concept per level.** Count what a level introduces and compare to its
@@ -203,5 +203,5 @@ your archetype.
 4. Made the solve nondeterministic, or gated the flag behind a guess / needless side channel.
    Or assumed a fixed flag length (hardcoded a byte count / too-small pad capacity) — flags vary.
 5. Crammed more than one concept into a level, or mismatched the module's voice.
-6. Didn't consult siblings / `runtime/` before building or before giving up.
+6. Didn't consult siblings / `workspace/` before building or before giving up.
 7. Claimed success (tests, push) without verifying, or attributed a change to the user.

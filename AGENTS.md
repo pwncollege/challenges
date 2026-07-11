@@ -84,7 +84,7 @@ nix develop
 pwnshop test challenges/web-security/path-traversal-1
 ```
 
-The dev shell starts a project-local `dockerd` (see `runtime/`) and exports `DOCKER_HOST` at it. That daemon ships with a patched seccomp profile (`runtime/seccomp.nix`) that allows extra `personality()` values including `ADDR_NO_RANDOMIZE` and `READ_IMPLIES_EXEC` -- challenges that disable ASLR via `personality()` rely on this. Outside the dev shell, `pwnshop` silently falls through to the host `dockerd` with stock moby seccomp, and those challenges fail with `personality: Operation not permitted`. Do not "fix" that EPERM by patching pwnshop; enter `nix develop`.
+The dev shell starts a project-local `dockerd` (see `workspace/`) and exports `DOCKER_HOST` at it. That daemon ships with a patched seccomp profile (`workspace/platform/container/seccomp.nix`) that allows extra `personality()` values including `ADDR_NO_RANDOMIZE` and `READ_IMPLIES_EXEC` -- challenges that disable ASLR via `personality()` rely on this. Outside the dev shell, `pwnshop` silently falls through to the host `dockerd` with stock moby seccomp, and those challenges fail with `personality: Operation not permitted`. Do not "fix" that EPERM by patching pwnshop; enter `nix develop`.
 
 Requirements for `nix develop`: Linux (`x86_64-linux`), `systemd`, `sudo`, and Nix flakes enabled (`experimental-features = nix-command flakes` in `~/.config/nix/nix.conf` or `/etc/nix/nix.conf`). See `docs/development.md`.
 

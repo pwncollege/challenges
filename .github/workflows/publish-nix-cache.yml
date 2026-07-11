@@ -6,7 +6,7 @@ on:
     paths:
       - flake.nix
       - flake.lock
-      - runtime/**
+      - workspace/**
       - tools/pwnshop/**
   workflow_dispatch:
 

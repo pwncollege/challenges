@@ -316,6 +316,12 @@ func workspacePath(path string) string {
 }
 
 func runChallengeInit() error {
+	if len(os.Args) > 1 {
+		if err := runInitCommand(os.Args[1:]); err != nil {
+			return fmt.Errorf("run workspace entrypoint: %w", err)
+		}
+		return nil
+	}
 	if err := runInit(); err != nil {
 		return fmt.Errorf("run .init: %w", err)
 	}
@@ -600,7 +606,11 @@ func runInit() error {
 	} else if err != nil {
 		return err
 	}
-	command := exec.Command("/challenge/.init")
+	return runInitCommand([]string{"/challenge/.init"})
+}
+
+func runInitCommand(argv []string) error {
+	command := exec.Command(argv[0], argv[1:]...)
 	command.Stdout = os.Stderr
 	command.Stderr = os.Stderr
 	return command.Run()

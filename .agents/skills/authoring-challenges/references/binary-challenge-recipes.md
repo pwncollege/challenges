@@ -85,8 +85,8 @@ int main(int argc, char **argv) {
 - **Do NOT** disable ASLR via `/proc/sys/kernel/randomize_va_space` — `/proc/sys` is
   read-only in the runtime, so it's a silent no-op.
 - **Do NOT** add `privileged: true` / a `challenge.yml` for `personality`. The dev
-  shell's dockerd ships a patched seccomp profile (`runtime/seccomp.nix`) that already
-  allows `personality(ADDR_NO_RANDOMIZE)`. Check `runtime/seccomp.nix` before reaching
+  shell's dockerd ships a patched seccomp profile (`workspace/platform/container/seccomp.nix`) that already
+  allows `personality(ADDR_NO_RANDOMIZE)`. Check `workspace/platform/container/seccomp.nix` before reaching
   for any extra capability or privilege.
 - The flag comes from the **inherited FD opened pre-drop** — no memfd copy of `/flag` is
   needed (an inherited FD keeps its read rights across `execve`).

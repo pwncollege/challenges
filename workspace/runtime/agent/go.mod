@@ -1,4 +1,4 @@
-module pwn.college/runtime/workspace
+module pwn.college/workspace/runtime/agent
 
 go 1.23
 

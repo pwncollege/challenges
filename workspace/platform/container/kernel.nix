@@ -1,4 +1,4 @@
-{ pkgs, name }:
+{ pkgs }:
 let
   kataContainersSrc = pkgs.fetchzip {
     url = "https://github.com/kata-containers/kata-containers/archive/refs/tags/${pkgs.kata-runtime.version}.tar.gz";
@@ -37,10 +37,12 @@ let
         "PROFILING"
       ];
     in
-    pkgs.writeText "${name}.conf" (pkgs.lib.strings.concatLines (map (t: "CONFIG_${t}=y") enable));
+    pkgs.writeText "pwn-workspace.conf" (
+      pkgs.lib.strings.concatLines (map (t: "CONFIG_${t}=y") enable)
+    );
 in
 pkgs.stdenv.mkDerivation {
-  pname = "${name}-linux-kernel";
+  pname = "pwn-workspace-linux-kernel";
   version = kernelVersion;
   dontUnpack = true;
   buildInputs = with pkgs; [
@@ -84,7 +86,7 @@ pkgs.stdenv.mkDerivation {
     patchShebangs tools/packaging
     cd tools/packaging/kernel
 
-    install -D -m 0644 ${config} configs/fragments/x86_64/${name}.conf
+    install -D -m 0644 ${config} configs/fragments/x86_64/pwn-workspace.conf
 
     cp ${kernelTarball} linux-${kernelVersion}.tar.xz
     sha256sum linux-${kernelVersion}.tar.xz > linux-${kernelVersion}.tar.xz.sha256

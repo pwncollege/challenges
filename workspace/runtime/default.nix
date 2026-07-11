@@ -2,7 +2,7 @@
   pkgs,
   name ? "pwn-workspace-runtime",
   workspacePackages ? import ./packages { inherit pkgs; },
-  workspaceServices ? import ./services { inherit pkgs; },
+  runtimeServices ? import ./services { inherit pkgs; },
 }:
 let
   workspaceAgent = import ./agent { inherit pkgs; };
@@ -20,5 +20,5 @@ pkgs.buildEnv {
       workspacePackages
       workspaceProfileFiles
     ]
-    ++ workspaceServices;
+    ++ runtimeServices;
 }

@@ -25,7 +25,7 @@ If flakes are not enabled on your system, add this to `~/.config/nix/nix.conf`:
 experimental-features = nix-command flakes
 ```
 
-On shell entry, the dev shell will start the challenge runtime (using sudo). This is a dedicated docker daemon, properly configured (see [../runtime/](../runtime) for more details). It also exports `DOCKER_HOST` so Docker and `pwnshop` talk to this daemon.
+On shell entry, the dev shell starts the challenge runtime (using sudo). This includes a dedicated Docker daemon and the node-local workspace daemon (see [../workspace/](../workspace) for more details). The shell currently still exports `DOCKER_HOST` for Docker and `pwnshop`, along with `PWN_WORKSPACE_DAEMON_URL` for the workspace daemon.
 
 Then use `pwnshop` for all workflows:
 
@@ -66,8 +66,9 @@ Shared Dockerfiles and packages reuse Docker's layer cache, so the monorepo does
 - Check unit status/logs:
 
 ```bash
-systemctl status pwn-platform-runtime-docker.service
-journalctl -u pwn-platform-runtime-docker.service -b --no-pager
+systemctl status pwn-workspace-docker.service
+journalctl -u pwn-workspace-daemon.service -b --no-pager
+journalctl -u pwn-workspace-docker.service -b --no-pager
 ```
 
 ## Non-Nix Setup (Not Recommended)

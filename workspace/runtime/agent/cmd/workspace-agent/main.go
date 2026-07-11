@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"pwn.college/runtime/workspace/internal/workspace"
+	"pwn.college/workspace/runtime/agent/internal/workspace"
 )
 
 func main() {
