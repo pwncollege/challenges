@@ -21,6 +21,11 @@ let
   config =
     let
       enable = [
+        "TUN"
+        "VIRTUALIZATION"
+        "KVM"
+        "KVM_AMD"
+        "KVM_INTEL"
         "SECURITY_LANDLOCK"
         "BPF_JIT"
         "BPF_SYSCALL"
