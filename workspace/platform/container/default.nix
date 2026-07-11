@@ -18,6 +18,7 @@ let
 
   kataConfig = import ./kata.nix { inherit pkgs; };
   seccompProfile = import ./seccomp.nix { inherit pkgs; };
+  sourceCheck = import ./source-check { inherit pkgs; };
 
   jsonFormat = pkgs.formats.json { };
   cniConfigFile = jsonFormat.generate "10-${name}.conflist" {
@@ -30,7 +31,6 @@ let
         isGateway = true;
         ipMasq = false;
         portIsolation = true;
-        macspoofchk = true;
         ipam = {
           type = "host-local";
           dataDir = cniDataDir;
@@ -39,6 +39,10 @@ let
           ];
           routes = [ { dst = "0.0.0.0/0"; } ];
         };
+      }
+      {
+        type = "pwn-source-check";
+        bridge = workspaceBridge;
       }
     ];
   };
@@ -68,7 +72,7 @@ let
       ConfigPath = "${kataConfig}"
 
     [plugins."io.containerd.cri.v1.runtime".cni]
-      bin_dirs = ["${pkgs.cni-plugins}/bin"]
+      bin_dirs = ["${sourceCheck}/bin", "${pkgs.cni-plugins}/bin"]
       conf_dir = "${cniConfigDir}"
       max_conf_num = 1
       use_internal_loopback = true
