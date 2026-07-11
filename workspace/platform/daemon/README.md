@@ -1,8 +1,8 @@
 # Workspace daemon
 
-The workspace daemon is the node-local owner of workspace containers, the dedicated
-workspace Docker network, workspace request proxying, and optional Btrfs home
-volumes.
+The workspace daemon is the node-local owner of Kata workspaces, workspace
+request proxying, and optional Btrfs home volumes. It controls containerd through
+CRI; containerd invokes the configured CNI chain for workspace networking.
 
 It always starts workspace containers with the `kata` runtime. It mounts `/nix`
 read-only and runs the configured workspace runtime's `bin/workspace-entrypoint`.
@@ -20,7 +20,11 @@ Required environment variables:
 
 - `PWN_WORKSPACE_NIX_STORE_PATH` (host closure store mounted at `/nix/store` in workspaces)
 - `PWN_WORKSPACE_PATH`
-- `PWN_WORKSPACE_DOCKER_NETWORK`
+- `PWN_WORKSPACE_BRIDGE`
+- `PWN_WORKSPACE_CONTAINERD_ADDRESS`
+- `PWN_WORKSPACE_LOG_DIRECTORY`
+- `PWN_WORKSPACE_SECCOMP_PROFILE`
+- `PWN_WORKSPACE_SUBNET`
 
 Optional environment variables:
 
@@ -33,9 +37,10 @@ If volume storage is configured, the path must be on a Btrfs filesystem mounted
 `nosuid`. The local development host leaves it disabled because `pwnshop`
 does not yet use persistent homes.
 
-The Docker network must already exist as a labeled bridge network with exactly
-one IPv4 subnet. The daemon derives its manual IPAM range from that subnet and
-does not create or modify the network.
+The platform generates a CNI bridge configuration. CNI `host-local` IPAM assigns
+addresses from `PWN_WORKSPACE_SUBNET`; the daemon reads the assigned address from
+CRI sandbox status. Startup fails if that subnet overlaps a host route on any
+interface other than the platform's own bridge.
 
 `PWN_WORKSPACE_NIX_STORE_PATH` contains only the Nix closure of
 `PWN_WORKSPACE_PATH`. The host prepares this shared view once per runtime

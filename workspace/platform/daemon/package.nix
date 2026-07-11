@@ -5,7 +5,7 @@ pkgs.buildGoModule {
   version = "0.1.0";
 
   src = ./.;
-  vendorHash = "sha256-kjpwIfxM9MA98Wa6hSrbYMD4pcq+VAaXzlFhJRcC3fQ=";
+  vendorHash = "sha256-gseQY5ihAwjIa5WDtcNJHSqen+IqmkzaDHo7uPdcIy8=";
 
   buildInputs = [ pkgs.btrfs-progs.dev ];
 

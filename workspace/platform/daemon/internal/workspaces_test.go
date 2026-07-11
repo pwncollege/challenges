@@ -1,16 +1,16 @@
 package daemon
 
 import (
-	"net/netip"
 	"slices"
 	"testing"
 )
 
 func TestWorkspaceVolumeContainerConfig(t *testing.T) {
 	s := &Server{config: Config{
-		dockerNetwork: "workspace-test",
-		nixStorePath:  "/var/lib/pwn.college/workspace-closures/test/store",
-		workspacePath: "/nix/store/test-workspace",
+		logDirectory:   "/run/pwn.college/logs",
+		nixStorePath:   "/var/lib/pwn.college/workspace-closures/test/store",
+		seccompProfile: "/nix/store/test-seccomp.json",
+		workspacePath:  "/nix/store/test-workspace",
 	}}
 	body := workspaceStartRequest{
 		RuntimeConfig: runtimeConfig{
@@ -22,19 +22,18 @@ func TestWorkspaceVolumeContainerConfig(t *testing.T) {
 			DstPath:    "/home/hacker",
 		},
 	}
-	_, host, _ := s.workspaceContainerConfig(
+	_, container := s.workspaceContainerConfig(
 		"99999999-9999-4999-8999-999999999999",
-		netip.MustParseAddr("192.0.2.2"),
 		body,
 		"/volumes/88888888-8888-4888-8888-888888888888/active",
 	)
-	capabilities := []string(host.CapAdd)
+	capabilities := container.Linux.SecurityContext.Capabilities.AddCapabilities
 	for _, capability := range []string{"SYS_ADMIN", "NET_ADMIN"} {
 		if !slices.Contains(capabilities, capability) {
 			t.Fatalf("capabilities = %v, want %s", capabilities, capability)
 		}
 	}
-	if len(host.Mounts) != 2 || host.Mounts[1].Target != "/home/hacker" {
-		t.Fatalf("mounts = %#v", host.Mounts)
+	if len(container.Mounts) != 2 || container.Mounts[1].ContainerPath != "/home/hacker" {
+		t.Fatalf("mounts = %#v", container.Mounts)
 	}
 }

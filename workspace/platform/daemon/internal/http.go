@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 const maxAPIRequestBody = 1 << 20
@@ -140,16 +141,37 @@ func (s *Server) withVolumeStorage(next http.Handler) http.Handler {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	info, err := s.docker.Info(ctx)
+	status, err := s.runtime.Status(ctx, &runtimeapi.StatusRequest{})
 	if err != nil {
 		jsonError(w, http.StatusServiceUnavailable, "unhealthy", err.Error())
 		return
 	}
-	if _, ok := info.Runtimes[kataRuntime]; !ok {
+	runtimeReady := false
+	networkReady := false
+	for _, condition := range status.Status.GetConditions() {
+		switch condition.Type {
+		case "RuntimeReady":
+			runtimeReady = condition.Status
+		case "NetworkReady":
+			networkReady = condition.Status
+		}
+	}
+	if !runtimeReady || !networkReady {
+		jsonError(w, http.StatusServiceUnavailable, "unhealthy", "Container runtime is not ready")
+		return
+	}
+	kataAvailable := false
+	for _, handler := range status.RuntimeHandlers {
+		if handler.Name == kataRuntime {
+			kataAvailable = true
+			break
+		}
+	}
+	if !kataAvailable {
 		jsonError(w, http.StatusServiceUnavailable, "unhealthy", "Kata runtime unavailable")
 		return
 	}
-	if err := s.validateWorkspaceNetwork(ctx); err != nil {
+	if err := s.validateWorkspaceRoutes(); err != nil {
 		jsonError(w, http.StatusServiceUnavailable, "unhealthy", err.Error())
 		return
 	}

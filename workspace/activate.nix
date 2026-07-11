@@ -63,20 +63,16 @@ pkgs.writeShellApplication {
     bash
     coreutils
     curl
-    docker
     systemd
   ];
   text = ''
     set -euo pipefail
-
-    docker_host='unix://${platform.dockerSockPath}'
 
     unit_files=("${unitDirectory}"/*)
     unit_file_names=("''${unit_files[@]##*/}")
     current_systemd_units='${platform.runDir}/current-systemd-units'
 
     emit_environment() {
-      printf 'export DOCKER_HOST=%q\n' "$docker_host"
       printf 'export PWN_WORKSPACE_DAEMON_URL=%q\n' '${platform.daemonURL}'
     }
 
@@ -94,6 +90,18 @@ pkgs.writeShellApplication {
       done
     }
 
+    remove_stale_units() {
+      local previous_unit_directory
+      previous_unit_directory="$(readlink -f "$current_systemd_units" 2>/dev/null || true)"
+      [[ -d "$previous_unit_directory" ]] || return 0
+      for previous_unit_file in "$previous_unit_directory"/*; do
+        previous_unit_name="''${previous_unit_file##*/}"
+        if [[ ! -e '${unitDirectory}'/"$previous_unit_name" ]]; then
+          systemctl disable --runtime --now "$previous_unit_name" >/dev/null 2>&1 || true
+        fi
+      done
+    }
+
     install -d -m 0711 -o root -g root '${platform.runDir}'
 
     if [[ "$(readlink -f "$current_systemd_units" 2>/dev/null || true)" == '${unitDirectory}' ]] && check_health; then
@@ -102,14 +110,13 @@ pkgs.writeShellApplication {
     fi
 
     install -d -m 0711 -o root -g root \
-      '${platform.dockerRunDir}' \
-      '${platform.dockerDataDir}' \
       '${platform.containerdRunDir}' \
       '${platform.containerdDataDir}'
 
     mkdir -p /nix/var/nix/gcroots
     ln -sfn "$0" '/nix/var/nix/gcroots/${platform.name}'
 
+    remove_stale_units
     systemctl enable --runtime --force --quiet "''${unit_files[@]}"
     if ! timeout 60 systemctl restart "''${unit_file_names[@]}" >/dev/null 2>&1; then
       echo 'Error: failed to (re)start workspace services' >&2

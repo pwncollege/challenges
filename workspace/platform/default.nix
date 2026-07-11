@@ -6,7 +6,6 @@
   dataDir ? "/var/lib/pwn.college",
   runDir ? "/run/pwn.college",
   daemonListenAddress ? "127.0.0.1:8000",
-  workspaceNetwork ? "pwn-workspace",
   workspaceSubnet ? "172.31.0.0/20",
   volumeBasePath ? null,
 }:
@@ -22,7 +21,6 @@ let
       name
       dataDir
       runDir
-      workspaceNetwork
       workspaceSubnet
       ;
   };
@@ -41,11 +39,12 @@ let
       name
       workspaceRuntime
       daemonListenAddress
-      workspaceNetwork
+      runDir
+      workspaceSubnet
       publicKey
       volumeBasePath
       ;
-    inherit (container) dockerSockPath;
+    inherit (container) containerdSockPath seccompProfile workspaceBridge;
     inherit (store) nixStorePath;
   };
 in
@@ -55,19 +54,16 @@ in
     dataDir
     runDir
     daemonListenAddress
-    workspaceNetwork
     workspaceSubnet
     ;
   daemonURL = daemon.url;
   inherit (container)
-    dockerDataDir
-    dockerRunDir
-    dockerSockPath
     containerdDataDir
     containerdRunDir
     containerdSockPath
-    sockets
     ;
+
+  sockets = { };
 
   services = container.services // {
     "${unitName "store"}" = store.service;

@@ -7,7 +7,7 @@ This repository ships a Nix flake (`flake.nix`) that provides a working dev envi
 The flake dev shell currently targets:
 
 - OS/arch: Linux (`x86_64-linux` only)
-- Init system: `systemd` (the runtime uses `systemctl` to manage a dedicated Docker daemon)
+- Init system: `systemd` (the runtime uses `systemctl` to manage a dedicated containerd)
 - Privileges: `sudo` access (used to start the challenge runtime)
 - Tooling: Nix with flakes enabled (so `nix develop` works; set `experimental-features = nix-command flakes` in `~/.config/nix/nix.conf` or `/etc/nix/nix.conf`)
 
@@ -25,7 +25,11 @@ If flakes are not enabled on your system, add this to `~/.config/nix/nix.conf`:
 experimental-features = nix-command flakes
 ```
 
-On shell entry, the dev shell starts the challenge runtime (using sudo). This includes a dedicated Docker daemon and the node-local workspace daemon (see [../workspace/](../workspace) for more details). The shell currently still exports `DOCKER_HOST` for Docker and `pwnshop`, along with `PWN_WORKSPACE_DAEMON_URL` for the workspace daemon.
+On shell entry, the dev shell starts the challenge runtime (using sudo). This includes a dedicated containerd with CRI, CNI, and Kata, plus the node-local workspace daemon (see [../workspace/](../workspace) for more details). It exports `PWN_WORKSPACE_DAEMON_URL` for the workspace daemon.
+
+The current `pwnshop` commands are still Docker-backed and have not yet been
+ported to the workspace daemon API. Do not assume they use this runtime until
+that follow-up port is complete.
 
 Then use `pwnshop` for all workflows:
 
@@ -60,15 +64,15 @@ Shared Dockerfiles and packages reuse Docker's layer cache, so the monorepo does
 - The runtime is implemented as systemd units and requires a systemd-based host (or WSL with systemd enabled).
 - This will not work inside a container that does not run systemd as PID 1.
 
-`Error: dockerd not reachable at unix:///run/pwn.college/docker/docker.sock`:
+The workspace daemon health check fails:
 
 - Verify you are on a systemd host and have sudo rights.
 - Check unit status/logs:
 
 ```bash
-systemctl status pwn-workspace-docker.service
+systemctl status pwn-workspace-containerd.service
+journalctl -u pwn-workspace-containerd.service -b --no-pager
 journalctl -u pwn-workspace-daemon.service -b --no-pager
-journalctl -u pwn-workspace-docker.service -b --no-pager
 ```
 
 ## Non-Nix Setup (Not Recommended)

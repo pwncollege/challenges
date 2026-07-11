@@ -5,7 +5,9 @@ import (
 	"log"
 	"time"
 
-	dockerclient "github.com/docker/docker/client"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	daemon "pwn.college/workspace/platform/daemon/internal"
 )
 
@@ -14,14 +16,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	docker, err := dockerclient.NewClientWithOpts(
-		dockerclient.FromEnv,
-		dockerclient.WithAPIVersionNegotiation(),
+	containerd, err := grpc.NewClient(
+		cfg.ContainerdAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	workspaceDaemon := daemon.New(cfg, docker)
+	defer containerd.Close()
+	workspaceDaemon := daemon.New(
+		cfg,
+		runtimeapi.NewRuntimeServiceClient(containerd),
+		runtimeapi.NewImageServiceClient(containerd),
+	)
 
 	bootstrapContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

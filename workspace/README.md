@@ -2,9 +2,9 @@
 
 The workspace system consists of a runtime artifact and a trusted node platform.
 `runtime/` builds the agent, packages, and user-facing services made available
-inside each Kata workspace. `platform/` defines the dedicated containerd and
-Docker daemon, workspace Docker network, closure-only Nix filesystem view, and
-workspace daemon. The platform definition is shared by two activation paths:
+inside each Kata workspace. `platform/` defines the dedicated containerd CRI
+runtime, CNI network, closure-only Nix filesystem view, and workspace daemon.
+The platform definition is shared by two activation paths:
 
 - `activate.nix` renders transient units for development on any systemd-based
   Linux host with Nix.
@@ -28,7 +28,7 @@ provide the workspace runtime:
 
 An optional `publicKey` enables API request signature verification. It is the
 hex encoding of the raw 32-byte Ed25519 public key. The module also supports
-overriding the listen address, state paths, workspace network and subnet, and
+overriding the listen address, state paths, workspace subnet, and
 optional Btrfs volume path.
 
 Each workspace runtime generation gets a hardlinked store view below

@@ -7,22 +7,23 @@ import (
 	"path/filepath"
 	"sync"
 
-	dockerclient "github.com/docker/docker/client"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 type Server struct {
 	config        Config
-	docker        *dockerclient.Client
-	ipam          *ipAllocator
+	runtime       runtimeapi.RuntimeServiceClient
+	images        runtimeapi.ImageServiceClient
 	proxies       sync.Map
 	volumeLocks   map[string]struct{}
 	volumeLocksMu sync.Mutex
 }
 
-func New(cfg Config, docker *dockerclient.Client) *Server {
+func New(cfg Config, runtime runtimeapi.RuntimeServiceClient, images runtimeapi.ImageServiceClient) *Server {
 	return &Server{
 		config:      cfg,
-		docker:      docker,
+		runtime:     runtime,
+		images:      images,
 		volumeLocks: map[string]struct{}{},
 	}
 }
@@ -36,27 +37,15 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	if err := assertWorkspacePath(s.config.hostWorkspacePath()); err != nil {
 		return err
 	}
-
-	if _, err := s.docker.Ping(ctx); err != nil {
+	if err := os.MkdirAll(s.config.logDirectory, 0o711); err != nil {
 		return err
 	}
-	subnet, reservedAddresses, err := s.workspaceNetworkConfig(ctx)
-	if err != nil {
+	if err := s.validateWorkspaceRoutes(); err != nil {
 		return err
 	}
-	ipam, err := newIPAllocator(subnet)
-	if err != nil {
+	if _, err := s.runtime.Version(ctx, &runtimeapi.VersionRequest{Version: "0.1.0"}); err != nil {
 		return err
 	}
-	for _, address := range reservedAddresses {
-		if address == subnet.Addr().Next() {
-			continue
-		}
-		if err := ipam.reserve(address); err != nil {
-			return fmt.Errorf("reserve network address %s: %w", address, err)
-		}
-	}
-	s.ipam = ipam
 	return s.rebuildProxyState(ctx)
 }
 

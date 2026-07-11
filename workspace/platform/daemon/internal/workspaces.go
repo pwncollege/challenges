@@ -4,18 +4,15 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	dockercontainer "github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
-	dockernetwork "github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/strslice"
-	dockerclient "github.com/docker/docker/client"
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 type runtimeConfig struct {
@@ -45,6 +42,16 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	existing, err := s.workspaceSandboxes(r.Context(), workspaceUUID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if len(existing) > 0 {
+		jsonError(w, http.StatusConflict, "workspace_exists", "Workspace already exists")
+		return
+	}
+
 	active := ""
 	if body.Volume != nil {
 		active = s.activePath(body.Volume.VolumeUUID)
@@ -53,117 +60,181 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if _, err := s.docker.ImageInspect(r.Context(), body.RuntimeConfig.ContainerImageRef); err != nil {
+	image, err := s.images.ImageStatus(r.Context(), &runtimeapi.ImageStatusRequest{
+		Image: &runtimeapi.ImageSpec{Image: body.RuntimeConfig.ContainerImageRef},
+	})
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if image.Image == nil {
 		jsonError(w, http.StatusConflict, "image_not_available", "Image is not available locally")
 		return
 	}
 
-	workspaceIP, err := s.ipam.allocate()
-	if err != nil {
-		jsonError(w, http.StatusConflict, "ip_exhausted", err.Error())
+	sandboxConfig, containerConfig := s.workspaceContainerConfig(workspaceUUID, body, active)
+	if err := os.MkdirAll(sandboxConfig.LogDirectory, 0o711); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	releaseIP := true
-	defer func() {
-		if releaseIP {
-			s.ipam.release(workspaceIP)
-		}
-	}()
-
-	containerConfig, hostConfig, networkingConfig := s.workspaceContainerConfig(workspaceUUID, workspaceIP, body, active)
-	created, err := s.docker.ContainerCreate(r.Context(), containerConfig, hostConfig, networkingConfig, nil, workspaceUUID)
+	sandbox, err := s.runtime.RunPodSandbox(r.Context(), &runtimeapi.RunPodSandboxRequest{
+		Config:         sandboxConfig,
+		RuntimeHandler: kataRuntime,
+	})
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	if err := s.docker.ContainerStart(r.Context(), created.ID, dockercontainer.StartOptions{}); err != nil {
-		_ = s.docker.ContainerRemove(context.Background(), created.ID, dockercontainer.RemoveOptions{Force: true})
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = s.removeSandbox(context.Background(), sandbox.PodSandboxId)
+		}
+	}()
+
+	created, err := s.runtime.CreateContainer(r.Context(), &runtimeapi.CreateContainerRequest{
+		PodSandboxId:  sandbox.PodSandboxId,
+		Config:        containerConfig,
+		SandboxConfig: sandboxConfig,
+	})
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if _, err := s.runtime.StartContainer(r.Context(), &runtimeapi.StartContainerRequest{ContainerId: created.ContainerId}); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	workspaceIP, err := s.sandboxIP(r.Context(), sandbox.PodSandboxId)
+	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 	if err := waitForAgent(r.Context(), workspaceIP, s.config.agentPort); err != nil {
-		_ = s.docker.ContainerRemove(context.Background(), created.ID, dockercontainer.RemoveOptions{Force: true})
 		jsonError(w, http.StatusBadGateway, "workspace_agent_unreachable", err.Error())
 		return
 	}
-	releaseIP = false
+
+	cleanup = false
 	s.proxies.Store(workspaceUUID, workspaceIP)
 	writeJSON(w, http.StatusOK, map[string]any{"workspace_uuid": workspaceUUID})
 }
 
 func (s *Server) workspaceContainerConfig(
 	workspaceUUID string,
-	workspaceIP netip.Addr,
 	body workspaceStartRequest,
 	activeVolumePath string,
-) (*dockercontainer.Config, *dockercontainer.HostConfig, *dockernetwork.NetworkingConfig) {
+) (*runtimeapi.PodSandboxConfig, *runtimeapi.ContainerConfig) {
 	labels := map[string]string{workspaceLabel: workspaceUUID}
 	if body.Volume != nil {
 		labels[volumeLabel] = body.Volume.VolumeUUID
 	}
-	entrypoint := filepath.Join(s.config.workspacePath, "bin", "workspace-entrypoint")
-	containerConfig := &dockercontainer.Config{
-		Image:      body.RuntimeConfig.ContainerImageRef,
-		User:       "0:0",
-		Entrypoint: strslice.StrSlice{"/bin/sh", "-c", `exec "$0" "$@"`, entrypoint},
-		Cmd:        strslice.StrSlice(body.RuntimeConfig.Entrypoint),
-		Env:        environment(body.RuntimeConfig.Env),
-		Labels:     labels,
+	sandbox := &runtimeapi.PodSandboxConfig{
+		Metadata: &runtimeapi.PodSandboxMetadata{
+			Name:      workspaceUUID,
+			Uid:       workspaceUUID,
+			Namespace: "pwn-workspaces",
+		},
+		Hostname:     workspaceUUID,
+		LogDirectory: filepath.Join(s.config.logDirectory, workspaceUUID),
+		Labels:       labels,
+		Linux: &runtimeapi.LinuxPodSandboxConfig{
+			Sysctls: map[string]string{
+				"net.ipv4.ip_unprivileged_port_start": "1024",
+			},
+		},
 	}
 
-	mounts := []mount.Mount{
+	entrypoint := filepath.Join(s.config.workspacePath, "bin", "workspace-entrypoint")
+	mounts := []*runtimeapi.Mount{
 		{
-			Type:     mount.TypeBind,
-			Source:   s.config.nixStorePath,
-			Target:   "/nix/store",
-			ReadOnly: true,
+			HostPath:      s.config.nixStorePath,
+			ContainerPath: "/nix/store",
+			Readonly:      true,
 		},
 	}
 	if body.Volume != nil {
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: activeVolumePath,
-			Target: body.Volume.DstPath,
+		mounts = append(mounts, &runtimeapi.Mount{
+			HostPath:      activeVolumePath,
+			ContainerPath: body.Volume.DstPath,
 		})
 	}
-	hostConfig := &dockercontainer.HostConfig{
-		AutoRemove:  true,
-		Runtime:     kataRuntime,
-		Mounts:      mounts,
-		NetworkMode: dockercontainer.NetworkMode(s.config.dockerNetwork),
-		CapAdd:      strslice.StrSlice{"SYS_PTRACE", "SYS_ADMIN", "NET_ADMIN"},
-		Sysctls: map[string]string{
-			"net.ipv4.ip_unprivileged_port_start": "1024",
+	container := &runtimeapi.ContainerConfig{
+		Metadata: &runtimeapi.ContainerMetadata{Name: "workspace"},
+		Image: &runtimeapi.ImageSpec{
+			Image:          body.RuntimeConfig.ContainerImageRef,
+			RuntimeHandler: kataRuntime,
 		},
-		Resources: dockercontainer.Resources{
-			Devices: []dockercontainer.DeviceMapping{
-				{PathOnHost: "/dev/kvm", PathInContainer: "/dev/kvm", CgroupPermissions: "rwm"},
-				{PathOnHost: "/dev/net/tun", PathInContainer: "/dev/net/tun", CgroupPermissions: "rwm"},
+		Command: []string{"/bin/sh", "-c", `exec "$0" "$@"`, entrypoint},
+		Args:    body.RuntimeConfig.Entrypoint,
+		Envs:    environment(body.RuntimeConfig.Env),
+		Mounts:  mounts,
+		Devices: []*runtimeapi.Device{
+			{HostPath: "/dev/kvm", ContainerPath: "/dev/kvm", Permissions: "rwm"},
+			{HostPath: "/dev/net/tun", ContainerPath: "/dev/net/tun", Permissions: "rwm"},
+		},
+		Labels:  labels,
+		LogPath: "workspace.log",
+		Linux: &runtimeapi.LinuxContainerConfig{
+			SecurityContext: &runtimeapi.LinuxContainerSecurityContext{
+				RunAsUser:  &runtimeapi.Int64Value{Value: 0},
+				RunAsGroup: &runtimeapi.Int64Value{Value: 0},
+				Capabilities: &runtimeapi.Capability{
+					AddCapabilities: []string{"SYS_PTRACE", "SYS_ADMIN", "NET_ADMIN"},
+				},
+				Seccomp: &runtimeapi.SecurityProfile{
+					ProfileType:  runtimeapi.SecurityProfile_Localhost,
+					LocalhostRef: s.config.seccompProfile,
+				},
 			},
 		},
 	}
-	networkingConfig := &dockernetwork.NetworkingConfig{
-		EndpointsConfig: map[string]*dockernetwork.EndpointSettings{
-			s.config.dockerNetwork: {
-				IPAMConfig: &dockernetwork.EndpointIPAMConfig{IPv4Address: workspaceIP.String()},
-			},
-		},
-	}
-	return containerConfig, hostConfig, networkingConfig
+	return sandbox, container
 }
 
 func (s *Server) handleWorkspaceStop(w http.ResponseWriter, r *http.Request) {
 	workspaceUUID := r.PathValue("workspaceUUID")
-	if err := s.docker.ContainerStop(r.Context(), workspaceUUID, dockercontainer.StopOptions{}); err != nil && !dockerclient.IsErrNotFound(err) {
+	sandboxes, err := s.workspaceSandboxes(r.Context(), workspaceUUID)
+	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	value, ok := s.proxies.Load(workspaceUUID)
-	s.proxies.Delete(workspaceUUID)
-	if ok {
-		s.ipam.release(value.(netip.Addr))
+	for _, sandbox := range sandboxes {
+		if err := s.removeSandbox(r.Context(), sandbox.Id); err != nil {
+			jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+			return
+		}
 	}
+	s.proxies.Delete(workspaceUUID)
 	writeJSON(w, http.StatusOK, map[string]any{"workspace_uuid": workspaceUUID, "stopped": true})
+}
+
+func (s *Server) removeSandbox(ctx context.Context, sandboxID string) error {
+	response, err := s.runtime.ListContainers(ctx, &runtimeapi.ListContainersRequest{
+		Filter: &runtimeapi.ContainerFilter{PodSandboxId: sandboxID},
+	})
+	if err != nil && status.Code(err) != codes.NotFound {
+		return err
+	}
+	for _, container := range response.GetContainers() {
+		_, stopErr := s.runtime.StopContainer(ctx, &runtimeapi.StopContainerRequest{
+			ContainerId: container.Id,
+			Timeout:     10,
+		})
+		if stopErr != nil && status.Code(stopErr) != codes.NotFound {
+			return stopErr
+		}
+		if _, err := s.runtime.RemoveContainer(ctx, &runtimeapi.RemoveContainerRequest{ContainerId: container.Id}); err != nil && status.Code(err) != codes.NotFound {
+			return err
+		}
+	}
+	if _, err := s.runtime.StopPodSandbox(ctx, &runtimeapi.StopPodSandboxRequest{PodSandboxId: sandboxID}); err != nil && status.Code(err) != codes.NotFound {
+		return err
+	}
+	if _, err := s.runtime.RemovePodSandbox(ctx, &runtimeapi.RemovePodSandboxRequest{PodSandboxId: sandboxID}); err != nil && status.Code(err) != codes.NotFound {
+		return err
+	}
+	return nil
 }
 
 func validateWorkspaceStart(body workspaceStartRequest, volumeStorageEnabled bool) error {
@@ -209,15 +280,15 @@ func validateVolumeDestination(path string) error {
 	return nil
 }
 
-func environment(values map[string]string) []string {
+func environment(values map[string]string) []*runtimeapi.KeyValue {
 	names := make([]string, 0, len(values))
 	for name := range values {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	env := make([]string, 0, len(names))
+	env := make([]*runtimeapi.KeyValue, 0, len(names))
 	for _, name := range names {
-		env = append(env, name+"="+values[name])
+		env = append(env, &runtimeapi.KeyValue{Key: name, Value: values[name]})
 	}
 	return env
 }

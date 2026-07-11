@@ -9,7 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -23,17 +22,161 @@ import (
 	"testing"
 	"time"
 
-	dockercontainer "github.com/docker/docker/api/types/container"
-	dockernetwork "github.com/docker/docker/api/types/network"
-	dockerclient "github.com/docker/docker/client"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	daemon "pwn.college/workspace/platform/daemon/internal"
 )
 
-type capturedContainerCreate struct {
-	config     dockercontainer.Config
-	host       dockercontainer.HostConfig
-	networking dockernetwork.NetworkingConfig
-	name       string
+type criState struct {
+	mu             sync.Mutex
+	sandbox        *runtimeapi.PodSandbox
+	container      *runtimeapi.Container
+	sandboxRequest *runtimeapi.RunPodSandboxRequest
+	createRequest  *runtimeapi.CreateContainerRequest
+}
+
+type runtimeService struct {
+	runtimeapi.UnimplementedRuntimeServiceServer
+	state *criState
+}
+
+type imageService struct {
+	runtimeapi.UnimplementedImageServiceServer
+}
+
+func (s *runtimeService) Version(context.Context, *runtimeapi.VersionRequest) (*runtimeapi.VersionResponse, error) {
+	return &runtimeapi.VersionResponse{
+		Version:           "0.1.0",
+		RuntimeName:       "containerd",
+		RuntimeVersion:    "2.3.0",
+		RuntimeApiVersion: "v1",
+	}, nil
+}
+
+func (s *runtimeService) Status(context.Context, *runtimeapi.StatusRequest) (*runtimeapi.StatusResponse, error) {
+	return &runtimeapi.StatusResponse{
+		Status: &runtimeapi.RuntimeStatus{Conditions: []*runtimeapi.RuntimeCondition{
+			{Type: "RuntimeReady", Status: true},
+			{Type: "NetworkReady", Status: true},
+		}},
+		RuntimeHandlers: []*runtimeapi.RuntimeHandler{{Name: "kata"}},
+	}, nil
+}
+
+func (s *runtimeService) ListPodSandbox(_ context.Context, request *runtimeapi.ListPodSandboxRequest) (*runtimeapi.ListPodSandboxResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if s.state.sandbox == nil || !sandboxMatches(s.state.sandbox, request.Filter) {
+		return &runtimeapi.ListPodSandboxResponse{}, nil
+	}
+	return &runtimeapi.ListPodSandboxResponse{Items: []*runtimeapi.PodSandbox{s.state.sandbox}}, nil
+}
+
+func sandboxMatches(sandbox *runtimeapi.PodSandbox, filter *runtimeapi.PodSandboxFilter) bool {
+	if filter == nil {
+		return true
+	}
+	if filter.Id != "" && filter.Id != sandbox.Id {
+		return false
+	}
+	if filter.State != nil && filter.State.State != sandbox.State {
+		return false
+	}
+	for name, value := range filter.LabelSelector {
+		if sandbox.Labels[name] != value {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *runtimeService) RunPodSandbox(_ context.Context, request *runtimeapi.RunPodSandboxRequest) (*runtimeapi.RunPodSandboxResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	s.state.sandboxRequest = request
+	s.state.sandbox = &runtimeapi.PodSandbox{
+		Id:             "sandbox-id",
+		Metadata:       request.Config.Metadata,
+		State:          runtimeapi.PodSandboxState_SANDBOX_READY,
+		Labels:         request.Config.Labels,
+		RuntimeHandler: request.RuntimeHandler,
+	}
+	return &runtimeapi.RunPodSandboxResponse{PodSandboxId: "sandbox-id"}, nil
+}
+
+func (s *runtimeService) PodSandboxStatus(context.Context, *runtimeapi.PodSandboxStatusRequest) (*runtimeapi.PodSandboxStatusResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	return &runtimeapi.PodSandboxStatusResponse{Status: &runtimeapi.PodSandboxStatus{
+		Id:      s.state.sandbox.Id,
+		State:   s.state.sandbox.State,
+		Labels:  s.state.sandbox.Labels,
+		Network: &runtimeapi.PodSandboxNetworkStatus{Ip: "127.0.0.2"},
+	}}, nil
+}
+
+func (s *runtimeService) CreateContainer(_ context.Context, request *runtimeapi.CreateContainerRequest) (*runtimeapi.CreateContainerResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	s.state.createRequest = request
+	s.state.container = &runtimeapi.Container{
+		Id:           "container-id",
+		PodSandboxId: request.PodSandboxId,
+		Metadata:     request.Config.Metadata,
+		State:        runtimeapi.ContainerState_CONTAINER_CREATED,
+		Labels:       request.Config.Labels,
+	}
+	return &runtimeapi.CreateContainerResponse{ContainerId: "container-id"}, nil
+}
+
+func (s *runtimeService) StartContainer(context.Context, *runtimeapi.StartContainerRequest) (*runtimeapi.StartContainerResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	s.state.container.State = runtimeapi.ContainerState_CONTAINER_RUNNING
+	return &runtimeapi.StartContainerResponse{}, nil
+}
+
+func (s *runtimeService) ListContainers(_ context.Context, request *runtimeapi.ListContainersRequest) (*runtimeapi.ListContainersResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if s.state.container == nil || request.Filter.PodSandboxId != s.state.container.PodSandboxId {
+		return &runtimeapi.ListContainersResponse{}, nil
+	}
+	return &runtimeapi.ListContainersResponse{Containers: []*runtimeapi.Container{s.state.container}}, nil
+}
+
+func (s *runtimeService) StopContainer(context.Context, *runtimeapi.StopContainerRequest) (*runtimeapi.StopContainerResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	s.state.container.State = runtimeapi.ContainerState_CONTAINER_EXITED
+	return &runtimeapi.StopContainerResponse{}, nil
+}
+
+func (s *runtimeService) RemoveContainer(context.Context, *runtimeapi.RemoveContainerRequest) (*runtimeapi.RemoveContainerResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	s.state.container = nil
+	return &runtimeapi.RemoveContainerResponse{}, nil
+}
+
+func (s *runtimeService) StopPodSandbox(context.Context, *runtimeapi.StopPodSandboxRequest) (*runtimeapi.StopPodSandboxResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	s.state.sandbox.State = runtimeapi.PodSandboxState_SANDBOX_NOTREADY
+	return &runtimeapi.StopPodSandboxResponse{}, nil
+}
+
+func (s *runtimeService) RemovePodSandbox(context.Context, *runtimeapi.RemovePodSandboxRequest) (*runtimeapi.RemovePodSandboxResponse, error) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	s.state.sandbox = nil
+	return &runtimeapi.RemovePodSandboxResponse{}, nil
+}
+
+func (*imageService) ImageStatus(context.Context, *runtimeapi.ImageStatusRequest) (*runtimeapi.ImageStatusResponse, error) {
+	return &runtimeapi.ImageStatusResponse{Image: &runtimeapi.Image{Id: "sha256:test"}}, nil
 }
 
 func TestWorkspaceLifecycleAndProxy(t *testing.T) {
@@ -55,74 +198,24 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 	})
 	agentServer := &http.Server{Handler: agentMux}
 	go func() { _ = agentServer.Serve(agentListener) }()
-	t.Cleanup(func() {
-		_ = agentServer.Close()
-	})
+	t.Cleanup(func() { _ = agentServer.Close() })
 
-	var captured capturedContainerCreate
-	var captureMu sync.Mutex
-	engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := stripDockerAPIVersion(r.URL.Path)
-		switch {
-		case (r.Method == http.MethodGet || r.Method == http.MethodHead) && path == "/_ping":
-			w.Header().Set("API-Version", "1.47")
-			_, _ = w.Write([]byte("OK"))
-		case r.Method == http.MethodGet && path == "/networks/workspace-test":
-			writeJSON(w, http.StatusOK, map[string]any{
-				"Name":   "workspace-test",
-				"Driver": "bridge",
-				"Labels": map[string]string{"pwn.workspace-network": "true"},
-				"IPAM": map[string]any{
-					"Config": []map[string]string{{"Subnet": "127.0.0.0/29", "Gateway": "127.0.0.1"}},
-				},
-				"Containers": map[string]any{},
-			})
-		case r.Method == http.MethodGet && path == "/containers/json":
-			writeJSON(w, http.StatusOK, []any{})
-		case r.Method == http.MethodGet && path == "/images/test-workspace:latest/json":
-			writeJSON(w, http.StatusOK, map[string]any{"Id": "sha256:test"})
-		case r.Method == http.MethodPost && path == "/containers/create":
-			data, err := io.ReadAll(r.Body)
-			if err != nil {
-				t.Error(err)
-			}
-			var config dockercontainer.Config
-			var envelope struct {
-				HostConfig       dockercontainer.HostConfig     `json:"HostConfig"`
-				NetworkingConfig dockernetwork.NetworkingConfig `json:"NetworkingConfig"`
-			}
-			if err := json.Unmarshal(data, &config); err != nil {
-				t.Error(err)
-			}
-			if err := json.Unmarshal(data, &envelope); err != nil {
-				t.Error(err)
-			}
-			captureMu.Lock()
-			captured = capturedContainerCreate{
-				config:     config,
-				host:       envelope.HostConfig,
-				networking: envelope.NetworkingConfig,
-				name:       r.URL.Query().Get("name"),
-			}
-			captureMu.Unlock()
-			writeJSON(w, http.StatusCreated, map[string]any{"Id": "container-id", "Warnings": []string{}})
-		case r.Method == http.MethodPost && path == "/containers/container-id/start":
-			w.WriteHeader(http.StatusNoContent)
-		case r.Method == http.MethodPost && strings.HasPrefix(path, "/containers/") && strings.HasSuffix(path, "/stop"):
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			http.Error(w, fmt.Sprintf("unexpected Docker request: %s %s", r.Method, r.URL.RequestURI()), http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(engine.Close)
-	docker, err := dockerclient.NewClientWithOpts(
-		dockerclient.WithHost(engine.URL),
-		dockerclient.WithHTTPClient(engine.Client()),
-		dockerclient.WithVersion("1.47"),
+	state := &criState{}
+	listener := bufconn.Listen(1 << 20)
+	grpcServer := grpc.NewServer()
+	runtimeapi.RegisterRuntimeServiceServer(grpcServer, &runtimeService{state: state})
+	runtimeapi.RegisterImageServiceServer(grpcServer, &imageService{})
+	go func() { _ = grpcServer.Serve(listener) }()
+	t.Cleanup(grpcServer.Stop)
+	containerd, err := grpc.NewClient(
+		"passthrough:///containerd",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = containerd.Close() })
 
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -138,16 +231,24 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(hostWorkspacePath, "bin", "workspace-entrypoint"), nil, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("PWN_WORKSPACE_CONTAINERD_ADDRESS", "unix:///test/containerd.sock")
+	t.Setenv("PWN_WORKSPACE_BRIDGE", "pwn-workspace0")
+	t.Setenv("PWN_WORKSPACE_LOG_DIRECTORY", filepath.Join(t.TempDir(), "logs"))
 	t.Setenv("PWN_WORKSPACE_NIX_STORE_PATH", nixStorePath)
 	t.Setenv("PWN_WORKSPACE_PATH", workspacePath)
-	t.Setenv("PWN_WORKSPACE_DOCKER_NETWORK", "workspace-test")
+	t.Setenv("PWN_WORKSPACE_SECCOMP_PROFILE", filepath.Join(t.TempDir(), "seccomp.json"))
+	t.Setenv("PWN_WORKSPACE_SUBNET", "127.0.0.0/29")
 	t.Setenv("PWN_WORKSPACE_AGENT_PORT", strconv.Itoa(int(agentPort)))
 	t.Setenv("PWN_WORKSPACE_VOLUME_BASE_PATH", "")
 	cfg, err := daemon.LoadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := daemon.New(cfg, docker)
+	server := daemon.New(
+		cfg,
+		runtimeapi.NewRuntimeServiceClient(containerd),
+		runtimeapi.NewImageServiceClient(containerd),
+	)
 	if err := server.Bootstrap(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -175,38 +276,41 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 		t.Fatalf("start status = %d: %s", startResponse.StatusCode, body)
 	}
 
-	captureMu.Lock()
-	created := captured
-	captureMu.Unlock()
-	if created.name != workspaceUUID {
-		t.Errorf("container name = %q, want %q", created.name, workspaceUUID)
+	state.mu.Lock()
+	sandboxRequest := state.sandboxRequest
+	createRequest := state.createRequest
+	state.mu.Unlock()
+	if sandboxRequest.RuntimeHandler != "kata" {
+		t.Errorf("runtime handler = %q, want kata", sandboxRequest.RuntimeHandler)
 	}
-	if created.config.Image != "test-workspace:latest" {
-		t.Errorf("image = %q", created.config.Image)
+	if sandboxRequest.Config.Labels["pwn.workspace-uuid"] != workspaceUUID {
+		t.Errorf("sandbox labels = %#v", sandboxRequest.Config.Labels)
 	}
-	if got := []string(created.config.Entrypoint); !slices.Equal(got, []string{"/bin/sh", "-c", `exec "$0" "$@"`, filepath.Join(workspacePath, "bin", "workspace-entrypoint")}) {
-		t.Errorf("entrypoint = %v", got)
+	created := createRequest.Config
+	if created.Image.Image != "test-workspace:latest" {
+		t.Errorf("image = %q", created.Image.Image)
 	}
-	if got := []string(created.config.Cmd); !slices.Equal(got, []string{"/challenge/custom-init", "value"}) {
-		t.Errorf("command = %v", got)
+	if !slices.Equal(created.Command, []string{"/bin/sh", "-c", `exec "$0" "$@"`, filepath.Join(workspacePath, "bin", "workspace-entrypoint")}) {
+		t.Errorf("command = %v", created.Command)
 	}
-	if !slices.Contains(created.config.Env, "PWN_FLAG=pwn.college{test}") || !slices.Contains(created.config.Env, "PWN_USER=hacker") {
-		t.Errorf("environment = %v", created.config.Env)
+	if !slices.Equal(created.Args, []string{"/challenge/custom-init", "value"}) {
+		t.Errorf("args = %v", created.Args)
 	}
-	if created.host.Runtime != "kata" {
-		t.Errorf("runtime = %q, want kata", created.host.Runtime)
+	environment := map[string]string{}
+	for _, value := range created.Envs {
+		environment[value.Key] = value.Value
 	}
-	for _, capability := range []string{"CAP_SYS_PTRACE", "CAP_SYS_ADMIN", "CAP_NET_ADMIN"} {
-		if !slices.Contains([]string(created.host.CapAdd), capability) {
-			t.Errorf("capabilities = %v, want %s", created.host.CapAdd, capability)
+	if environment["PWN_FLAG"] != "pwn.college{test}" || environment["PWN_USER"] != "hacker" {
+		t.Errorf("environment = %v", environment)
+	}
+	capabilities := created.Linux.SecurityContext.Capabilities.AddCapabilities
+	for _, capability := range []string{"SYS_PTRACE", "SYS_ADMIN", "NET_ADMIN"} {
+		if !slices.Contains(capabilities, capability) {
+			t.Errorf("capabilities = %v, want %s", capabilities, capability)
 		}
 	}
-	if len(created.host.Mounts) != 1 || created.host.Mounts[0].Source != nixStorePath || created.host.Mounts[0].Target != "/nix/store" || !created.host.Mounts[0].ReadOnly {
-		t.Errorf("mounts = %#v", created.host.Mounts)
-	}
-	endpoint := created.networking.EndpointsConfig["workspace-test"]
-	if endpoint == nil || endpoint.IPAMConfig == nil || endpoint.IPAMConfig.IPv4Address != "127.0.0.2" {
-		t.Errorf("network endpoint = %#v", endpoint)
+	if len(created.Mounts) != 1 || created.Mounts[0].HostPath != nixStorePath || created.Mounts[0].ContainerPath != "/nix/store" || !created.Mounts[0].Readonly {
+		t.Errorf("mounts = %#v", created.Mounts)
 	}
 
 	proxiedResponse, err := http.Post(workspaceDaemon.URL+"/w/"+workspaceUUID+"/exec/?value=1", "application/json", strings.NewReader(`{"argv":["true"]}`))
@@ -238,6 +342,13 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 		t.Fatalf("stop status = %d: %s", stopResponse.StatusCode, body)
 	}
 
+	state.mu.Lock()
+	sandboxRemoved := state.sandbox == nil
+	containerRemoved := state.container == nil
+	state.mu.Unlock()
+	if !sandboxRemoved || !containerRemoved {
+		t.Errorf("CRI resources remain after stop: sandbox=%v container=%v", !sandboxRemoved, !containerRemoved)
+	}
 	missing, err := http.Get(workspaceDaemon.URL + "/w/" + workspaceUUID + "/")
 	if err != nil {
 		t.Fatal(err)
@@ -268,14 +379,6 @@ func signedRequest(
 	request.Header.Set("X-Pwn-Workspace-Signature", base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, []byte(canonical))))
 	request.Header.Set("Content-Type", "application/json")
 	return request
-}
-
-func stripDockerAPIVersion(path string) string {
-	parts := strings.SplitN(strings.TrimPrefix(path, "/"), "/", 2)
-	if len(parts) == 2 && strings.HasPrefix(parts[0], "v1.") {
-		return "/" + parts[1]
-	}
-	return path
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

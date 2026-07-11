@@ -14,7 +14,6 @@ let
       dataDir
       runDir
       daemonListenAddress
-      workspaceNetwork
       workspaceSubnet
       volumeBasePath
       publicKey
@@ -54,16 +53,10 @@ in
       description = "Listen address for the workspace daemon HTTP API.";
     };
 
-    workspaceNetwork = lib.mkOption {
-      type = lib.types.str;
-      default = "pwn-workspace";
-      description = "Dedicated Docker network used by workspaces.";
-    };
-
     workspaceSubnet = lib.mkOption {
       type = lib.types.str;
       default = "172.31.0.0/20";
-      description = "IPv4 subnet used when provisioning the workspace network.";
+      description = "IPv4 subnet allocated to workspaces on this node.";
     };
 
     volumeBasePath = lib.mkOption {
