@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 type Config struct {
 	listenAddress     string
 	containerdAddress string
+	egressAddress     string
 	logDirectory      string
 	nixStorePath      string
 	publicKey         ed25519.PublicKey
@@ -26,6 +28,7 @@ type Config struct {
 func LoadConfig() (Config, error) {
 	env := envReader{}
 	containerdAddress := env.required("PWN_WORKSPACE_CONTAINERD_ADDRESS")
+	egressAddress := env.required("PWN_WORKSPACE_EGRESS_ADDRESS")
 	logDirectory := env.required("PWN_WORKSPACE_LOG_DIRECTORY")
 	nixStorePath := env.required("PWN_WORKSPACE_NIX_STORE_PATH")
 	seccompProfile := env.required("PWN_WORKSPACE_SECCOMP_PROFILE")
@@ -44,6 +47,9 @@ func LoadConfig() (Config, error) {
 	}
 	if !filepath.IsAbs(workspacePath) {
 		return Config{}, errors.New("PWN_WORKSPACE_PATH must be absolute")
+	}
+	if net.ParseIP(egressAddress).To4() == nil {
+		return Config{}, errors.New("PWN_WORKSPACE_EGRESS_ADDRESS must be an IPv4 address")
 	}
 	if !filepath.IsAbs(nixStorePath) {
 		return Config{}, errors.New("PWN_WORKSPACE_NIX_STORE_PATH must be absolute")
@@ -74,6 +80,7 @@ func LoadConfig() (Config, error) {
 	return Config{
 		listenAddress:     getenv("PWN_WORKSPACE_DAEMON_LISTEN_ADDRESS", "127.0.0.1:8000"),
 		containerdAddress: containerdAddress,
+		egressAddress:     egressAddress,
 		logDirectory:      filepath.Clean(logDirectory),
 		nixStorePath:      filepath.Clean(nixStorePath),
 		publicKey:         publicKey,

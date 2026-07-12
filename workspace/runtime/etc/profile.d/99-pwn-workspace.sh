@@ -5,7 +5,7 @@ esac
 
 export LANG="${LANG:-C.UTF-8}"
 export MANPATH="${MANPATH:-/run/workspace/profile/share/man:}"
-export SSL_CERT_FILE="${SSL_CERT_FILE:-/run/workspace/profile/etc/ssl/certs/ca-bundle.crt}"
+export SSL_CERT_FILE="${SSL_CERT_FILE:-/run/workspace/profile/etc/ssl/certs/workspace-ca-bundle.crt}"
 export TERMINFO="${TERMINFO:-/run/workspace/profile/share/terminfo}"
 
 if tput setaf 1 >/dev/null 2>&1; then

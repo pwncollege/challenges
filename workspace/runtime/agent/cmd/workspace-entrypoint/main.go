@@ -243,7 +243,7 @@ func setupSystemEnvironment() error {
 	os.Setenv("PATH", workspacePath(os.Getenv("PATH")))
 	os.Setenv("LANG", "C.UTF-8")
 	os.Setenv("MANPATH", filepath.Join(workspaceProfile, "share", "man")+":")
-	os.Setenv("SSL_CERT_FILE", filepath.Join(workspaceProfile, "etc", "ssl", "certs", "ca-bundle.crt"))
+	os.Setenv("SSL_CERT_FILE", filepath.Join(workspaceProfile, "etc", "ssl", "certs", "workspace-ca-bundle.crt"))
 	os.Setenv("TERMINFO", filepath.Join(workspaceProfile, "share", "terminfo"))
 	if err := writeEnvironment(); err != nil {
 		return err

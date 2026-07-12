@@ -223,6 +223,7 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PWN_WORKSPACE_CONTAINERD_ADDRESS", "unix:///test/containerd.sock")
+	t.Setenv("PWN_WORKSPACE_EGRESS_ADDRESS", "192.0.2.1")
 	t.Setenv("PWN_WORKSPACE_LOG_DIRECTORY", filepath.Join(t.TempDir(), "logs"))
 	t.Setenv("PWN_WORKSPACE_NIX_STORE_PATH", nixStorePath)
 	t.Setenv("PWN_WORKSPACE_PATH", workspacePath)
@@ -274,6 +275,9 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 	}
 	if sandboxRequest.Config.Labels["pwn.workspace-uuid"] != workspaceUUID {
 		t.Errorf("sandbox labels = %#v", sandboxRequest.Config.Labels)
+	}
+	if !slices.Equal(sandboxRequest.Config.DnsConfig.Servers, []string{"192.0.2.1"}) {
+		t.Errorf("DNS servers = %v", sandboxRequest.Config.DnsConfig.Servers)
 	}
 	created := createRequest.Config
 	if created.Image.Image != "test-workspace:latest" {

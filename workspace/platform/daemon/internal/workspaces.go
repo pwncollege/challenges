@@ -143,6 +143,7 @@ func (s *Server) workspaceContainerConfig(
 				"net.ipv4.ip_unprivileged_port_start": "1024",
 			},
 		},
+		DnsConfig: &runtimeapi.DNSConfig{Servers: []string{s.config.egressAddress}},
 	}
 
 	entrypoint := filepath.Join(s.config.workspacePath, "bin", "workspace-entrypoint")

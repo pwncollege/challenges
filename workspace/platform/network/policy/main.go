@@ -23,22 +23,25 @@ const (
 
 type netConf struct {
 	types.NetConf
-	Bridge string `json:"bridge"`
+	AgentPort     uint16 `json:"agentPort"`
+	Bridge        string `json:"bridge"`
+	EgressAddress string `json:"egressAddress"`
 }
 
 type sourceIdentity struct {
 	HostInterface string
 	MAC           net.HardwareAddr
 	IPv4          net.IP
+	Gateway       net.IP
+	EgressAddress net.IP
+	AgentPort     uint16
 }
 
 func main() {
 	skel.PluginMainFuncs(skel.CNIFuncs{
-		Add:    cmdAdd,
-		Check:  cmdCheck,
-		Del:    cmdDel,
-		Status: cmdStatus,
-	}, version.All, "pwn.college workspace source-address check")
+		Add: cmdAdd,
+		Del: cmdDel,
+	}, version.All, "pwn.college workspace network policy")
 }
 
 func cmdAdd(args *skel.CmdArgs) error {
@@ -50,29 +53,15 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	if err := configureSourceCheck(identity); err != nil {
+	if err := configureNetworkPolicy(identity); err != nil {
 		return err
 	}
 	return types.PrintResult(result, conf.CNIVersion)
 }
 
-func cmdCheck(args *skel.CmdArgs) error {
-	conf, result, err := loadConfig(args.StdinData)
-	if err != nil {
-		return err
-	}
-	identity, err := sourceIdentityFromResult(conf, args, result)
-	if err != nil {
-		return err
-	}
-	return checkSourceCheck(identity)
-}
-
 // The bridge plugin deletes the host veth after this plugin's DEL. The kernel
 // deletes the veth's clsact qdisc and all of its filters with the interface.
 func cmdDel(_ *skel.CmdArgs) error { return nil }
-
-func cmdStatus(_ *skel.CmdArgs) error { return nil }
 
 func loadConfig(data []byte) (*netConf, *current.Result, error) {
 	conf := &netConf{}
@@ -81,6 +70,12 @@ func loadConfig(data []byte) (*netConf, *current.Result, error) {
 	}
 	if conf.Bridge == "" {
 		return nil, nil, errors.New("bridge must not be empty")
+	}
+	if net.ParseIP(conf.EgressAddress).To4() == nil {
+		return nil, nil, errors.New("egressAddress must be an IPv4 address")
+	}
+	if conf.AgentPort == 0 {
+		return nil, nil, errors.New("agentPort must not be zero")
 	}
 	if conf.RawPrevResult == nil {
 		return nil, nil, errors.New("prevResult is required")
@@ -120,7 +115,11 @@ func sourceIdentityFromResult(conf *netConf, args *skel.CmdArgs, result *current
 		return sourceIdentity{}, fmt.Errorf("parse container MAC address %q: %w", containerInterface.Mac, err)
 	}
 
-	addresses := make([]net.IP, 0, 1)
+	type address struct {
+		ip      net.IP
+		gateway net.IP
+	}
+	addresses := make([]address, 0, 1)
 	for _, ip := range result.IPs {
 		if ip.Interface == nil || *ip.Interface < 0 || *ip.Interface >= len(result.Interfaces) {
 			continue
@@ -129,23 +128,26 @@ func sourceIdentityFromResult(conf *netConf, args *skel.CmdArgs, result *current
 		if intf.Name != args.IfName || intf.Sandbox == "" || ip.Address.IP.To4() == nil {
 			continue
 		}
-		addresses = append(addresses, ip.Address.IP.To4())
+		gateway := ip.Gateway.To4()
+		if gateway == nil {
+			continue
+		}
+		addresses = append(addresses, address{ip: ip.Address.IP.To4(), gateway: gateway})
 	}
 	if len(addresses) != 1 {
 		return sourceIdentity{}, fmt.Errorf("expected one IPv4 address for %s, found %v", args.IfName, addresses)
 	}
-	if _, err := net.InterfaceByName(hostInterfaces[0]); err != nil {
-		return sourceIdentity{}, fmt.Errorf("find host interface %s: %w", hostInterfaces[0], err)
-	}
-
 	return sourceIdentity{
 		HostInterface: hostInterfaces[0],
 		MAC:           mac,
-		IPv4:          addresses[0],
+		IPv4:          addresses[0].ip,
+		Gateway:       addresses[0].gateway,
+		EgressAddress: net.ParseIP(conf.EgressAddress).To4(),
+		AgentPort:     conf.AgentPort,
 	}, nil
 }
 
-func configureSourceCheck(identity sourceIdentity) error {
+func configureNetworkPolicy(identity sourceIdentity) error {
 	intf, err := net.InterfaceByName(identity.HostInterface)
 	if err != nil {
 		return fmt.Errorf("find host interface %s: %w", identity.HostInterface, err)
@@ -158,86 +160,20 @@ func configureSourceCheck(identity sourceIdentity) error {
 
 	qdisc := clsactQdisc(intf.Index)
 	if err := connection.Qdisc().Add(&qdisc); err != nil {
-		if !errors.Is(err, unix.EEXIST) {
-			return fmt.Errorf("attach clsact to %s: %w", identity.HostInterface, err)
-		}
-		configured, checkErr := sourceCheckConfigured(connection, intf.Index, identity)
-		if checkErr != nil {
-			return checkErr
-		}
-		if configured {
+		if errors.Is(err, unix.EEXIST) {
 			return nil
 		}
-		return errors.New("host interface has an unexpected clsact qdisc")
+		return fmt.Errorf("attach clsact to %s: %w", identity.HostInterface, err)
 	}
 
 	// Install the catch-all first so a partial setup fails closed. CNI does not
 	// start the container until ADD completes successfully.
-	for _, filter := range sourceFilters(intf.Index, identity) {
+	for _, filter := range policyFilters(intf.Index, identity) {
 		if err := connection.Filter().Add(&filter); err != nil {
-			return fmt.Errorf("configure source check on %s: %w", identity.HostInterface, err)
+			return fmt.Errorf("configure network policy on %s: %w", identity.HostInterface, err)
 		}
 	}
 	return nil
-}
-
-func checkSourceCheck(identity sourceIdentity) error {
-	intf, err := net.InterfaceByName(identity.HostInterface)
-	if err != nil {
-		return fmt.Errorf("find host interface %s: %w", identity.HostInterface, err)
-	}
-	connection, err := tc.Open(&tc.Config{})
-	if err != nil {
-		return fmt.Errorf("open traffic-control netlink socket: %w", err)
-	}
-	defer connection.Close()
-	configured, err := sourceCheckConfigured(connection, intf.Index, identity)
-	if err != nil {
-		return err
-	}
-	if !configured {
-		return errors.New("workspace source check filter is missing")
-	}
-	return nil
-}
-
-func sourceCheckConfigured(connection *tc.Tc, interfaceIndex int, identity sourceIdentity) (bool, error) {
-	qdiscs, err := connection.Qdisc().Get()
-	if err != nil {
-		return false, fmt.Errorf("list qdiscs: %w", err)
-	}
-	foundQdisc := false
-	for _, qdisc := range qdiscs {
-		if qdisc.Ifindex == uint32(interfaceIndex) && qdisc.Kind == "clsact" {
-			foundQdisc = true
-			break
-		}
-	}
-	if !foundQdisc {
-		return false, nil
-	}
-
-	filters, err := connection.Filter().Get(&tc.Msg{
-		Family:  unix.AF_UNSPEC,
-		Ifindex: uint32(interfaceIndex),
-		Parent:  tc.HandleIngress + 1,
-	})
-	if err != nil {
-		return false, fmt.Errorf("list source-check filters: %w", err)
-	}
-	for _, wanted := range sourceFilters(interfaceIndex, identity) {
-		found := false
-		for _, existing := range filters {
-			if filterMatches(existing, wanted) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false, errors.New("host interface has an incomplete source check")
-		}
-	}
-	return true, nil
 }
 
 func clsactQdisc(interfaceIndex int) tc.Object {
@@ -252,50 +188,82 @@ func clsactQdisc(interfaceIndex int) tc.Object {
 	}
 }
 
-func sourceFilters(interfaceIndex int, identity sourceIdentity) []tc.Object {
+func policyFilters(interfaceIndex int, identity sourceIdentity) []tc.Object {
 	pass := []*tc.Action{{Kind: "gact", Gact: &tc.Gact{Parms: &tc.GactParms{Action: passAction}}}}
 	drop := []*tc.Action{{Kind: "gact", Gact: &tc.Gact{Parms: &tc.GactParms{Action: dropAction}}}}
-	macMask := net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-	ipMask := net.IPv4(255, 255, 255, 255)
 	ipv4 := identity.IPv4.To4()
 	arpSource := binary.BigEndian.Uint32(ipv4)
+	arpTarget := binary.BigEndian.Uint32(identity.Gateway.To4())
 	arpMask := uint32(0xffffffff)
-	ipProtocol := uint16(unix.ETH_P_IP)
 	arpProtocol := uint16(unix.ETH_P_ARP)
 	skipHardware := uint32(tc.SkipHw)
+	ack := uint16(0x10)
 
-	// The catch-all is deliberately first: configureSourceCheck applies filters
+	// The catch-all is deliberately first: configureNetworkPolicy applies filters
 	// in this order, while their priorities still make the allow rules run first.
 	return []tc.Object{
 		filter(interfaceIndex, 100, unix.ETH_P_ALL, tc.Attribute{
 			Kind:     "matchall",
 			Matchall: &tc.Matchall{Actions: &drop, Flags: &skipHardware},
 		}),
-		filter(interfaceIndex, 10, unix.ETH_P_IP, tc.Attribute{
-			Kind: "flower",
-			Flower: &tc.Flower{
-				Actions:        &pass,
-				Flags:          &skipHardware,
-				KeyEthSrc:      &identity.MAC,
-				KeyEthSrcMask:  &macMask,
-				KeyEthType:     &ipProtocol,
-				KeyIPv4Src:     &ipv4,
-				KeyIPv4SrcMask: &ipMask,
-			},
-		}),
-		filter(interfaceIndex, 20, unix.ETH_P_ARP, tc.Attribute{
+		ipv4Filter(interfaceIndex, 10, identity, unix.IPPROTO_UDP, 0, 53, 0, 0, identity.EgressAddress, pass),
+		ipv4Filter(interfaceIndex, 20, identity, unix.IPPROTO_TCP, 0, 53, 0, 0, identity.EgressAddress, pass),
+		ipv4Filter(interfaceIndex, 30, identity, unix.IPPROTO_TCP, 0, 80, 0, 0, identity.EgressAddress, pass),
+		ipv4Filter(interfaceIndex, 40, identity, unix.IPPROTO_TCP, 0, 443, 0, 0, identity.EgressAddress, pass),
+		ipv4Filter(interfaceIndex, 50, identity, unix.IPPROTO_TCP, identity.AgentPort, 0, ack, ack, identity.Gateway, pass),
+		filter(interfaceIndex, 60, unix.ETH_P_ARP, tc.Attribute{
 			Kind: "flower",
 			Flower: &tc.Flower{
 				Actions:       &pass,
 				Flags:         &skipHardware,
 				KeyEthSrc:     &identity.MAC,
-				KeyEthSrcMask: &macMask,
+				KeyEthSrcMask: fullMACMask(),
 				KeyEthType:    &arpProtocol,
 				KeyArpSIP:     &arpSource,
 				KeyArpSIPMask: &arpMask,
+				KeyArpTIP:     &arpTarget,
+				KeyArpTIPMask: &arpMask,
 			},
 		}),
 	}
+}
+
+func ipv4Filter(interfaceIndex int, priority uint16, identity sourceIdentity, protocol uint8, sourcePort, destinationPort, tcpFlags, tcpFlagsMask uint16, destination net.IP, actions []*tc.Action) tc.Object {
+	ipProtocol := uint16(unix.ETH_P_IP)
+	skipHardware := uint32(tc.SkipHw)
+	ipMask := net.IPv4(255, 255, 255, 255)
+	flower := &tc.Flower{
+		Actions:        &actions,
+		Flags:          &skipHardware,
+		KeyEthSrc:      &identity.MAC,
+		KeyEthSrcMask:  fullMACMask(),
+		KeyEthType:     &ipProtocol,
+		KeyIPProto:     &protocol,
+		KeyIPv4Src:     &identity.IPv4,
+		KeyIPv4SrcMask: &ipMask,
+		KeyIPv4Dst:     &destination,
+		KeyIPv4DstMask: &ipMask,
+	}
+	if protocol == unix.IPPROTO_TCP {
+		if sourcePort != 0 {
+			flower.KeyTCPSrc = &sourcePort
+		}
+		if destinationPort != 0 {
+			flower.KeyTCPDst = &destinationPort
+		}
+		if tcpFlagsMask != 0 {
+			flower.KeyTCPFlags = &tcpFlags
+			flower.KeyTCPFlagsMask = &tcpFlagsMask
+		}
+	} else {
+		flower.KeyUDPDst = &destinationPort
+	}
+	return filter(interfaceIndex, priority, unix.ETH_P_IP, tc.Attribute{Kind: "flower", Flower: flower})
+}
+
+func fullMACMask() *net.HardwareAddr {
+	mask := net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+	return &mask
 }
 
 func filter(interfaceIndex int, priority, protocol uint16, attribute tc.Attribute) tc.Object {
@@ -309,42 +277,4 @@ func filter(interfaceIndex int, priority, protocol uint16, attribute tc.Attribut
 		},
 		Attribute: attribute,
 	}
-}
-
-func filterMatches(existing, wanted tc.Object) bool {
-	if existing.Ifindex != wanted.Ifindex || existing.Parent != wanted.Parent || existing.Info != wanted.Info || existing.Kind != wanted.Kind {
-		return false
-	}
-	if wanted.Matchall != nil {
-		return existing.Matchall != nil && actionMatches(existing.Matchall.Actions, dropAction)
-	}
-	if existing.Flower == nil || wanted.Flower == nil || !actionMatches(existing.Flower.Actions, passAction) {
-		return false
-	}
-	if !hardwareAddressEqual(existing.Flower.KeyEthSrc, wanted.Flower.KeyEthSrc) {
-		return false
-	}
-	if !hardwareAddressEqual(existing.Flower.KeyEthSrcMask, wanted.Flower.KeyEthSrcMask) || !uint16Equal(existing.Flower.KeyEthType, wanted.Flower.KeyEthType) {
-		return false
-	}
-	if wanted.Flower.KeyIPv4Src != nil {
-		return existing.Flower.KeyIPv4Src != nil && (*existing.Flower.KeyIPv4Src).Equal(*wanted.Flower.KeyIPv4Src) && existing.Flower.KeyIPv4SrcMask != nil && (*existing.Flower.KeyIPv4SrcMask).Equal(*wanted.Flower.KeyIPv4SrcMask)
-	}
-	return uint32Equal(existing.Flower.KeyArpSIP, wanted.Flower.KeyArpSIP) && uint32Equal(existing.Flower.KeyArpSIPMask, wanted.Flower.KeyArpSIPMask)
-}
-
-func actionMatches(actions *[]*tc.Action, wanted uint32) bool {
-	return actions != nil && len(*actions) == 1 && (*actions)[0].Gact != nil && (*actions)[0].Gact.Parms != nil && (*actions)[0].Gact.Parms.Action == wanted
-}
-
-func hardwareAddressEqual(left, right *net.HardwareAddr) bool {
-	return left != nil && right != nil && (*left).String() == (*right).String()
-}
-
-func uint32Equal(left, right *uint32) bool {
-	return left != nil && right != nil && *left == *right
-}
-
-func uint16Equal(left, right *uint16) bool {
-	return left != nil && right != nil && *left == *right
 }

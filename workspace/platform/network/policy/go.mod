@@ -1,4 +1,4 @@
-module pwn.college/workspace/platform/container/source-check
+module pwn.college/workspace/platform/network/policy
 
 go 1.23
 

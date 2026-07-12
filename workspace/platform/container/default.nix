@@ -4,7 +4,9 @@
   name,
   dataDir,
   runDir,
-  workspaceSubnet,
+  cniConfigDir,
+  networkPolicy,
+  egressPolicyServiceName,
 }:
 
 let
@@ -13,45 +15,9 @@ let
   containerdDataDir = "${dataDir}/containerd";
   containerdRunDir = "${runDir}/containerd";
   containerdSockPath = "${containerdRunDir}/containerd.sock";
-  cniDataDir = "${dataDir}/cni";
-  workspaceBridge = "${name}0";
 
   kataConfig = import ./kata.nix { inherit pkgs; };
   seccompProfile = import ./seccomp.nix { inherit pkgs; };
-  sourceCheck = import ./source-check { inherit pkgs; };
-
-  jsonFormat = pkgs.formats.json { };
-  cniConfigFile = jsonFormat.generate "10-${name}.conflist" {
-    cniVersion = "1.1.0";
-    name = name;
-    plugins = [
-      {
-        type = "bridge";
-        bridge = workspaceBridge;
-        isGateway = true;
-        ipMasq = false;
-        portIsolation = true;
-        ipam = {
-          type = "host-local";
-          dataDir = cniDataDir;
-          ranges = [
-            [ { subnet = workspaceSubnet; } ]
-          ];
-          routes = [ { dst = "0.0.0.0/0"; } ];
-        };
-      }
-      {
-        type = "pwn-source-check";
-        bridge = workspaceBridge;
-      }
-    ];
-  };
-  cniConfigDir = pkgs.linkFarm "${name}-cni" [
-    {
-      name = "10-${name}.conflist";
-      path = cniConfigFile;
-    }
-  ];
 
   containerdConfig = pkgs.writeText "${name}-containerd-config.toml" ''
     version = 4
@@ -72,7 +38,7 @@ let
       ConfigPath = "${kataConfig}"
 
     [plugins."io.containerd.cri.v1.runtime".cni]
-      bin_dirs = ["${sourceCheck}/bin", "${pkgs.cni-plugins}/bin"]
+      bin_dirs = ["${networkPolicy}/bin", "${pkgs.cni-plugins}/bin"]
       conf_dir = "${cniConfigDir}"
       max_conf_num = 1
       use_internal_loopback = true
@@ -95,12 +61,13 @@ in
   services = {
     "${unitName "containerd"}" = {
       description = "pwn.college workspace container runtime";
-      after = [ "local-fs.target" ];
+      requires = [ "${egressPolicyServiceName}.service" ];
+      after = [ "${egressPolicyServiceName}.service" "local-fs.target" ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "notify";
         ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfig}";
-        Environment = "PATH=${lib.makeBinPath [ pkgs.kata-runtime pkgs.nftables pkgs.runc ]}";
+        Environment = "PATH=${lib.makeBinPath [ pkgs.kata-runtime pkgs.runc ]}";
         Restart = "on-failure";
         TimeoutStartSec = 60;
         NotifyAccess = "all";
@@ -117,6 +84,5 @@ in
   tmpfilesRules = [
     "d ${containerdRunDir} 0711 root root -"
     "d ${containerdDataDir} 0711 root root -"
-    "d ${cniDataDir} 0711 root root -"
   ];
 }

@@ -6,6 +6,8 @@
   dataDir ? "/var/lib/pwn.college",
   runDir ? "/run/pwn.college",
   daemonListenAddress ? "127.0.0.1:8000",
+  egressAddress ? "192.0.2.1",
+  egressDomains ? [ "example.com" ],
   workspaceSubnet ? "172.31.0.0/20",
   volumeBasePath ? null,
 }:
@@ -14,6 +16,16 @@ let
   name = "pwn-workspace";
   unitName = component: "${name}-${component}";
 
+  network = import ./network {
+    inherit
+      pkgs
+      name
+      dataDir
+      egressAddress
+      egressDomains
+      workspaceSubnet
+      ;
+  };
   container = import ./container {
     inherit
       pkgs
@@ -21,7 +33,11 @@ let
       name
       dataDir
       runDir
-      workspaceSubnet
+      ;
+    inherit (network)
+      cniConfigDir
+      networkPolicy
+      egressPolicyServiceName
       ;
   };
   store = import ./store.nix {
@@ -43,6 +59,8 @@ let
       publicKey
       volumeBasePath
       ;
+    egressAddress = network.egressAddress;
+    egressServiceName = network.egressServiceName;
     inherit (container) containerdSockPath seccompProfile;
     inherit (store) nixStorePath;
   };
@@ -53,6 +71,8 @@ in
     dataDir
     runDir
     daemonListenAddress
+    egressAddress
+    egressDomains
     workspaceSubnet
     ;
   daemonURL = daemon.url;
@@ -64,7 +84,7 @@ in
 
   sockets = { };
 
-  services = container.services // {
+  services = network.services // container.services // {
     "${unitName "store"}" = store.service;
     "${unitName "daemon"}" = daemon.service;
   };
@@ -73,5 +93,6 @@ in
     "d ${runDir} 0711 root root -"
   ]
   ++ store.tmpfilesRules
+  ++ network.tmpfilesRules
   ++ container.tmpfilesRules;
 }

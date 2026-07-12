@@ -21,6 +21,7 @@ Required environment variables:
 - `PWN_WORKSPACE_NIX_STORE_PATH` (host closure store mounted at `/nix/store` in workspaces)
 - `PWN_WORKSPACE_PATH`
 - `PWN_WORKSPACE_CONTAINERD_ADDRESS`
+- `PWN_WORKSPACE_EGRESS_ADDRESS`
 - `PWN_WORKSPACE_LOG_DIRECTORY`
 - `PWN_WORKSPACE_SECCOMP_PROFILE`
 
@@ -39,6 +40,10 @@ The platform generates a CNI bridge configuration. CNI `host-local` IPAM assigns
 addresses from the platform's configured workspace subnet; the daemon reads the
 assigned address from CRI sandbox status and does not know about the bridge or
 subnet itself.
+
+Workspace forwarding is denied by default. Sandboxes use the platform egress
+service as their only DNS server; it currently resolves only `example.com` and
+reverse proxies HTTP and HTTPS traffic for that name from the host network.
 
 `PWN_WORKSPACE_NIX_STORE_PATH` contains only the Nix closure of
 `PWN_WORKSPACE_PATH`. The host prepares this shared view once per runtime

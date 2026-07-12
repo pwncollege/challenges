@@ -14,6 +14,8 @@ let
       dataDir
       runDir
       daemonListenAddress
+      egressAddress
+      egressDomains
       workspaceSubnet
       volumeBasePath
       publicKey
@@ -51,6 +53,22 @@ in
       type = lib.types.str;
       default = "127.0.0.1:8000";
       description = "Listen address for the workspace daemon HTTP API.";
+    };
+
+    egressAddress = lib.mkOption {
+      type = lib.types.str;
+      default = "192.0.2.1";
+      description = "Synthetic IPv4 address used for whitelisted workspace DNS and HTTP traffic.";
+    };
+
+    egressDomains = lib.mkOption {
+      type = lib.types.listOf lib.types.nonEmptyStr;
+      default = [ "example.com" ];
+      description = "Domain names allowed through workspace egress. A wildcard may replace the complete leftmost label; an empty list denies all domains.";
+      example = [
+        "example.com"
+        "*.example.net"
+      ];
     };
 
     workspaceSubnet = lib.mkOption {

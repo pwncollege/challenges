@@ -8,6 +8,8 @@
   nixStorePath,
   daemonListenAddress,
   runDir,
+  egressAddress,
+  egressServiceName,
   publicKey ? null,
   volumeBasePath ? null,
 }:
@@ -23,10 +25,12 @@ in
     description = "pwn.college workspace daemon";
     requires = [
       "${unitName "containerd"}.service"
+      "${egressServiceName}.service"
       "${unitName "store"}.service"
     ];
     after = [
       "${unitName "containerd"}.service"
+      "${egressServiceName}.service"
       "${unitName "store"}.service"
     ];
     wantedBy = [ "multi-user.target" ];
@@ -38,6 +42,7 @@ in
         "PWN_WORKSPACE_AGENT_PORT=8000"
         "PWN_WORKSPACE_CONTAINERD_ADDRESS=unix://${containerdSockPath}"
         "PWN_WORKSPACE_DAEMON_LISTEN_ADDRESS=${daemonListenAddress}"
+        "PWN_WORKSPACE_EGRESS_ADDRESS=${egressAddress}"
         "PWN_WORKSPACE_LOG_DIRECTORY=${runDir}/logs"
         "PWN_WORKSPACE_NIX_STORE_PATH=${nixStorePath}"
         "PWN_WORKSPACE_PATH=${workspaceRuntime}"

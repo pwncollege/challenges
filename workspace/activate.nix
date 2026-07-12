@@ -2,6 +2,7 @@
   pkgs,
   lib,
   workspaceRuntime,
+  egressDomains ? [ "example.com" ],
 }:
 
 let
@@ -10,6 +11,7 @@ let
       pkgs
       lib
       workspaceRuntime
+      egressDomains
       ;
   };
 
