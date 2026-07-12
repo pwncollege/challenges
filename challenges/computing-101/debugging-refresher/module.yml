@@ -10,6 +10,8 @@ challenges:
   name: Setting Breakpoints
 - id: gdb-scripting
   name: GDB Scripting
+- id: modifying-data
+  name: Modifying Data  
 - id: modifying-execution
   name: Modifying Execution
   progression_locked: true
