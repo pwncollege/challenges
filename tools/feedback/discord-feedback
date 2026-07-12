@@ -47,6 +47,14 @@ MAX_DISCORD_SERVER_ERROR_RETRIES = 5
 IMAGE_ATTACHMENT_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
 MAX_IMAGE_ATTACHMENT_BYTES = 25 * 1024 * 1024
 STATUS_HEARTBEAT_SECONDS = 30
+STREAM_OUTPUT_QUEUE_LINES = 1000
+# Validation can fan out across a large module, but it must never wait forever on a wedged
+# build, test, Docker client, or runtime. This is an outer process-tree watchdog; pwnshop's
+# own --timeout only bounds an individual test after its workspace has started.
+PWNSHOP_VALIDATION_TIMEOUT_SECONDS = 60 * 60
+# Match CI's per-test limit so a stuck solve becomes a named failure with a challenge log
+# instead of consuming the entire outer validation window.
+PWNSHOP_TEST_TIMEOUT_SECONDS = 10 * 60
 # A noninteractive cast should finish in seconds. Cap it so a hang-prone playtest command
 # (e.g. one that pipes from a long-lived or SUID-root process it cannot kill) is aborted
 # quickly by `pwnshop run --timeout`, which tears the container down to stop it for real.
@@ -853,33 +861,71 @@ def insert_before_stdin_prompt(args: list[str], additions: list[str]) -> list[st
     return [*args, *additions]
 
 
+def process_group_exists(process_group: int) -> bool:
+    try:
+        os.killpg(process_group, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        # Conservatively assume it still exists so teardown can escalate.
+        return True
+    return True
+
+
 def terminate_process_tree(
-    process: "subprocess.Popen[Any]", *, grace_seconds: float = 5.0
+    process: "subprocess.Popen[Any]",
+    *,
+    process_group: Optional[int] = None,
+    grace_seconds: float = 5.0,
 ) -> None:
     """Best-effort teardown of a child and everything it spawned.
 
     stream_command starts children with start_new_session=True, so the process and its
     descendants share a process group. Signalling the group (rather than the lone leader)
     reaps the grandchildren -- here `nix -> pwnshop -> asciinema -> docker exec` -- that a
-    bare process.kill() would orphan. SIGINT first so pwnshop's own cleanup (tearing down
-    the challenge container) can run; escalate to SIGKILL only if it ignores us.
+    bare process.kill() would orphan. The group id is captured when the child starts because
+    the group leader can exit while a grandchild still holds stdout open. SIGINT first so
+    pwnshop's own cleanup (tearing down the challenge container) can run; escalate to
+    SIGKILL only if anything in the group ignores us.
     """
-    if process.poll() is not None:
-        return
-    try:
-        pgid = os.getpgid(process.pid)
-    except ProcessLookupError:
-        return
+    if process_group is None:
+        try:
+            process_group = os.getpgid(process.pid)
+        except OSError as error:
+            logger.warning("could not find process group for pid %d: %s", process.pid, error)
+            return
+
+    def wait_for_group() -> bool:
+        deadline = time.monotonic() + grace_seconds
+        while True:
+            # poll() reaps the leader when it has exited. A zombie leader otherwise keeps
+            # the process group visible even after every live process is gone.
+            process.poll()
+            if not process_group_exists(process_group):
+                return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(0.1, remaining))
+
     for sig in (signal.SIGINT, signal.SIGKILL):
         try:
-            os.killpg(pgid, sig)
+            os.killpg(process_group, sig)
         except ProcessLookupError:
             return
-        try:
-            process.wait(timeout=grace_seconds)
+        except OSError as error:
+            # Cleanup is best-effort and must never hide the command's real failure.
+            logger.warning(
+                "could not signal process group %d with %s: %s",
+                process_group,
+                signal.Signals(sig).name,
+                error,
+            )
             return
-        except subprocess.TimeoutExpired:
-            continue
+        if wait_for_group():
+            return
 
 
 def stream_command(
@@ -896,8 +942,13 @@ def stream_command(
     started = time.monotonic()
     last_heartbeat = started
     timed_out = False
+    timeout_message = None
     input_file = None
     process = None
+    process_group = None
+    reader = None
+    reader_stop = None
+    cleanup_attempted = False
 
     if input_text is not None:
         input_file = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
@@ -919,15 +970,35 @@ def stream_command(
                 bufsize=1,
                 start_new_session=True,
             )
-            output_queue = queue.Queue()
+            # start_new_session=True makes the child's PID its process-group ID. Keep it
+            # even after the leader exits so leaked descendants can still be killed.
+            process_group = process.pid
+            # Backpressure bounds memory even if a descendant floods stdout after its
+            # command leader exits. The reader checks reader_stop while waiting for room.
+            output_queue = queue.Queue(maxsize=STREAM_OUTPUT_QUEUE_LINES)
+            reader_stop = threading.Event()
 
             def read_output() -> None:
                 assert process.stdout is not None
                 try:
                     for line in process.stdout:
-                        output_queue.put(line)
+                        while not reader_stop.is_set():
+                            try:
+                                output_queue.put(line, timeout=0.1)
+                                break
+                            except queue.Full:
+                                continue
+                        if reader_stop.is_set():
+                            break
+                except (OSError, ValueError):
+                    # The supervisor closes stdout during exceptional cleanup to unblock
+                    # this daemon reader. Any output already read remains in the queue.
+                    pass
                 finally:
-                    output_queue.put(None)
+                    try:
+                        output_queue.put_nowait(None)
+                    except queue.Full:
+                        pass
 
             reader = threading.Thread(target=read_output, daemon=True)
             reader.start()
@@ -935,10 +1006,21 @@ def stream_command(
             while True:
                 if timeout and time.monotonic() - started > timeout:
                     timed_out = True
-                    terminate_process_tree(process)
-                    click.echo(
+                    timeout_message = (
                         f"{heartbeat_label or 'Command'} timed out after {timeout}s"
                     )
+                    click.echo(timeout_message)
+                    reader_stop.set()
+                    terminate_process_tree(
+                        process, process_group=process_group
+                    )
+                    cleanup_attempted = True
+                    break
+
+                if process.poll() is not None:
+                    # The bounded queue/pipe retain the command's final output for the
+                    # drain below. Anything produced after its leader exits is descendant
+                    # output and must not extend the command's lifetime.
                     break
 
                 try:
@@ -954,12 +1036,18 @@ def stream_command(
                             f"({format_duration(time.monotonic() - started)} elapsed)"
                         )
                         last_heartbeat = time.monotonic()
-                    if process.poll() is not None and not reader.is_alive():
+                    # A dead leader can leave a grandchild holding the stdout pipe open.
+                    # Stop waiting for EOF; the process-group cleanup below will reap it.
+                    if process.poll() is not None:
                         break
                     continue
 
                 if line is None:
-                    break
+                    # EOF can arrive just before the leader's exit becomes observable.
+                    # Keep polling so this path is still governed by the outer timeout.
+                    if process.poll() is not None:
+                        break
+                    continue
 
                 log.write(line)
                 log.flush()
@@ -968,20 +1056,62 @@ def stream_command(
                 if line_handler:
                     line_handler(line.rstrip("\n"))
 
-            return_code = process.wait()
-            reader.join(timeout=1)
+            if not cleanup_attempted:
+                terminate_process_tree(process, process_group=process_group)
+                cleanup_attempted = True
+            if timed_out:
+                reader_stop.set()
+            reader.join(timeout=0.1)
+            if reader.is_alive():
+                # An escaped/uninterruptible writer may still own the pipe. Stop consuming
+                # it so the abandoned queue cannot grow without bound after we return.
+                reader_stop.set()
+                reader.join(timeout=0.9)
+            # Only drain after the producer stopped. An escaped or unkillable descendant
+            # could otherwise keep stdout busy and turn this get_nowait loop into another
+            # unbounded wait after the watchdog has already fired.
+            if not reader.is_alive():
+                while True:
+                    try:
+                        line = output_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    if line is None:
+                        continue
+                    log.write(line)
+                    log.flush()
+                    if echo_output:
+                        click.echo(line, nl=False)
+                    if line_handler:
+                        line_handler(line.rstrip("\n"))
+            if timeout_message:
+                log.write(f"\n{timeout_message}\n")
+                log.flush()
+            return_code = process.poll()
     finally:
         # Covers Ctrl-C and any unexpected error: tear down the child tree (and the
-        # challenge container it spawned) instead of orphaning it. No-op on the normal and
-        # timeout paths, where the process has already exited.
-        if process is not None:
-            terminate_process_tree(process)
+        # challenge container it spawned) instead of orphaning it. Avoid repeating the
+        # bounded SIGINT/SIGKILL grace periods after normal or timeout cleanup.
+        if process is not None and not cleanup_attempted:
+            terminate_process_tree(process, process_group=process_group)
+        if reader_stop is not None:
+            reader_stop.set()
+        if reader is not None and reader.is_alive():
+            reader.join(timeout=1)
+        if (
+            process is not None
+            and process.stdout is not None
+            and (reader is None or not reader.is_alive())
+        ):
+            process.stdout.close()
         if input_file:
             input_file.close()
 
     elapsed = format_duration(time.monotonic() - started)
     if timed_out:
         raise subprocess.TimeoutExpired(command, timeout)
+    if return_code is None:
+        raise RuntimeError(f"command process could not be reaped: {shlex.join(command)}")
     click.echo(f"Finished with exit code {return_code} in {elapsed}")
     return return_code
 
@@ -1350,19 +1480,36 @@ When done, write a concise implementation note to {artifact_dir}/implementation-
 
 def build_fix_prompt(
     analysis_path: pathlib.Path,
-    failure_dir: pathlib.Path,
+    artifact_dir: pathlib.Path,
     attempt: int,
+    failure: BaseException,
     directions: list[str],
     pr_feedback_path: Optional[pathlib.Path] = None,
 ) -> str:
-    return f"""The feedback implementation has failing validation on attempt {attempt}.
+    test_log = artifact_dir / f"pwnshop-test-attempt-{attempt}.log"
+    failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
+    serial_log = artifact_dir / f"pwnshop-test-attempt-{attempt}-serial.log"
+    serial_failure_dir = artifact_dir / f"test-logs-attempt-{attempt}-serial"
+    failure_detail = f"{type(failure).__name__}: {failure}"
+    return f"""The feedback implementation's pwnshop validation failed on attempt {attempt}.
+This is a repair phase, not a request to merely report the failure.
 
 Analysis report: {analysis_path}
-Failure logs: {failure_dir}
+Observed failure: {failure_detail}
+Full pwnshop log: {test_log}
+Per-challenge failure logs: {failure_dir}
+Serial re-check log (when present): {serial_log}
+Serial per-challenge logs (when present): {serial_failure_dir}
 
-Read the failure logs, inspect the changed files, and make the smallest correct fixes.
-Follow AGENTS.md and .claude/skills/authoring-challenges/SKILL.md.
-Do not commit, push, open a PR, or edit generated Discord artifacts.
+Requirements:
+- Read every present validation artifact above, inspect the changed files, and examine live process/service state when the evidence points outside a challenge.
+- Diagnose whether the root cause is challenge content/tests, pwnshop, the Nix dev shell, Docker/containerd/Kata, leaked processes or containers, resource exhaustion, or another part of the validation environment.
+- Fix the root cause. Make the smallest durable repository change when code/config is wrong. When local project runtime state is broken, actually repair it safely (for example, clean leaked validation processes/containers or restart the relevant project-local runtime services); do not stop after saying an operator should do that.
+- Tooling and runtime fixes are in scope when the evidence supports them. Do not weaken a challenge, its tests, privilege/isolation, or the validation command to conceal an infrastructure failure, and do not switch to the host Docker daemon.
+- Review earlier `fix-agent-attempt-*.log` artifacts after repeated failures and take a new evidence-based step instead of repeating a no-op diagnosis.
+- Run targeted checks after the repair. Run pwnshop only inside `nix develop`, give every pwnshop command a finite timeout of at most one hour, and leave the full modified-challenge validation to the outer feedback loop.
+- Follow AGENTS.md and .claude/skills/authoring-challenges/SKILL.md for any challenge changes.
+- Do not commit, push, open a PR, or edit generated Discord artifacts.
 {directions_block(directions)}{pr_feedback_block(pr_feedback_path)}
 """
 
@@ -1792,6 +1939,17 @@ def pwnshop_invocation(repo: pathlib.Path, args: list[str]) -> list[str]:
     return [*_pwnshop_prefix(repo), *args]
 
 
+def force_fresh_pwnshop() -> None:
+    """Make validation after a repair re-evaluate the repo's current dev shell.
+
+    A long-lived shell's bare pwnshop points into an immutable Nix store generation. If the
+    repair agent changes pwnshop, the runtime, or the flake, retrying that cached executable
+    would test the old code and can send the repair loop chasing an already-fixed problem.
+    """
+    global _PWNSHOP_PREFIX
+    _PWNSHOP_PREFIX = ["nix", "develop", "--command", "pwnshop"]
+
+
 def run_logged(
     command: list[str],
     *,
@@ -1874,12 +2032,19 @@ def run_tests(
             "--require-solved",
             "--attempts",
             "2",
+            "--timeout",
+            str(PWNSHOP_TEST_TIMEOUT_SECONDS),
             "--log-failures",
             str(log_dir),
             "challenges",
         ],
     )
-    rc = run_logged(command, cwd=repo, log_path=test_log)
+    rc = run_logged(
+        command,
+        cwd=repo,
+        log_path=test_log,
+        timeout=PWNSHOP_VALIDATION_TIMEOUT_SECONDS,
+    )
     if rc == 0:
         return test_log
 
@@ -1908,6 +2073,8 @@ def run_tests(
             "--require-solved",
             "--attempts",
             "3",
+            "--timeout",
+            str(PWNSHOP_TEST_TIMEOUT_SECONDS),
             "--jobs",
             "1",
             "--log-failures",
@@ -1915,7 +2082,12 @@ def run_tests(
             *failed,
         ],
     )
-    retry_rc = run_logged(retry_command, cwd=repo, log_path=retry_log)
+    retry_rc = run_logged(
+        retry_command,
+        cwd=repo,
+        log_path=retry_log,
+        timeout=PWNSHOP_VALIDATION_TIMEOUT_SECONDS,
+    )
     if retry_rc != 0:
         still_failing = failed_challenges_from_logs(repo, retry_log_dir) or failed
         raise click.ClickException(
@@ -1929,6 +2101,24 @@ def run_tests(
     return test_log
 
 
+def validation_log_info(path: pathlib.Path) -> Optional[tuple[int, bool]]:
+    match = re.fullmatch(
+        r"pwnshop-test-attempt-(\d+)(-serial)?\.log", path.name
+    )
+    if not match:
+        return None
+    return int(match.group(1)), bool(match.group(2))
+
+
+def next_validation_attempt(artifact_dir: pathlib.Path) -> int:
+    attempts = [
+        info[0]
+        for path in artifact_dir.glob("pwnshop-test-attempt-*.log")
+        if (info := validation_log_info(path)) is not None
+    ]
+    return max(attempts, default=0) + 1
+
+
 def validate_with_fixes(
     repo: pathlib.Path,
     artifact_dir: pathlib.Path,
@@ -1938,32 +2128,47 @@ def validate_with_fixes(
     analysis_path: pathlib.Path,
     directions: list[str],
     pr_feedback_path: Optional[pathlib.Path],
-    first_attempt: int,
-    fix_attempts: int,
+    fix_attempts: Optional[int],
 ) -> pathlib.Path:
-    """Validate; on a genuine (non-flaky) failure, run the fix agent and retry.
+    """Validate; on any pwnshop failure, run the fix agent and retry.
 
     run_tests already absorbs load-induced flakiness via a serial re-check, so a failure
-    that reaches here is a real breakage -- and fixing those agentically is the whole point
-    of the bot, not a reason to abort. Each failed attempt feeds the fix agent and re-tests.
-    Raises ClickException only if the challenge is still broken after `fix_attempts` fixes.
+    that reaches here needs a real challenge, tooling, or local-runtime repair. By default
+    the loop keeps repairing until validation passes. An operator can explicitly set
+    `fix_attempts` to impose a safety ceiling.
     """
-    for index in range(fix_attempts + 1):
-        attempt = first_attempt + index
+    attempt = next_validation_attempt(artifact_dir)
+    if attempt > 1:
+        # Resume (or post-UX validation) through a fresh generation. A prior repair may
+        # have changed pwnshop/runtime/flake inputs before the feedback process died.
+        force_fresh_pwnshop()
+    repairs = 0
+    while True:
         click.echo(f"Running pwnshop validation attempt {attempt}")
         try:
             return run_tests(repo, artifact_dir, base_ref, attempt)
-        except click.ClickException:
-            if index >= fix_attempts:
-                raise
-            click.echo(f"Validation attempt {attempt} failed; starting fix agent")
-            failure_dir = artifact_dir / f"test-logs-attempt-{attempt}"
+        except (
+            click.ClickException,
+            subprocess.SubprocessError,
+            OSError,
+            RuntimeError,
+        ) as failure:
+            if fix_attempts is not None and repairs >= fix_attempts:
+                raise click.ClickException(
+                    "pwnshop validation is still failing after "
+                    f"{repairs} repair attempt(s): {failure}"
+                ) from failure
+            repairs += 1
+            click.echo(
+                f"Validation attempt {attempt} failed; starting repair agent {repairs}"
+            )
             run_agent(
                 agent,
                 build_fix_prompt(
                     analysis_path,
-                    failure_dir,
+                    artifact_dir,
                     attempt,
+                    failure,
                     directions,
                     pr_feedback_path,
                 ),
@@ -1972,7 +2177,10 @@ def validate_with_fixes(
                 output_name=f"fix-agent-attempt-{attempt}.log",
                 apply=True,
             )
-    raise AssertionError("unreachable")  # the final attempt returns or raises above
+            # A repair may have changed pwnshop/runtime/flake inputs. Re-enter a fresh dev
+            # shell so the next attempt validates the repaired generation, not a cached one.
+            force_fresh_pwnshop()
+            attempt += 1
 
 
 def extract_json_array(text: str) -> list[dict[str, Any]]:
@@ -3166,8 +3374,21 @@ def resumed_test_log(
     stored = resume_state.get("test_log")
     if stored and pathlib.Path(stored).exists():
         return pathlib.Path(stored)
-    logs = sorted(artifact_dir.glob("pwnshop-test-attempt-*.log"))
-    return logs[-1] if logs else (artifact_dir / "pwnshop-test-skipped.log")
+    logs = [
+        (path, info)
+        for path in artifact_dir.glob("pwnshop-test-attempt-*.log")
+        if (info := validation_log_info(path)) is not None
+    ]
+    if not logs:
+        return artifact_dir / "pwnshop-test-skipped.log"
+    latest_attempt = max(info[0] for _path, info in logs)
+    latest_logs = [item for item in logs if item[1][0] == latest_attempt]
+    # run_tests returns the primary log even when a serial retry proved the failures flaky.
+    # Match that behavior; fall back to serial only if the primary artifact is absent.
+    return next(
+        (path for path, (_attempt, serial) in latest_logs if not serial),
+        latest_logs[0][0],
+    )
 
 
 def existing_pr_url(repo: pathlib.Path) -> Optional[str]:
@@ -3293,7 +3514,14 @@ def latest_run_id(artifact_root_dir: pathlib.Path) -> Optional[str]:
     "--max-messages", type=click.IntRange(1, None), default=20000, show_default=True
 )
 @click.option(
-    "--max-fix-attempts", type=click.IntRange(0, 5), default=2, show_default=True
+    "--max-fix-attempts",
+    type=click.IntRange(0, None),
+    default=None,
+    show_default="unlimited",
+    help=(
+        "Optional safety ceiling for pwnshop repair agents. By default, keep diagnosing, "
+        "repairing, and retrying until validation passes; 0 disables repair."
+    ),
 )
 @click.option(
     "--include-authors",
@@ -3578,6 +3806,7 @@ def feedback_command(
                 "include_threads": include_threads,
                 "include_authors": include_authors,
                 "directions": directions,
+                "max_fix_attempts": max_fix_attempts,
                 "pr_feedback": pr_feedback,
                 "pr_feedback_hours": pr_feedback_hours,
                 "pr_feedback_prs": pr_feedback_prs,
@@ -3651,7 +3880,6 @@ def feedback_command(
             analysis_path=analysis_path,
             directions=directions,
             pr_feedback_path=pr_feedback_path,
-            first_attempt=1,
             fix_attempts=max_fix_attempts,
         )
         mark_phase_done("validation", test_log=str(test_log))
@@ -3697,7 +3925,6 @@ def feedback_command(
                 analysis_path=analysis_path,
                 directions=directions,
                 pr_feedback_path=pr_feedback_path,
-                first_attempt=max_fix_attempts + 2,
                 fix_attempts=max_fix_attempts,
             )
         mark_phase_done("casts", test_log=str(test_log))
