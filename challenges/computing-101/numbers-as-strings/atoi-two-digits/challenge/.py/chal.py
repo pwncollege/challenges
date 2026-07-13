@@ -1,6 +1,7 @@
 import __main__ as checker
 import random
 import subprocess
+import sys
 
 # A shared-library challenge exporting TWO functions, atoi_digit and atoi. The
 # flag is dispensed by this (root) checker only after it independently verifies
@@ -19,7 +20,7 @@ def run_one(so_path, fname, s, *, quiet):
         p = subprocess.run(
             ["/challenge/harness", so_path, fname, s],
             stdout=subprocess.PIPE,
-            stderr=(subprocess.DEVNULL if quiet else None),
+            stderr=subprocess.PIPE,
             timeout=5,
         )
     except subprocess.TimeoutExpired:
@@ -28,9 +29,12 @@ def run_one(so_path, fname, s, *, quiet):
             "Every path has to reach a `ret`; an accidental loop with no way out spins forever."
         )
     if p.returncode != 0:
-        raise AssertionError(
-            f"The harness exited abnormally (status {p.returncode}) on {fname}({s!r})."
-        )
+        stderr = p.stderr.decode("utf-8", errors="replace").strip()
+        details = f"\n\nHarness stderr:\n{stderr}" if stderr else ""
+        raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on {fname}({s!r}).{details}")
+    if not quiet and p.stderr:
+        sys.stderr.write(p.stderr.decode("utf-8", errors="replace"))
+        sys.stderr.flush()
     if len(p.stdout) < 8:
         raise AssertionError("The harness never reported a result --- did your code crash?")
     return int.from_bytes(p.stdout[-8:], "little")

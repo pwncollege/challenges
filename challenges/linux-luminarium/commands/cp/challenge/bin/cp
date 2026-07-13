@@ -32,5 +32,11 @@ then
 	exit 2
 fi
 
+if [ -d "$2" ]
+then
+	fold -s <<< "ERROR: /tmp/hack-the-planet is currently a directory. Remove it with 'rm -r /tmp/hack-the-planet' (or restart the challenge), then run cp again so this path can be created as the destination file."
+	exit 2
+fi
+
 echo "Correct! Performing 'cp $1 $2'".
 /bin/cp "$1" "$2"

@@ -34,4 +34,6 @@ Nice and easy!
 ----
 **NOTE:**
 After this level, we will enable Privileged Mode!
-When you launch a challenge in Privileged Mode (by clicking the `Privileged` button instead of the `Start` button), the resulting container will give you full `sudo` access to allow you to introspect and debug to your heart's content, but of course with a placeholder flag.
+In the workspace, click the closed lock to restart the challenge in Privileged Mode, and click the open lock to return to normal mode.
+The terminal prompt's hostname ends in `~practice` while Privileged Mode is active.
+Privileged Mode gives you full `sudo` access to introspect and debug, but it provides a placeholder flag that cannot be submitted.

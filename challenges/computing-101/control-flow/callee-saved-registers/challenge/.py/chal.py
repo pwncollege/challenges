@@ -8,7 +8,7 @@ give_flag = False
 
 check_runtime_prologue = (
     "Let's load your library and run solve(check_callee_clobbered) --- "
-    "with my values sitting in rbx,r12,r13,r14,r15..."
+    "with my values sitting in rbx, rbp, r12, r13, r14, r15..."
 )
 check_runtime_success = "If you used those registers and then restored them, the flag is printed above!"
 check_runtime_failure = "Hmm, that's not right:\n"
@@ -23,11 +23,17 @@ def check_runtime(so_path):
     print("")
     sys.stdout.flush()
 
-    result = subprocess.run(
-        ["/challenge/harness", so_path],
-        input=flag,
-        timeout=5,
-    )
+    try:
+        result = subprocess.run(
+            ["/challenge/harness", so_path],
+            input=flag,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            "Your solve never returned --- it ran too long and was killed. "
+            "Every path through a function must eventually reach `ret`."
+        )
     print("")
 
     if result.returncode != 0:

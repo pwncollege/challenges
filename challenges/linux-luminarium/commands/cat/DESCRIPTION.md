@@ -2,9 +2,8 @@ One of the most critical Linux commands is `cat`.
 `cat` is most often used for reading out files, like so:
 
 ```console
-hacker@dojo:~$ cat /challenge/DESCRIPTION.md
-One of the most critical Linux commands is `cat`.
-`cat` is most often used for reading out files, like so:
+hacker@dojo:~$ cat /path/to/file
+Hello Hackers!
 ```
 
 `cat` will con**cat**enate (hence the name) multiple files if provided multiple arguments.

@@ -50,7 +50,7 @@ Consider the following:
 hacker@dojo:~$ id
 uid=1000(hacker) gid=1000(hacker) groups=1000(hacker)
 hacker@dojo:~$ ls -l /flag
--r--r----- 1 root root 53 Jul  4 04:47 /flag
+-r--r----- 1 root root ... /flag
 hacker@dojo:~$ cat /flag
 cat: /flag: Permission denied
 hacker@dojo:~$
