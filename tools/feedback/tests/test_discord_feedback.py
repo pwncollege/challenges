@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -388,6 +389,586 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(run_tests.call_args.args[-1], 5)
 
 
+class OperatorFeedbackTests(unittest.TestCase):
+    def test_feedback_is_appended_as_durable_jsonl(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            feedback_path = pathlib.Path(temporary_directory) / "feedback.jsonl"
+
+            first = discord_feedback.append_operator_feedback(
+                feedback_path, "  Prefer the smaller fix.  "
+            )
+            second = discord_feedback.append_operator_feedback(
+                feedback_path, "Keep Unicode: ☃"
+            )
+
+            entries = discord_feedback.load_operator_feedback(feedback_path)
+            self.assertEqual(
+                [entry["id"] for entry in entries], [first["id"], second["id"]]
+            )
+            self.assertEqual(entries[0]["text"], "Prefer the smaller fix.")
+            self.assertEqual(entries[1]["text"], "Keep Unicode: ☃")
+            self.assertEqual(entries[0]["source"], "terminal")
+            self.assertTrue(entries[0]["created_at"].endswith("+00:00"))
+
+            with self.assertRaisesRegex(ValueError, "cannot be empty"):
+                discord_feedback.append_operator_feedback(feedback_path, "   ")
+            with self.assertRaisesRegex(ValueError, "cannot exceed"):
+                discord_feedback.append_operator_feedback(
+                    feedback_path,
+                    "x" * (discord_feedback.OPERATOR_FEEDBACK_MAX_CHARS + 1),
+                )
+
+    def test_pending_feedback_ignores_malformed_and_handled_entries(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            feedback_path = pathlib.Path(temporary_directory) / "feedback.jsonl"
+            handled = discord_feedback.append_operator_feedback(feedback_path, "done")
+            pending = discord_feedback.append_operator_feedback(feedback_path, "new")
+            with feedback_path.open("a") as output:
+                output.write("not-json\n")
+                output.write('{"id": "missing-text"}\n')
+
+            entries = discord_feedback.pending_operator_feedback(
+                feedback_path,
+                {"handled_operator_feedback": [handled["id"]]},
+            )
+
+            self.assertEqual([entry["id"] for entry in entries], [pending["id"]])
+
+    def test_every_agent_prompt_points_to_live_feedback_file(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            artifact_dir = root / "artifacts"
+            artifact_dir.mkdir()
+            streamed_prompt = None
+
+            def stream_agent(_command, **kwargs):
+                nonlocal streamed_prompt
+                streamed_prompt = kwargs["input_text"]
+                return 0
+
+            with (
+                mock.patch.object(
+                    discord_feedback,
+                    "resolve_agent",
+                    return_value=("claude", ["claude"]),
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "stream_command",
+                    side_effect=stream_agent,
+                ),
+            ):
+                discord_feedback.run_agent(
+                    "claude",
+                    "Do the phase.",
+                    repo=root,
+                    artifact_dir=artifact_dir,
+                    output_name="agent.md",
+                )
+
+            self.assertIsNotNone(streamed_prompt)
+            self.assertIn(
+                str(artifact_dir / discord_feedback.OPERATOR_FEEDBACK_FILENAME),
+                streamed_prompt,
+            )
+            self.assertIn(
+                "re-read the file immediately before finalizing", streamed_prompt
+            )
+            self.assertIn("Later entries supersede earlier entries", streamed_prompt)
+
+    def test_reconciliation_leaves_feedback_arriving_mid_agent_pending(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            artifact_dir = root / "artifacts"
+            artifact_dir.mkdir()
+            state_path = artifact_dir / "pr-watch-state.json"
+            state = discord_feedback.load_watch_state(state_path)
+            feedback_path = discord_feedback.operator_feedback_path(artifact_dir)
+            first = discord_feedback.append_operator_feedback(feedback_path, "first")
+            arriving = None
+
+            def run_feedback_agent(*_args, **_kwargs):
+                nonlocal arriving
+                response_path = artifact_dir / "operator-feedback-response-001.md"
+                response_path.write_text("addressed\n")
+                arriving = discord_feedback.append_operator_feedback(
+                    feedback_path, "arrived while the agent ran"
+                )
+                return artifact_dir / "operator-feedback-agent-001.log"
+
+            with mock.patch.object(
+                discord_feedback,
+                "run_agent",
+                side_effect=run_feedback_agent,
+            ):
+                handled, pushed = discord_feedback.address_pending_operator_feedback(
+                    root,
+                    artifact_dir,
+                    "codex",
+                    [],
+                    state,
+                    state_path,
+                )
+
+            self.assertTrue(handled)
+            self.assertFalse(pushed)
+            self.assertEqual(state["handled_operator_feedback"], [first["id"]])
+            self.assertIsNotNone(arriving)
+            pending = discord_feedback.pending_operator_feedback(feedback_path, state)
+            self.assertEqual([entry["id"] for entry in pending], [arriving["id"]])
+            saved = json.loads(state_path.read_text())
+            self.assertEqual(saved["handled_operator_feedback"], [first["id"]])
+
+    def test_failed_operator_feedback_push_keeps_batch_pending(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            artifact_dir = root / "artifacts"
+            artifact_dir.mkdir()
+            state_path = artifact_dir / "pr-watch-state.json"
+            state = discord_feedback.load_watch_state(state_path)
+            feedback_path = discord_feedback.operator_feedback_path(artifact_dir)
+            entry = discord_feedback.append_operator_feedback(feedback_path, "fix it")
+            push_error = subprocess.CalledProcessError(1, ["git", "push"])
+
+            with (
+                mock.patch.object(discord_feedback, "run_agent"),
+                mock.patch.object(
+                    discord_feedback,
+                    "commit_and_push",
+                    side_effect=push_error,
+                ),
+            ):
+                with self.assertRaisesRegex(OSError, "could not commit or push"):
+                    discord_feedback.address_pending_operator_feedback(
+                        root,
+                        artifact_dir,
+                        "codex",
+                        [],
+                        state,
+                        state_path,
+                        pr_url="https://github.com/pwncollege/challenges/pull/123",
+                        commit_changes=True,
+                    )
+
+            self.assertNotIn(entry["id"], state["handled_operator_feedback"])
+            pending = discord_feedback.pending_operator_feedback(feedback_path, state)
+            self.assertEqual([item["id"] for item in pending], [entry["id"]])
+            saved = json.loads(state_path.read_text())
+            self.assertEqual(saved["handled_operator_feedback"], [])
+
+    def test_watcher_backs_off_after_failed_operator_feedback_push(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            artifact_dir = repo / "artifacts"
+            artifact_dir.mkdir()
+            discord_feedback.append_operator_feedback(
+                discord_feedback.operator_feedback_path(artifact_dir),
+                "fix it",
+            )
+            push_error = subprocess.CalledProcessError(1, ["git", "push"])
+            pull_states = [
+                {"state": "open", "merged_at": None},
+                {"state": "closed", "merged_at": "2026-07-13T00:00:00Z"},
+            ]
+
+            with (
+                mock.patch.object(
+                    discord_feedback,
+                    "github_repo_slug",
+                    return_value=("pwncollege", "challenges"),
+                ),
+                mock.patch.object(discord_feedback, "parse_pr_number", return_value=123),
+                mock.patch.object(
+                    discord_feedback.GitHubAPI,
+                    "from_environment",
+                    return_value=object(),
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "get_pull_request",
+                    side_effect=pull_states,
+                ) as get_pull_request,
+                mock.patch.object(discord_feedback, "run_agent") as run_agent,
+                mock.patch.object(
+                    discord_feedback,
+                    "commit_and_push",
+                    side_effect=push_error,
+                ),
+            ):
+                started = time.monotonic()
+                discord_feedback.watch_pull_request(
+                    repo,
+                    artifact_dir,
+                    "https://github.com/pwncollege/challenges/pull/123",
+                    "codex",
+                    [],
+                    0.05,
+                    3,
+                )
+                elapsed = time.monotonic() - started
+
+            self.assertGreaterEqual(elapsed, 0.04)
+            run_agent.assert_called_once()
+            self.assertEqual(get_pull_request.call_count, 2)
+
+    def test_feedback_wakes_waiter_without_waiting_for_poll_interval(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            feedback_path = pathlib.Path(temporary_directory) / "feedback.jsonl"
+
+            def submit_feedback():
+                time.sleep(0.05)
+                discord_feedback.append_operator_feedback(feedback_path, "wake up")
+
+            thread = threading.Thread(target=submit_feedback)
+            started = time.monotonic()
+            thread.start()
+            try:
+                received = discord_feedback.wait_for_operator_feedback(
+                    feedback_path,
+                    {"handled_operator_feedback": []},
+                    2,
+                )
+            finally:
+                thread.join()
+
+            self.assertTrue(received)
+            self.assertLess(time.monotonic() - started, 1)
+
+    def test_tui_auto_detection_requires_an_interactive_parent(self):
+        with (
+            mock.patch.object(sys.stdin, "isatty", return_value=True),
+            mock.patch.object(sys.stdout, "isatty", return_value=True),
+            mock.patch.dict(os.environ, {"TERM": "xterm-256color"}, clear=False),
+        ):
+            self.assertTrue(discord_feedback.should_launch_terminal_ui(True))
+            self.assertFalse(discord_feedback.should_launch_terminal_ui(False))
+            with mock.patch.dict(
+                os.environ,
+                {discord_feedback.TUI_CHILD_ENV: "1"},
+                clear=False,
+            ):
+                self.assertFalse(discord_feedback.should_launch_terminal_ui(True))
+
+    def test_cli_routes_interactive_run_through_tui_parent(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            now = datetime.datetime(2026, 7, 13, 1, 2, 3, tzinfo=datetime.timezone.utc)
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "utc_now", return_value=now),
+                mock.patch.object(
+                    discord_feedback,
+                    "should_launch_terminal_ui",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "run_terminal_ui",
+                    return_value=(0, repo / "run-ui.log"),
+                ) as run_terminal_ui,
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    ["--fetch-only"],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            run_terminal_ui.assert_called_once()
+            self.assertEqual(
+                run_terminal_ui.call_args.kwargs["run_id"], "20260713-010203"
+            )
+            self.assertTrue(
+                (
+                    repo
+                    / ".discord-feedback"
+                    / "20260713-010203"
+                    / discord_feedback.OPERATOR_FEEDBACK_FILENAME
+                ).is_file()
+            )
+            self.assertIn("discord-feedback exited with code 0", result.output)
+
+    def test_cli_tui_failure_keeps_resume_command_visible(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            now = datetime.datetime(
+                2026, 7, 13, 1, 2, 3, tzinfo=datetime.timezone.utc
+            )
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "utc_now", return_value=now),
+                mock.patch.object(
+                    discord_feedback,
+                    "should_launch_terminal_ui",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "run_terminal_ui",
+                    return_value=(130, repo / "run-ui.log"),
+                ),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    ["--fetch-only"],
+                )
+
+            self.assertEqual(result.exit_code, 130, result.output)
+            self.assertIn("--resume 20260713-010203", result.output)
+            self.assertIn("Every completed phase is checkpointed", result.output)
+
+    def test_feedback_arriving_during_validation_restarts_downstream_phases(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            run_id = "20260713-010203"
+            artifact_dir = repo / ".discord-feedback" / run_id
+            artifact_dir.mkdir(parents=True)
+            (artifact_dir / "analysis.md").write_text("analysis complete\n")
+            (artifact_dir / "implementation-notes.md").write_text("implemented\n")
+            (artifact_dir / "resume-state.json").write_text(
+                json.dumps({"completed_phases": ["analysis", "implementation"]})
+                + "\n"
+            )
+
+            invalidation_seen_by_agent = False
+
+            def write_agent_output(*_args, **kwargs):
+                nonlocal invalidation_seen_by_agent
+                if kwargs["output_name"].startswith("operator-feedback-agent-"):
+                    checkpoint = json.loads(
+                        (artifact_dir / "resume-state.json").read_text()
+                    )
+                    invalidation_seen_by_agent = (
+                        "validation" not in checkpoint["completed_phases"]
+                    )
+                output_path = artifact_dir / kwargs["output_name"]
+                output_path.write_text("# Summary\n\nValidated changes.\n")
+                return output_path
+
+            validation_log = artifact_dir / "pwnshop-test-attempt-1.log"
+            validation_calls = 0
+
+            def validate_phase(*_args, **_kwargs):
+                nonlocal validation_calls
+                validation_calls += 1
+                if validation_calls == 1:
+                    discord_feedback.append_operator_feedback(
+                        discord_feedback.operator_feedback_path(artifact_dir),
+                        "Feedback submitted during validation.",
+                    )
+                return validation_log
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "prepare_branch"),
+                mock.patch.object(
+                    discord_feedback,
+                    "validate_with_fixes",
+                    side_effect=validate_phase,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "changed_challenges_since",
+                    return_value=[],
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "run_agent",
+                    side_effect=write_agent_output,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "pr_body_is_usable",
+                    return_value=True,
+                ),
+                mock.patch.object(discord_feedback, "git_output", return_value=""),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    ["--resume", run_id, "--apply", "--skip-casts"],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(validation_calls, 2)
+            self.assertTrue(invalidation_seen_by_agent)
+            self.assertIn(
+                "Direct operator feedback invalidated completed phase(s): validation",
+                result.output,
+            )
+            state = json.loads((artifact_dir / "resume-state.json").read_text())
+            self.assertIn("validation", state["completed_phases"])
+            self.assertIn("pr-body", state["completed_phases"])
+
+    def test_resumed_existing_pr_pushes_reconciled_operator_feedback(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            run_id = "20260713-010203"
+            artifact_dir = repo / ".discord-feedback" / run_id
+            artifact_dir.mkdir(parents=True)
+            validation_log = artifact_dir / "pwnshop-test-attempt-1.log"
+            validation_log.write_text("passed\n")
+            (artifact_dir / "analysis.md").write_text("analysis complete\n")
+            (artifact_dir / "implementation-notes.md").write_text("implemented\n")
+            (artifact_dir / "pr-body.md").write_text("old body\n")
+            (artifact_dir / "pr-url.txt").write_text(
+                "https://github.com/pwncollege/challenges/pull/123\n"
+            )
+            (artifact_dir / "resume-state.json").write_text(
+                json.dumps(
+                    {
+                        "completed_phases": [
+                            "scrape",
+                            "analysis",
+                            "implementation",
+                            "validation",
+                            "casts",
+                            "pr-body",
+                            "create-pr",
+                        ],
+                        "test_log": str(validation_log),
+                    }
+                )
+                + "\n"
+            )
+            feedback = discord_feedback.append_operator_feedback(
+                discord_feedback.operator_feedback_path(artifact_dir),
+                "Use the direct operator correction.",
+            )
+
+            def write_agent_output(*_args, **kwargs):
+                output_path = artifact_dir / kwargs["output_name"]
+                output_path.write_text("# Summary\n\nValidated changes.\n")
+                return output_path
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "prepare_branch"),
+                mock.patch.object(
+                    discord_feedback,
+                    "validate_with_fixes",
+                    return_value=validation_log,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "changed_challenges_since",
+                    return_value=[],
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "run_agent",
+                    side_effect=write_agent_output,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "pr_body_is_usable",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "commit_and_push",
+                    return_value=True,
+                ) as commit_and_push,
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    [
+                        "--resume",
+                        run_id,
+                        "--apply",
+                        "--create-pr",
+                        "--no-watch-pr",
+                        "--skip-casts",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            commit_and_push.assert_called_once_with(repo, "Address operator feedback")
+            self.assertIn("Pushed resumed feedback changes", result.output)
+            watch_state = json.loads(
+                (artifact_dir / "pr-watch-state.json").read_text()
+            )
+            self.assertIn(feedback["id"], watch_state["handled_operator_feedback"])
+
+    def test_existing_pr_recovery_pushes_a_clean_branch_ahead_of_origin(self):
+        repo = pathlib.Path("/repo")
+
+        def git_output(arguments, _repo):
+            if arguments == ["branch", "--show-current"]:
+                return "feedback/run"
+            if arguments == [
+                "rev-list",
+                "--count",
+                "refs/remotes/origin/feedback/run..HEAD",
+            ]:
+                return "1"
+            self.fail(f"unexpected git_output arguments: {arguments}")
+
+        succeeded = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        with (
+            mock.patch.object(
+                discord_feedback,
+                "git_output",
+                side_effect=git_output,
+            ),
+            mock.patch.object(
+                discord_feedback.subprocess,
+                "run",
+                side_effect=[succeeded, succeeded],
+            ) as run,
+        ):
+            result = discord_feedback.push_commits_ahead_of_origin(repo)
+
+        self.assertTrue(result)
+        self.assertEqual(
+            run.call_args_list[-1].args[0],
+            ["git", "push", "-u", "origin", "HEAD"],
+        )
+
+    def test_existing_pr_recovery_skips_an_up_to_date_branch(self):
+        repo = pathlib.Path("/repo")
+
+        def git_output(arguments, _repo):
+            outputs = {
+                ("branch", "--show-current"): "feedback/run",
+                (
+                    "rev-list",
+                    "--count",
+                    "refs/remotes/origin/feedback/run..HEAD",
+                ): "0",
+            }
+            return outputs[tuple(arguments)]
+
+        remote_exists = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        with (
+            mock.patch.object(
+                discord_feedback,
+                "git_output",
+                side_effect=git_output,
+            ),
+            mock.patch.object(
+                discord_feedback.subprocess,
+                "run",
+                return_value=remote_exists,
+            ) as run,
+        ):
+            result = discord_feedback.push_commits_ahead_of_origin(repo)
+
+        self.assertFalse(result)
+        run.assert_called_once()
+
+    def test_commit_and_push_still_rejects_a_clean_new_branch(self):
+        repo = pathlib.Path("/repo")
+        with (
+            mock.patch.object(discord_feedback, "git_output", return_value=""),
+            mock.patch.object(discord_feedback.subprocess, "run") as run,
+        ):
+            result = discord_feedback.commit_and_push(repo, "No changes")
+
+        self.assertFalse(result)
+        run.assert_not_called()
+
+
 class StreamCommandTests(unittest.TestCase):
     @staticmethod
     def process_is_live(pid):
@@ -419,6 +1000,40 @@ class StreamCommandTests(unittest.TestCase):
             log = log_path.read_text()
             self.assertIn("started", log)
             self.assertIn("validation timed out after 0.05s", log)
+
+    def test_tui_teardown_kills_descendants_after_leader_exits(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            pid_path = root / "grandchild.pid"
+            leader_code = "\n".join(
+                (
+                    "import pathlib, subprocess, sys",
+                    "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
+                    "pathlib.Path(sys.argv[1]).write_text(str(child.pid))",
+                )
+            )
+            grandchild_pid = None
+            try:
+                process = subprocess.Popen(
+                    [sys.executable, "-c", leader_code, str(pid_path)],
+                    start_new_session=True,
+                )
+                process.wait(timeout=5)
+                grandchild_pid = int(pid_path.read_text())
+                self.assertTrue(self.process_is_live(grandchild_pid))
+
+                discord_feedback.stop_terminal_ui_child(process)
+
+                deadline = time.monotonic() + 2
+                while self.process_is_live(grandchild_pid) and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertFalse(self.process_is_live(grandchild_pid))
+            finally:
+                if grandchild_pid is not None and self.process_is_live(grandchild_pid):
+                    try:
+                        os.kill(grandchild_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
 
     def test_exited_leader_does_not_leave_live_grandchild(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

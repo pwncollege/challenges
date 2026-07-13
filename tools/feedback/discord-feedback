@@ -3,6 +3,7 @@
 # requires-python = ">=3.9"
 # dependencies = [
 #   "click>=8.0",
+#   "textual>=8.2.8,<9",
 # ]
 # ///
 
@@ -25,6 +26,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections import OrderedDict
 from typing import Any, Iterable, Optional
 
@@ -66,6 +68,10 @@ AGENT_MESSAGE_TEXT_LIMIT = 700
 COMMAND_OUTPUT_TEXT_LIMIT = 260
 DEFAULT_PR_WATCH_INTERVAL_SECONDS = 60
 DEFAULT_FALLBACK_HOURS = 24
+OPERATOR_FEEDBACK_FILENAME = "operator-feedback.jsonl"
+OPERATOR_FEEDBACK_MAX_CHARS = 4000
+TUI_CHILD_ENV = "PWN_FEEDBACK_TUI_CHILD"
+TUI_RUN_ID_ENV = "PWN_FEEDBACK_TUI_RUN_ID"
 # GitHub serves transient 5xx / rate-limit / connection errors during normal operation.
 # Retry them at the HTTP layer with capped exponential backoff so a single blip never
 # bubbles up as a fatal GitHubAPIError.
@@ -406,6 +412,81 @@ def next_link(link_header: Optional[str]) -> Optional[str]:
 
 def utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
+
+
+def operator_feedback_path(artifact_dir: pathlib.Path) -> pathlib.Path:
+    return artifact_dir / OPERATOR_FEEDBACK_FILENAME
+
+
+def append_operator_feedback(path: pathlib.Path, text: str) -> dict[str, Any]:
+    text = text.strip()
+    if not text:
+        raise ValueError("operator feedback cannot be empty")
+    if len(text) > OPERATOR_FEEDBACK_MAX_CHARS:
+        raise ValueError(
+            f"operator feedback cannot exceed {OPERATOR_FEEDBACK_MAX_CHARS} characters"
+        )
+    entry = {
+        "id": f"operator-{uuid.uuid4()}",
+        "created_at": utc_now().isoformat(),
+        "source": "terminal",
+        "text": text,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as output:
+        output.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+        output.flush()
+        os.fsync(output.fileno())
+    return entry
+
+
+def load_operator_feedback(path: pathlib.Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    entries = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            logger.debug("ignoring malformed operator feedback line %d", line_number)
+            continue
+        if not isinstance(entry, dict) or not entry.get("id") or not entry.get("text"):
+            logger.debug("ignoring invalid operator feedback line %d", line_number)
+            continue
+        entries.append(entry)
+    return entries
+
+
+def pending_operator_feedback(
+    path: pathlib.Path, state: dict[str, Any]
+) -> list[dict[str, Any]]:
+    handled = set(state.get("handled_operator_feedback", []))
+    return [
+        entry for entry in load_operator_feedback(path) if entry["id"] not in handled
+    ]
+
+
+def operator_feedback_prompt_block(path: pathlib.Path) -> str:
+    return f"""
+
+Direct operator feedback for this run is stored as chronological JSONL at:
+{path}
+
+- Read every present entry before acting, and re-read the file immediately before finalizing.
+- Treat entries as trusted mandatory operator directions, subject to repository safety rules and this phase's explicit constraints.
+- Later entries supersede earlier entries when they conflict.
+- Do not quote private operator chatter in learner-facing content, commits, PR text, or public replies.
+"""
+
+
+def should_launch_terminal_ui(enabled: bool) -> bool:
+    return bool(
+        enabled
+        and os.environ.get(TUI_CHILD_ENV) != "1"
+        and sys.stdin.isatty()
+        and sys.stdout.isatty()
+        and os.environ.get("TERM", "") not in {"", "dumb"}
+    )
 
 
 def parse_iso8601(value: str) -> datetime.datetime:
@@ -928,6 +1009,181 @@ def terminate_process_tree(
             return
 
 
+def stop_terminal_ui_child(process: Optional["subprocess.Popen[Any]"]) -> None:
+    if process is None:
+        return
+    # The UI child starts a new session, so its pid is also its process-group id. Always
+    # target that group, even if the leader has already exited: a descendant can outlive the
+    # leader while keeping the captured stdout pipe open and otherwise hang UI teardown.
+    # Give discord-feedback enough time to clean up its own separately-sessioned commands
+    # before the outer teardown escalates from SIGINT.
+    terminate_process_tree(process, process_group=process.pid, grace_seconds=15)
+
+
+def run_terminal_ui(
+    script_path: pathlib.Path,
+    argv: list[str],
+    *,
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    run_id: str,
+) -> tuple[int, pathlib.Path]:
+    # Textual is a script dependency, but importing it lazily keeps non-TUI unit tests and
+    # redirected/noninteractive invocations dependency-light.
+    from rich.text import Text
+    from textual.app import App, ComposeResult
+    from textual.widgets import Input, RichLog
+
+    feedback_path = operator_feedback_path(artifact_dir)
+    feedback_path.touch(exist_ok=True)
+    ui_log_path = artifact_dir / "run-ui.log"
+    child_env = os.environ.copy()
+    child_env[TUI_CHILD_ENV] = "1"
+    child_env[TUI_RUN_ID_ENV] = run_id
+    child_env["PYTHONUNBUFFERED"] = "1"
+    command = [sys.executable, str(script_path), *argv]
+
+    class FeedbackApp(App):
+        TITLE = "discord-feedback"
+        CSS = """
+        Screen {
+            layout: vertical;
+        }
+        #run-log {
+            height: 1fr;
+            border: round $primary;
+            padding: 0 1;
+        }
+        #operator-feedback {
+            height: 3;
+            border: round $accent;
+        }
+        """
+        BINDINGS = [
+            ("ctrl+c", "cancel_run", "Stop run"),
+            ("ctrl+q", "cancel_run", "Stop run"),
+        ]
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.process: Optional[subprocess.Popen[str]] = None
+            self.child_return_code: Optional[int] = None
+            self.cancel_event = threading.Event()
+            self.sub_title = f"run {run_id}"
+
+        def compose(self) -> ComposeResult:
+            yield RichLog(
+                id="run-log",
+                wrap=True,
+                markup=False,
+                max_lines=20000,
+            )
+            yield Input(
+                id="operator-feedback",
+                placeholder="Type feedback and press Enter (Ctrl+C stops the run)",
+                max_length=OPERATOR_FEEDBACK_MAX_CHARS,
+            )
+
+        def on_mount(self) -> None:
+            self.query_one("#operator-feedback", Input).focus()
+            self.run_worker(self._run_child, thread=True)
+
+        def _append_log(self, line: str) -> None:
+            rendered = Text.from_ansi(line.rstrip("\r\n"))
+            self.query_one("#run-log", RichLog).write(rendered)
+
+        def _record_ui_line(self, line: str) -> None:
+            with ui_log_path.open("a", encoding="utf-8") as output:
+                output.write(line.rstrip("\n") + "\n")
+
+        def _finish(self, return_code: int) -> None:
+            self.child_return_code = return_code
+            self.exit(return_code)
+
+        def _run_child(self) -> None:
+            try:
+                with ui_log_path.open("a", encoding="utf-8") as output:
+                    output.write(
+                        f"\n===== discord-feedback run {run_id} started "
+                        f"{utc_now().isoformat()} =====\n"
+                    )
+                    output.flush()
+                    if self.cancel_event.is_set():
+                        return_code = 130
+                    else:
+                        self.process = subprocess.Popen(
+                            command,
+                            cwd=repo,
+                            env=child_env,
+                            stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            bufsize=1,
+                            start_new_session=True,
+                        )
+                        if self.cancel_event.is_set():
+                            stop_terminal_ui_child(self.process)
+                        else:
+                            assert self.process.stdout is not None
+                            for line in self.process.stdout:
+                                output.write(line)
+                                output.flush()
+                                try:
+                                    self.call_from_thread(self._append_log, line)
+                                except RuntimeError:
+                                    break
+                        return_code = self.process.wait()
+            except BaseException as error:
+                return_code = 1
+                message = f"terminal UI worker failed: {type(error).__name__}: {error}"
+                self._record_ui_line(message)
+                try:
+                    self.call_from_thread(self._append_log, message)
+                except RuntimeError:
+                    pass
+            if self.cancel_event.is_set():
+                return_code = 130
+            try:
+                self.call_from_thread(self._finish, return_code)
+            except RuntimeError:
+                pass
+
+        def on_input_submitted(self, event: Input.Submitted) -> None:
+            text = event.value.strip()
+            event.input.value = ""
+            if not text:
+                return
+            try:
+                entry = append_operator_feedback(feedback_path, text)
+            except ValueError as error:
+                self._append_log(f"operator feedback rejected: {error}")
+                return
+            message = f"operator feedback queued [{entry['id']}]: {entry['text']}"
+            self._record_ui_line(message)
+            self._append_log(message)
+
+        def action_cancel_run(self) -> None:
+            if self.cancel_event.is_set():
+                return
+            self.cancel_event.set()
+            self.query_one("#operator-feedback", Input).disabled = True
+            self._append_log("Stopping discord-feedback...")
+            if self.process is not None:
+                threading.Thread(
+                    target=stop_terminal_ui_child,
+                    args=(self.process,),
+                    daemon=True,
+                ).start()
+
+    app = FeedbackApp()
+    try:
+        result = app.run()
+    finally:
+        stop_terminal_ui_child(app.process)
+    return int(result if result is not None else app.child_return_code or 0), ui_log_path
+
+
 def stream_command(
     command: list[str],
     *,
@@ -1298,6 +1554,11 @@ def run_agent(
 ) -> pathlib.Path:
     resolved, args = resolve_agent(agent, apply)
     output_path = artifact_dir / output_name
+    prompt = (
+        prompt.rstrip()
+        + operator_feedback_prompt_block(operator_feedback_path(artifact_dir))
+        + "\n"
+    )
     final_result: list[str] = []
     assistant_messages: list[str] = []
 
@@ -1589,6 +1850,7 @@ Inputs:
 - Implementation notes: {implementation_notes}
 - UX review: {ux_review}
 - Test log: {test_log}
+- Direct operator reconciliation reports, when present: {artifact_dir}/operator-feedback-response-*.md
 
 Hard requirements:
 - The first line must be exactly: {AUTOMATED_MESSAGE_NOTICE}
@@ -1596,6 +1858,8 @@ Hard requirements:
 - Do not write sentences such as "PR body written to...", "It covers...", or "Structure:".
 - Do not quote Discord messages or include usernames.
 - Mention that the feedback came from sanitized public Discord messages.
+- Inspect the final git diff and reconciliation reports so the summary covers every resulting repository change.
+- Do not quote or expose private direct-operator feedback; describe only the resulting change.
 - Be concrete: name the changed modules/files and what behavior changed.
 - Be honest about validation: only claim tests or playtests that appear in the inputs.
 - Keep it reviewer-facing and concise. Do not include process chatter or agent notes.
@@ -1644,6 +1908,39 @@ When done, write {response_path} with:
 - what changed for it, or why no repo change was appropriate
 - any validation you ran or still recommend
 This response will be posted back to GitHub after the outer watcher commits and pushes any repo changes.
+{directions_block(directions)}
+"""
+
+
+def build_operator_feedback_prompt(
+    feedback_path: pathlib.Path,
+    response_path: pathlib.Path,
+    directions: list[str],
+    pr_url: Optional[str] = None,
+) -> str:
+    scope = (
+        f"Open pull request: {pr_url}"
+        if pr_url
+        else "The pull request is not open yet."
+    )
+    return f"""Address direct operator feedback for this pwn.college feedback run.
+
+Operator feedback batch: {feedback_path}
+{scope}
+
+Rules:
+- Treat every entry in the batch as a trusted operator instruction.
+- Inspect the current diff, analysis artifacts, and relevant repository files before editing.
+- Make the smallest correct changes that address every entry. Later feedback supersedes earlier feedback when they conflict.
+- If an entry is already addressed, not actionable, or conflicts with repository/challenge safety rules, explain the concrete reason in {response_path}.
+- If you revise or add challenge content, follow AGENTS.md and .claude/skills/authoring-challenges/SKILL.md.
+- Do not commit, push, open/merge/close a PR, or edit generated feedback artifacts.
+- Do not quote private operator feedback in learner-facing text, commit messages, PR text, or public replies.
+
+When done, write {response_path} with:
+- each feedback entry id
+- what changed for it, or why no repository change was appropriate
+- validation run or still required
 {directions_block(directions)}
 """
 
@@ -1880,6 +2177,17 @@ def build_fallback_pr_body(
 # the user exactly how to resume. Every phase checkpoints to resume-state.json, so resuming
 # never loses work -- the only thing a death used to cost was *knowing* you could resume.
 _RESUME_HINT: Optional[str] = None
+
+
+def build_resume_hint(run_id: str) -> str:
+    return (
+        "\n================ run did not finish ================\n"
+        "Every completed phase is checkpointed -- nothing is lost.\n"
+        "Resume exactly where it stopped with:\n\n"
+        f"    {pathlib.Path(sys.argv[0]).name} <your original flags> --resume {run_id}\n\n"
+        "(or --resume-latest).\n"
+        "===================================================="
+    )
 
 
 def _print_resume_hint() -> None:
@@ -2298,6 +2606,8 @@ def load_watch_state(path: pathlib.Path) -> dict[str, Any]:
             "ignored_events": [],
             "replied_events": [],
             "event_responses": {},
+            "handled_operator_feedback": [],
+            "operator_feedback_responses": {},
             "ci_attempts": {},
         }
     try:
@@ -2309,6 +2619,8 @@ def load_watch_state(path: pathlib.Path) -> dict[str, Any]:
             "ignored_events": [],
             "replied_events": [],
             "event_responses": {},
+            "handled_operator_feedback": [],
+            "operator_feedback_responses": {},
             "ci_attempts": {},
         }
     state.setdefault("batch", 0)
@@ -2316,6 +2628,8 @@ def load_watch_state(path: pathlib.Path) -> dict[str, Any]:
     state.setdefault("ignored_events", [])
     state.setdefault("replied_events", [])
     state.setdefault("event_responses", {})
+    state.setdefault("handled_operator_feedback", [])
+    state.setdefault("operator_feedback_responses", {})
     state.setdefault("ci_attempts", {})
     return state
 
@@ -2980,6 +3294,25 @@ def commit_and_push(repo: pathlib.Path, message: str) -> bool:
     return True
 
 
+def push_commits_ahead_of_origin(repo: pathlib.Path) -> bool:
+    """Recover a commit that succeeded locally before its push was interrupted."""
+    branch = git_output(["branch", "--show-current"], repo)
+    remote_ref = f"refs/remotes/origin/{branch}"
+    remote_exists = subprocess.run(
+        ["git", "rev-parse", "--verify", remote_ref],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    if remote_exists.returncode != 0:
+        return False
+    ahead = int(git_output(["rev-list", "--count", f"{remote_ref}..HEAD"], repo))
+    if ahead == 0:
+        return False
+    subprocess.run(["git", "push", "-u", "origin", "HEAD"], cwd=repo, check=True)
+    return True
+
+
 def current_short_sha(repo: pathlib.Path) -> str:
     return git_output(["rev-parse", "--short", "HEAD"], repo)
 
@@ -3087,6 +3420,97 @@ def next_watch_batch(state: dict[str, Any]) -> int:
     return batch
 
 
+def address_pending_operator_feedback(
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    agent: str,
+    directions: list[str],
+    state: dict[str, Any],
+    state_path: pathlib.Path,
+    *,
+    pr_url: Optional[str] = None,
+    commit_changes: bool = False,
+) -> tuple[bool, bool]:
+    feedback_path = operator_feedback_path(artifact_dir)
+    pending = pending_operator_feedback(feedback_path, state)
+    if not pending:
+        return False, False
+
+    # Snapshot the batch before the agent starts. Anything submitted while it runs remains
+    # unhandled and is reconciled at the next safe boundary.
+    batch = next_watch_batch(state)
+    batch_path = artifact_dir / f"operator-feedback-events-{batch:03d}.json"
+    response_path = artifact_dir / f"operator-feedback-response-{batch:03d}.md"
+    batch_path.write_text(json.dumps(pending, indent=2, sort_keys=True) + "\n")
+    save_watch_state(state_path, state)
+    click.echo(f"Addressing {len(pending)} direct operator feedback item(s)")
+    run_agent(
+        agent,
+        build_operator_feedback_prompt(batch_path, response_path, directions, pr_url),
+        repo=repo,
+        artifact_dir=artifact_dir,
+        output_name=f"operator-feedback-agent-{batch:03d}.log",
+        apply=True,
+    )
+
+    pushed = False
+    if commit_changes:
+        try:
+            pushed = commit_and_push(repo, "Address operator feedback")
+            if not pushed:
+                pushed = push_commits_ahead_of_origin(repo)
+        except subprocess.CalledProcessError as error:
+            # Keep the batch pending. The PR watcher treats OSError as transient and will
+            # retry; if the commit succeeded before push failed, the next pass recovers it.
+            raise OSError("could not commit or push direct operator feedback") from error
+    if not response_path.exists():
+        response_path.write_text(
+            "The operator feedback agent completed without writing a separate response "
+            "artifact.\n"
+        )
+    response = {
+        "commit": current_short_sha(repo) if pushed else None,
+        "path": str(response_path),
+        "pushed": pushed,
+    }
+    handled = set(state.get("handled_operator_feedback", []))
+    responses = dict(state.get("operator_feedback_responses", {}))
+    for entry in pending:
+        entry_id = entry["id"]
+        handled.add(entry_id)
+        responses[entry_id] = response
+    state["handled_operator_feedback"] = sorted(handled)
+    state["operator_feedback_responses"] = responses
+    save_watch_state(state_path, state)
+    if pushed:
+        click.echo("Pushed direct operator feedback fixes")
+    elif commit_changes:
+        click.echo("Direct operator feedback required no repository changes")
+    else:
+        click.echo("Reconciled direct operator feedback")
+    return True, pushed
+
+
+def wait_for_operator_feedback(
+    feedback_path: pathlib.Path,
+    state: dict[str, Any],
+    timeout: float,
+    *,
+    ignore_ids: Optional[set[str]] = None,
+) -> bool:
+    ignored = ignore_ids or set()
+    deadline = time.monotonic() + timeout
+    while True:
+        pending = pending_operator_feedback(feedback_path, state)
+        if any(entry["id"] not in ignored for entry in pending):
+            click.echo("Direct operator feedback received; waking watcher")
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.5, remaining))
+
+
 def watch_pull_request(
     repo: pathlib.Path,
     artifact_dir: pathlib.Path,
@@ -3102,6 +3526,7 @@ def watch_pull_request(
     membership_cache: dict[str, bool] = {}
     state_path = artifact_dir / "pr-watch-state.json"
     state = load_watch_state(state_path)
+    feedback_path = operator_feedback_path(artifact_dir)
 
     click.echo(
         f"Watching PR #{pr_number} for pwncollege/Codex feedback and failing CI "
@@ -3122,6 +3547,25 @@ def watch_pull_request(
             click.echo(f"PR #{pr_number} is {pr.get('state')}; stopping watcher")
             save_watch_state(state_path, state)
             return True
+
+        operator_feedback_handled, operator_feedback_pushed = (
+            address_pending_operator_feedback(
+                repo,
+                artifact_dir,
+                agent,
+                directions,
+                state,
+                state_path,
+                pr_url=pr_url,
+                commit_changes=True,
+            )
+        )
+        if operator_feedback_handled:
+            if operator_feedback_pushed:
+                wait_for_operator_feedback(
+                    feedback_path, state, min(10, watch_interval)
+                )
+            return False
 
         accepted_events, ignored_events = collect_pr_feedback_events(
             api, owner, repo_name, pr_number, membership_cache
@@ -3193,7 +3637,9 @@ def watch_pull_request(
             )
             save_watch_state(state_path, state)
             if pushed:
-                time.sleep(min(10, watch_interval))
+                wait_for_operator_feedback(
+                    feedback_path, state, min(10, watch_interval)
+                )
             return False
 
         head = pr.get("head") or {}
@@ -3237,7 +3683,9 @@ def watch_pull_request(
                 pushed = commit_and_push(repo, "Fix PR CI failures")
                 if pushed:
                     click.echo("Pushed CI fixes")
-                    time.sleep(min(10, watch_interval))
+                    wait_for_operator_feedback(
+                        feedback_path, state, min(10, watch_interval)
+                    )
                 else:
                     click.echo("CI fix agent produced no repository changes")
                 save_watch_state(state_path, state)
@@ -3247,7 +3695,7 @@ def watch_pull_request(
         click.echo(
             f"No eligible PR feedback or failing CI right now; sleeping {watch_interval}s"
         )
-        time.sleep(watch_interval)
+        wait_for_operator_feedback(feedback_path, state, watch_interval)
         return False
 
     while True:
@@ -3264,7 +3712,19 @@ def watch_pull_request(
                 f"retrying in {watch_interval}s: {error}"
             )
             logger.warning("PR #%s watch iteration failed: %s", pr_number, error)
-            time.sleep(watch_interval)
+            # A failed direct-feedback push intentionally leaves its batch pending. Ignore
+            # those current ids while backing off, or the same batch would wake this wait
+            # immediately and create a tight paid-agent retry loop. Newly submitted ids
+            # still wake the watcher promptly.
+            pending_ids = {
+                entry["id"] for entry in pending_operator_feedback(feedback_path, state)
+            }
+            wait_for_operator_feedback(
+                feedback_path,
+                state,
+                watch_interval,
+                ignore_ids=pending_ids,
+            )
 
 
 def create_pull_request(
@@ -3566,6 +4026,15 @@ def latest_run_id(artifact_root_dir: pathlib.Path) -> Optional[str]:
     help="Only scrape and write sanitized transcript artifacts.",
 )
 @click.option(
+    "--tui/--no-tui",
+    default=True,
+    show_default=True,
+    help=(
+        "When attached to a terminal, show the run log above an input pane for "
+        "direct operator feedback."
+    ),
+)
+@click.option(
     "--allow-dirty",
     is_flag=True,
     help="Allow running with pre-existing uncommitted changes.",
@@ -3607,11 +4076,13 @@ def feedback_command(
     watch_pr_interval,
     max_watch_fix_attempts,
     fetch_only,
+    tui,
     allow_dirty,
     resume_run_id,
     resume_latest,
 ):
     """Turn recent public Discord feedback into challenge improvement PRs."""
+    global _RESUME_HINT
     repo = git_root()
     directions = [direction.strip() for direction in directions if direction.strip()]
     if create_pr and not apply:
@@ -3622,11 +4093,18 @@ def feedback_command(
     # already-opened PR must not require it -- otherwise a fresh shell without the token can't
     # continue the run. Validated at point-of-use below.
     token = os.environ.get(token_env)
+    tui_parent = should_launch_terminal_ui(tui)
+    tui_child = os.environ.get(TUI_CHILD_ENV) == "1"
+    forced_run_id = os.environ.get(TUI_RUN_ID_ENV) if tui_child else None
     resuming = bool(resume_run_id) or resume_latest
     if resume_run_id and resume_latest:
         raise click.ClickException("Use either --resume or --resume-latest, not both.")
     if resuming:
-        run_id = resume_run_id or latest_run_id((repo / artifact_root).resolve())
+        run_id = (
+            resume_run_id
+            or forced_run_id
+            or latest_run_id((repo / artifact_root).resolve())
+        )
         if not run_id:
             raise click.ClickException(
                 f"No previous run found under {repo / artifact_root} to resume."
@@ -3634,29 +4112,41 @@ def feedback_command(
         artifact_dir = (repo / artifact_root / run_id).resolve()
         if not artifact_dir.is_dir():
             raise click.ClickException(f"Cannot resume: {artifact_dir} does not exist.")
-        click.echo(f"Resuming run {run_id} from {artifact_dir}")
+        if not tui_parent:
+            click.echo(f"Resuming run {run_id} from {artifact_dir}")
     else:
         # A resumable run leaves its in-progress changes in the working tree, so the
         # clean-worktree gate only applies to fresh runs.
-        if (apply or create_pr or branch) and not allow_dirty:
+        # The TUI parent already checked before creating its run artifacts.
+        if (apply or create_pr or branch) and not allow_dirty and not tui_child:
             ensure_clean_worktree(repo)
-        run_id = utc_now().strftime("%Y%m%d-%H%M%S")
+        run_id = forced_run_id or utc_now().strftime("%Y%m%d-%H%M%S")
         artifact_dir = (repo / artifact_root / run_id).resolve()
         artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    feedback_path = operator_feedback_path(artifact_dir)
+    feedback_path.touch(exist_ok=True)
+    _RESUME_HINT = build_resume_hint(run_id)
+    if tui_parent:
+        return_code, ui_log_path = run_terminal_ui(
+            pathlib.Path(__file__).resolve(),
+            sys.argv[1:],
+            repo=repo,
+            artifact_dir=artifact_dir,
+            run_id=run_id,
+        )
+        click.echo(
+            f"discord-feedback exited with code {return_code}; UI log: {ui_log_path}"
+        )
+        if return_code:
+            _print_resume_hint()
+            _RESUME_HINT = None
+            raise click.exceptions.Exit(return_code)
+        return
 
     # From here on, every phase is checkpointed; if anything below dies, the run can be
     # resumed exactly where it stopped. Stash the precise command so the top-level handler
     # can print it on any abnormal exit instead of leaving the user to guess the run id.
-    global _RESUME_HINT
-    _RESUME_HINT = (
-        "\n================ run did not finish ================\n"
-        "Every completed phase is checkpointed -- nothing is lost.\n"
-        "Resume exactly where it stopped with:\n\n"
-        f"    {pathlib.Path(sys.argv[0]).name} <your original flags> --resume {run_id}\n\n"
-        "(or --resume-latest).\n"
-        "===================================================="
-    )
-
     resume_state_path = artifact_dir / "resume-state.json"
     resume_state = load_resume_state(resume_state_path) if resuming else {"completed_phases": []}
     completed_phases = set(resume_state.get("completed_phases", []))
@@ -3690,6 +4180,8 @@ def feedback_command(
         pr_url = pr_url_path.read_text().strip() if pr_url_path.exists() else ""
         pr_url = pr_url or existing_pr_url(repo) or ""
         if pr_url:
+            if push_commits_ahead_of_origin(repo):
+                click.echo("Pushed locally committed feedback changes before re-attaching")
             click.echo(
                 f"Resume: re-attaching to {pr_url}; continuing to watch "
                 "(skipping scrape and pipeline)"
@@ -3906,58 +4398,57 @@ def feedback_command(
             )
         mark_phase_done("implementation")
 
-    test_log = artifact_dir / "pwnshop-test-skipped.log"
-    if skip_tests:
-        test_log.write_text("Tests skipped by --skip-tests.\n")
-    elif phase_done("validation"):
-        test_log = resumed_test_log(artifact_dir, resume_state)
-        click.echo("Resume: skipping main validation (already passed in this run)")
-    else:
-        test_log = validate_with_fixes(
-            repo,
-            artifact_dir,
-            base_ref,
-            agent=agent,
-            analysis_path=analysis_path,
-            directions=directions,
-            pr_feedback_path=pr_feedback_path,
-            fix_attempts=max_fix_attempts,
-        )
-        mark_phase_done("validation", test_log=str(test_log))
+    operator_state_path = artifact_dir / "pr-watch-state.json"
+    operator_state = load_watch_state(operator_state_path)
+    operator_feedback_applied = False
 
-    changed_challenges = changed_challenges_since(repo, base_ref)
-    ux_review = artifact_dir / "ux-review.md"
-    if skip_casts or not changed_challenges:
-        ux_review.write_text("Asciinema UX review skipped.\n")
-    elif phase_done("casts"):
-        test_log = resumed_test_log(artifact_dir, resume_state)
-        click.echo("Resume: reusing recorded casts and UX review")
-    else:
-        click.echo(
-            "Planning and recording UX casts for "
-            f"{len(changed_challenges)} changed challenge(s)"
+    def invalidate_downstream_phases() -> None:
+        stale_phases = completed_phases.intersection(
+            {"validation", "casts", "pr-body"}
         )
-        cast_dir = run_casts(
-            repo, artifact_dir, analysis_path, changed_challenges, agent, directions
-        )
-        run_agent(
-            agent,
-            build_cast_review_prompt(
-                analysis_path, cast_dir, changed_challenges, artifact_dir, directions
-            ),
-            repo=repo,
-            artifact_dir=artifact_dir,
-            output_name="ux-review-agent.log",
-            apply=True,
-        )
-        if not ux_review.exists():
-            ux_review.write_text(
-                "UX review agent did not write a separate report; see ux-review-agent.log.\n"
+        if stale_phases:
+            completed_phases.difference_update(stale_phases)
+            resume_state["completed_phases"] = sorted(completed_phases)
+            resume_state.pop("test_log", None)
+            if "casts" in stale_phases:
+                (artifact_dir / "ux-review.md").unlink(missing_ok=True)
+            if "pr-body" in stale_phases:
+                (artifact_dir / "pr-body.md").unlink(missing_ok=True)
+            save_resume_state(resume_state_path, resume_state)
+            click.echo(
+                "Direct operator feedback invalidated completed phase(s): "
+                f"{', '.join(sorted(stale_phases))}"
             )
-        if not skip_tests:
-            click.echo("Running final pwnshop validation after UX review")
-            # The UX-review agent edits challenges/descriptions, so this can surface a real
-            # break. Fix it agentically too -- same as the main loop -- instead of aborting.
+
+    def drain_operator_feedback() -> bool:
+        nonlocal operator_feedback_applied
+        handled_any = False
+        while pending_operator_feedback(feedback_path, operator_state):
+            # Persist invalidation before the feedback agent can mark this batch handled.
+            # A crash at any later point therefore resumes into fresh downstream work.
+            invalidate_downstream_phases()
+            handled, _ = address_pending_operator_feedback(
+                repo,
+                artifact_dir,
+                agent,
+                directions,
+                operator_state,
+                operator_state_path,
+            )
+            if not handled:
+                break
+            handled_any = True
+            operator_feedback_applied = True
+        return handled_any
+
+    def run_validation_phase() -> pathlib.Path:
+        test_log = artifact_dir / "pwnshop-test-skipped.log"
+        if skip_tests:
+            test_log.write_text("Tests skipped by --skip-tests.\n")
+        elif phase_done("validation"):
+            test_log = resumed_test_log(artifact_dir, resume_state)
+            click.echo("Resume: skipping main validation (already passed in this run)")
+        else:
             test_log = validate_with_fixes(
                 repo,
                 artifact_dir,
@@ -3968,12 +4459,69 @@ def feedback_command(
                 pr_feedback_path=pr_feedback_path,
                 fix_attempts=max_fix_attempts,
             )
-        mark_phase_done("casts", test_log=str(test_log))
+            mark_phase_done("validation", test_log=str(test_log))
+        return test_log
 
-    pr_body = artifact_dir / "pr-body.md"
-    if phase_done("pr-body"):
-        click.echo("Resume: reusing existing pr-body.md")
-    else:
+    def run_cast_phase(test_log: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
+        changed_challenges = changed_challenges_since(repo, base_ref)
+        ux_review = artifact_dir / "ux-review.md"
+        if skip_casts or not changed_challenges:
+            ux_review.write_text("Asciinema UX review skipped.\n")
+        elif phase_done("casts"):
+            test_log = resumed_test_log(artifact_dir, resume_state)
+            click.echo("Resume: reusing recorded casts and UX review")
+        else:
+            click.echo(
+                "Planning and recording UX casts for "
+                f"{len(changed_challenges)} changed challenge(s)"
+            )
+            cast_dir = run_casts(
+                repo, artifact_dir, analysis_path, changed_challenges, agent, directions
+            )
+            run_agent(
+                agent,
+                build_cast_review_prompt(
+                    analysis_path,
+                    cast_dir,
+                    changed_challenges,
+                    artifact_dir,
+                    directions,
+                ),
+                repo=repo,
+                artifact_dir=artifact_dir,
+                output_name="ux-review-agent.log",
+                apply=True,
+            )
+            if not ux_review.exists():
+                ux_review.write_text(
+                    "UX review agent did not write a separate report; see "
+                    "ux-review-agent.log.\n"
+                )
+            if not skip_tests:
+                click.echo("Running final pwnshop validation after UX review")
+                # The UX-review agent edits challenges/descriptions, so this can surface a
+                # real break. Fix it agentically too instead of aborting.
+                test_log = validate_with_fixes(
+                    repo,
+                    artifact_dir,
+                    base_ref,
+                    agent=agent,
+                    analysis_path=analysis_path,
+                    directions=directions,
+                    pr_feedback_path=pr_feedback_path,
+                    fix_attempts=max_fix_attempts,
+                )
+            mark_phase_done("casts", test_log=str(test_log))
+        return test_log, ux_review
+
+    def run_pr_body_phase(
+        test_log: pathlib.Path, ux_review: pathlib.Path
+    ) -> pathlib.Path:
+        pr_body = artifact_dir / "pr-body.md"
+        if phase_done("pr-body"):
+            click.echo("Resume: reusing existing pr-body.md")
+            return pr_body
+
         pr_body_agent_output = run_agent(
             agent,
             build_pr_body_prompt(
@@ -4008,6 +4556,26 @@ def feedback_command(
                 )
             )
         mark_phase_done("pr-body")
+        return pr_body
+
+    def stabilize_downstream_phases() -> pathlib.Path:
+        # Feedback can arrive while validation, cast review, or PR-body generation is
+        # running. Drain after every safe boundary; if a reconciliation agent ran,
+        # regenerate everything downstream before the run may finish or open its PR.
+        while True:
+            drain_operator_feedback()
+            test_log = run_validation_phase()
+            if drain_operator_feedback():
+                continue
+            test_log, ux_review = run_cast_phase(test_log)
+            if drain_operator_feedback():
+                continue
+            pr_body = run_pr_body_phase(test_log, ux_review)
+            if drain_operator_feedback():
+                continue
+            return pr_body
+
+    pr_body = stabilize_downstream_phases()
 
     if create_pr:
         # Reuse an already-opened PR on resume (the branch may already be pushed); only
@@ -4020,6 +4588,16 @@ def feedback_command(
             pr_url = existing_pr_url(repo)
         if pr_url:
             click.echo(f"Resume: reusing existing PR {pr_url}")
+            update_message = (
+                "Address operator feedback"
+                if operator_feedback_applied
+                else "Update feedback changes"
+            )
+            pushed_update = commit_and_push(repo, update_message)
+            if not pushed_update:
+                pushed_update = push_commits_ahead_of_origin(repo)
+            if pushed_update:
+                click.echo("Pushed resumed feedback changes to the existing PR")
         else:
             pr_url = create_pull_request(
                 repo,
@@ -4044,6 +4622,11 @@ def feedback_command(
                 watch_pr_interval,
                 max_watch_fix_attempts,
             )
+        elif pending_operator_feedback(feedback_path, operator_state):
+            click.echo("Direct feedback arrived while the PR was being opened; reconciling")
+            stabilize_downstream_phases()
+            if commit_and_push(repo, "Address operator feedback"):
+                click.echo("Pushed late direct operator feedback fixes")
     else:
         status = git_output(["status", "--short"], repo)
         click.echo(f"Feedback run complete. Artifacts: {artifact_dir}")
