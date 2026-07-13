@@ -26,14 +26,14 @@ Unlike `su`, which relies on password authentication, `sudo` checks policies to 
 These policies are defined in `/etc/sudoers`, and though it's mostly out of scope for our purposes, there are plenty of [resources](https://www.digitalocean.com/community/tutorials/how-to-edit-the-sudoers-file) for learning about this!
 
 So, the world has moved to `sudo` and has (for the purposes of system administration) left `su` behind.
-In fact, even pwn.college's Practice Mode works by giving you `sudo` access to elevate privileges!
+In fact, even pwn.college's Privileged Mode works by giving you `sudo` access to elevate privileges!
 
 In this level, we will give you `sudo` access, and you will use it to read the flag.
 Nice and easy!
 
 ----
 **NOTE:**
-After this level, we will enable Practice Mode!
-In the workspace, click the closed lock to restart the challenge in Practice Mode, and click the open lock to return to normal mode.
-The terminal prompt's hostname ends in `~practice` while Practice Mode is active.
-Practice Mode gives you full `sudo` access to introspect and debug, but it provides a placeholder flag that cannot be submitted.
+After this level, we will enable Privileged Mode!
+In the workspace, click the closed lock to restart the challenge in Privileged Mode, and click the open lock to return to normal mode.
+The terminal prompt's hostname ends in `~practice` while Privileged Mode is active.
+Privileged Mode gives you full `sudo` access to introspect and debug, but it provides a placeholder flag that cannot be submitted.

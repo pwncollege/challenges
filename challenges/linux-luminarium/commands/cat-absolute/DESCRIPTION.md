@@ -2,7 +2,8 @@ In the last level, you did `cat flag` to read the flag out of your home director
 You can, of course, specify `cat`'s arguments as absolute paths:
 
 ```console
-hacker@dojo:~$ cat /etc/hostname
+hacker@dojo:~$ cat /path/to/file
+Hello Hackers!
 ```
 
 In this challenge, I will not copy it to your home directory, but I will make it readable.

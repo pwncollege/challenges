@@ -1,8 +1,6 @@
 #!/bin/sh
 set -eu
 
-test -r /etc/hostname
-cat /etc/hostname >/dev/null
 [ ! -r /flag ]
 
 workdir="$(mktemp -d)"
