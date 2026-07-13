@@ -27,34 +27,35 @@ config = (pathlib.Path(__file__).parent / ".config").read_text()
 level = int(config)
 
 strace_expected_parent = r"""
-1..11   execve(<execve_args>) = 0
-2..11   socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3
-3..11   bind(3, {sa_family=AF_INET, sin_port=htons(<bind_port>), sin_addr=inet_addr("<bind_address>")}, 16) = 0
-4..11   listen(3, 0) = 0
-5..11   accept(3, NULL, NULL) = 4
+1..12   execve(<execve_args>) = 0
+2..12   socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3
+3..12   bind(3, {sa_family=AF_INET, sin_port=htons(<bind_port>), sin_addr=inet_addr("<bind_address>")}, 16) = 0
+4..12   listen(3, 0) = 0
+5..12   accept(3, NULL, NULL) = 4
 6..9    read(4, <read_request>, <read_request_count>) = <read_request_result>
 8..9    open("<open_path>", O_RDONLY) = 5
 8..9    read(5, <read_file>, <read_file_count>) = <read_file_result>
 8..9    close(5) = 0
 7..9    write(4, "HTTP/1.0 200 OK\r\n\r\n", 19) = 19
 8..9    write(4, <write_file>, <write_file_count>) = <write_file_result>
-10..11  fork() = <fork_result>
-6..11   close(4) = 0
+10..12  fork() = <fork_result>
+6..12   close(4) = 0
 9..11   accept(3, NULL, NULL) = ?
+12..12  accept(3, NULL, NULL) = <accept_result>
 1..8    exit(0) = ?
 """
 
 strace_expected_child = r"""
-10..11  close(3) = 0
-10..11  read(4, <read_request>, <read_request_count>) = <read_request_result>
+10..12  close(3) = 0
+10..12  read(4, <read_request>, <read_request_count>) = <read_request_result>
 10..10  open("<open_path>", O_RDONLY) = 3
 10..10  read(3, <read_file>, <read_file_count>) = <read_file_result>
 11..11  open("<open_path>", O_WRONLY|O_CREAT, 0777) = 3
 11..11  write(3, <write_file>, <write_file_count>) = <write_file_result>
-10..11  close(3) = 0
-10..11  write(4, "HTTP/1.0 200 OK\r\n\r\n", 19) = 19
+10..12  close(3) = 0
+10..12  write(4, "HTTP/1.0 200 OK\r\n\r\n", 19) = 19
 10..10  write(4, <write_file>, <write_file_count>) = <write_file_result>
-10..11  exit(0) = ?
+10..12  exit(0) = ?
 """
 
 
