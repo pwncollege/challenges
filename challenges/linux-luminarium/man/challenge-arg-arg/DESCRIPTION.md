@@ -8,6 +8,9 @@ Many other commands are analogous.
 
 Here is this level's documentation for `/challenge/challenge`:
 
-> Welcome to the documentation for `/challenge/challenge`! This program allows you to print arbitrary files to the terminal, when given the `--printfile` argument. The argument to the `--printfile` argument is the path of the flag to read. For example, `/challenge/challenge --printfile /challenge/DESCRIPTION.md` will print out the description of the level!
+> Welcome to the documentation for `/challenge/challenge`!
+> This program prints arbitrary files to the terminal when given the `--printfile` argument.
+> The argument to `--printfile` is the path of the file to read.
+> For example, `/challenge/challenge --printfile /etc/hostname` will print the container's hostname!
 
 Given that documentation, go get the flag!

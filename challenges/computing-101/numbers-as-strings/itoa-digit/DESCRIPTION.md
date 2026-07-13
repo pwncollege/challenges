@@ -13,4 +13,13 @@ We'll start with `itoa_digit`.
 Your `itoa_digit` gets a value in `rdi` (a single digit, `0`-`9`) and returns its ASCII character in `rax`.
 Remember to `.global itoa_digit` so the challenge can find it.
 
-Build and submit it as a library, add `0x30`, and return the character.
+The previous level was a whole executable.
+This level returns to the shared-library workflow from the earlier `atoi` functions:
+
+```console
+hacker@dojo:~$ as -o your-solve.o your-solve.s
+hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
+hacker@dojo:~$ /challenge/check your-solve.so
+```
+
+Add `0x30`, return the character, and claim the flag.

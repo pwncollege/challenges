@@ -16,7 +16,7 @@ function give_flag {
 
 	if [ ! -f /tmp/.redirected ]
 	then
-		fold -s <<< "You have created the COLLEGE file and wrote the right value to it, but it doesn't look like you did it via input redirection."
+		fold -s <<< "You have created the COLLEGE file and written the right value to it, but it doesn't look like you did it via output redirection."
 		return
 	fi
 

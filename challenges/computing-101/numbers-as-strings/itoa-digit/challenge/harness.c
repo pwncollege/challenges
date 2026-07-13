@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/random.h>
 #include <unistd.h>
 
 /*
@@ -11,16 +12,56 @@
  * on a single-digit value (0-9, handed to us as text). itoa_digit must return
  * that digit's ASCII character in rax.
  *
- * The call goes through call_fn (shim.S), which seeds the callee-saved registers
- * (rbx, r12-r15) and checks they survive --- itoa_digit is a function later
- * levels reuse, so it must honor the calling convention. We report the raw
+ * The call goes through call_fn (shim.S), which seeds the incoming register
+ * state and checks that the callee-saved registers and rsp survive ---
+ * itoa_digit is a function later levels reuse, so it must honor the calling convention. We report the raw
  * 64-bit return value to the checker over stdout (exactly 8 little-endian bytes).
  */
 
 #define LOG(...) do { fprintf(stderr, "[harness] " __VA_ARGS__); fputc('\n', stderr); } while (0)
 
-extern long call_fn(long (*fn)(long), long arg);  /* seeds rbx,r12-r15; calls fn(arg) */
-extern uint64_t cc_seen[5];
+extern long call_fn(long (*fn)(long), long arg);
+extern uint64_t cc_seen[6];
+extern uint64_t cc_incoming[8];
+extern uint64_t cc_expected_rsp;
+extern uint64_t cc_seen_rsp;
+
+static int prepare_call(void) {
+    if (getrandom(cc_incoming, sizeof cc_incoming, 0) != (ssize_t)sizeof cc_incoming) {
+        LOG("getrandom failed");
+        return -1;
+    }
+
+    /* Keep accidental pointer use deterministic: these values vary, but none
+     * is a canonical 64-bit x86 address. */
+    for (size_t i = 0; i < sizeof cc_incoming / sizeof cc_incoming[0]; i++)
+        cc_incoming[i] = (cc_incoming[i] & 0x0000ffffffffffffULL) | 0x5a5a000000000000ULL;
+    return 0;
+}
+
+static int check_call_state(void) {
+    static const uint64_t cc_expected[6] = {
+        0x1111111111111111ULL, 0xb0b0b0b0b0b0b0b0ULL, 0x1212121212121212ULL,
+        0x1313131313131313ULL, 0x1414141414141414ULL, 0x1515151515151515ULL,
+    };
+    static const char *ccname[6] = {"rbx", "rbp", "r12", "r13", "r14", "r15"};
+
+    for (size_t i = 0; i < sizeof cc_seen / sizeof cc_seen[0]; i++) {
+        if (cc_seen[i] != cc_expected[i]) {
+            LOG("your itoa_digit clobbered %s without restoring it.", ccname[i]);
+            LOG("a function must preserve the callee-saved registers (rbx, rbp, r12-r15) for its caller ---");
+            LOG("push them on entry and pop them before you ret, or just don't use them.");
+            return -1;
+        }
+    }
+    if (cc_seen_rsp != cc_expected_rsp) {
+        LOG("your itoa_digit returned with rsp = 0x%lx, but its caller expected 0x%lx.",
+            cc_seen_rsp, cc_expected_rsp);
+        LOG("balance every stack allocation and push before you ret.");
+        return -1;
+    }
+    return 0;
+}
 
 int main(int argc, char **argv) {
     setvbuf(stderr, NULL, _IONBF, 0);
@@ -45,21 +86,14 @@ int main(int argc, char **argv) {
     }
 
     LOG("calling itoa_digit(%ld) --- your code returns the digit's ASCII character in rax", value);
+    if (prepare_call() != 0) {
+        return 2;
+    }
     long r = call_fn(itoa_digit, value);
     LOG("itoa_digit returned %ld ('%c')", r, (r >= 0x20 && r < 0x7f) ? (char)r : '?');
 
-    static const uint64_t cc_expected[5] = {
-        0x1111111111111111ULL, 0x1212121212121212ULL, 0x1313131313131313ULL,
-        0x1414141414141414ULL, 0x1515151515151515ULL,
-    };
-    static const char *ccname[5] = {"rbx", "r12", "r13", "r14", "r15"};
-    for (int i = 0; i < 5; i++) {
-        if (cc_seen[i] != cc_expected[i]) {
-            LOG("your itoa_digit clobbered %s without restoring it.", ccname[i]);
-            LOG("a function must preserve the callee-saved registers (rbx, r12-r15) for its caller ---");
-            LOG("push them on entry and pop them before you ret, or just don't use them.");
-            return 1;
-        }
+    if (check_call_state() != 0) {
+        return 1;
     }
 
     uint64_t v = (uint64_t)r;

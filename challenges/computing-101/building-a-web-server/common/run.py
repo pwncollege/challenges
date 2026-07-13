@@ -27,34 +27,34 @@ config = (pathlib.Path(__file__).parent / ".config").read_text()
 level = int(config)
 
 strace_expected_parent = r"""
-1..10   execve(<execve_args>) = 0
-2..10   socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3
-3..10   bind(3, {sa_family=AF_INET, sin_port=htons(<bind_port>), sin_addr=inet_addr("<bind_address>")}, 16) = 0
-4..10   listen(3, 0) = 0
-5..10   accept(3, NULL, NULL) = 4
-6..8    read(4, <read_request>, <read_request_count>) = <read_request_result>
-7..8    open("<open_path>", O_RDONLY) = 5
-7..8    read(5, <read_file>, <read_file_count>) = <read_file_result>
-7..8    close(5) = 0
-6..8    write(4, "HTTP/1.0 200 OK\r\n\r\n", 19) = 19
-7..8    write(4, <write_file>, <write_file_count>) = <write_file_result>
-9..10   fork() = <fork_result>
-6..10   close(4) = 0
-8..10   accept(3, NULL, NULL) = ?
-1..7    exit(0) = ?
+1..11   execve(<execve_args>) = 0
+2..11   socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3
+3..11   bind(3, {sa_family=AF_INET, sin_port=htons(<bind_port>), sin_addr=inet_addr("<bind_address>")}, 16) = 0
+4..11   listen(3, 0) = 0
+5..11   accept(3, NULL, NULL) = 4
+6..9    read(4, <read_request>, <read_request_count>) = <read_request_result>
+8..9    open("<open_path>", O_RDONLY) = 5
+8..9    read(5, <read_file>, <read_file_count>) = <read_file_result>
+8..9    close(5) = 0
+7..9    write(4, "HTTP/1.0 200 OK\r\n\r\n", 19) = 19
+8..9    write(4, <write_file>, <write_file_count>) = <write_file_result>
+10..11  fork() = <fork_result>
+6..11   close(4) = 0
+9..11   accept(3, NULL, NULL) = ?
+1..8    exit(0) = ?
 """
 
 strace_expected_child = r"""
-9..10   close(3) = 0
-9..10   read(4, <read_request>, <read_request_count>) = <read_request_result>
-9..9    open("<open_path>", O_RDONLY) = 3
-9..9    read(3, <read_file>, <read_file_count>) = <read_file_result>
-10..10  open("<open_path>", O_WRONLY|O_CREAT, 0777) = 3
-10..10  write(3, <write_file>, <write_file_count>) = <write_file_result>
-9..10   close(3) = 0
-9..10   write(4, "HTTP/1.0 200 OK\r\n\r\n", 19) = 19
-9..9    write(4, <write_file>, <write_file_count>) = <write_file_result>
-9..10   exit(0) = ?
+10..11  close(3) = 0
+10..11  read(4, <read_request>, <read_request_count>) = <read_request_result>
+10..10  open("<open_path>", O_RDONLY) = 3
+10..10  read(3, <read_file>, <read_file_count>) = <read_file_result>
+11..11  open("<open_path>", O_WRONLY|O_CREAT, 0777) = 3
+11..11  write(3, <write_file>, <write_file_count>) = <write_file_result>
+10..11  close(3) = 0
+10..11  write(4, "HTTP/1.0 200 OK\r\n\r\n", 19) = 19
+10..10  write(4, <write_file>, <write_file_count>) = <write_file_result>
+10..11  exit(0) = ?
 """
 
 
@@ -240,6 +240,9 @@ def validate_strace(level, results, requirements):
                 (not stop or level <= int(stop))):
                 expected.append(expect)
 
+        if not expected:
+            return {}, []
+
         result = result_strace.strip().splitlines()
 
         captured = {}
@@ -401,12 +404,13 @@ def challenge():
         3: "bind an address to a socket",
         4: "listen on a socket",
         5: "accept a connection",
-        6: "respond to an http request",
-        7: "respond to a GET request for the contents of a specified file",
-        8: "accept multiple requests",
-        9: "concurrently accept multiple requests",
-        10: "respond to a POST request with a specified file and update its contents",
-        11: "respond to multiple concurrent GET and POST requests",
+        6: "read a request from a client",
+        7: "respond to an HTTP request",
+        8: "respond to a GET request for the contents of a specified file",
+        9: "accept multiple requests",
+        10: "concurrently accept multiple requests",
+        11: "respond to a POST request with a specified file and update its contents",
+        12: "respond to multiple concurrent GET and POST requests",
     }.get(level, "")
     description = f"In this challenge you will {description}."
 
@@ -451,26 +455,39 @@ $ {sys.argv[0]} ./server
 
         operation_names = {
             connect: "connect",
-            validate_connect: "validated connect",
+            validate_connect: "HTTP request",
             validate_get: "HTTP GET request",
             validate_post: "HTTP POST request",
         }
 
         operations = {
             5: [connect],
-            6: [validate_connect],
-            7: [validate_get],
-            8: [validate_get, connect],
+            6: [connect],
+            7: [validate_connect],
+            8: [validate_get],
             9: [validate_get, connect],
-            10: [validate_post, connect],
-            11: [*random.choices([validate_get, validate_post], k=32), connect],
+            10: [validate_get, connect],
+            11: [validate_post, connect],
         }.get(level, [])
+        if level == 12:
+            operations = [
+                validate_get,
+                validate_post,
+                *random.choices([validate_get, validate_post], k=30),
+            ]
+            random.shuffle(operations)
+            operations.append(connect)
 
-        requirements = {}
+        requirements = {
+            "read_request_result": (
+                lambda count: count.isdecimal() and int(count) > 0,
+                "Read a nonzero number of request bytes",
+            ),
+        }
 
         timeout = 10
 
-        if level == 11:
+        if level == 12:
             accept_kill = 100  # TODO: SIGCHLD
         elif level  >= 5:
             accept_kill = 2
@@ -502,7 +519,7 @@ $ {sys.argv[0]} ./server
 
         request_operations = [op for op in operations if op in (validate_get, validate_post)]
         connection_failures = [e for e in errors if "Failed to connect" in e]
-        if level >= 9 and request_operations and len(connection_failures) >= len(request_operations):
+        if level >= 10 and request_operations and len(connection_failures) >= len(request_operations):
             errors.append(
                 "Every checked HTTP request failed to connect. "
                 "For the concurrent levels, the parent should keep accepting after fork, "

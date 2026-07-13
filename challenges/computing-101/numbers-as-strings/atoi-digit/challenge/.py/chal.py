@@ -1,5 +1,6 @@
 import __main__ as checker
 import subprocess
+import sys
 
 # A shared-library challenge: the learner submits `atoi_digit` inside a .so, and
 # the flag is dispensed by this (root) checker only after it independently
@@ -11,7 +12,7 @@ solve_symbol = "atoi_digit"  # this level's entrypoint is named atoi_digit, not 
 
 check_runtime_prologue = "Let's hand your atoi_digit() each decimal digit, one at a time..."
 check_runtime_success = "Every digit decoded correctly!"
-check_runtime_failure = "That digit didn't decode right:\n"
+check_runtime_failure = "That's not right:\n"
 
 
 def as_signed(v):
@@ -23,7 +24,7 @@ def run_one(so_path, s, *, quiet):
         p = subprocess.run(
             ["/challenge/harness", so_path, s],
             stdout=subprocess.PIPE,
-            stderr=(subprocess.DEVNULL if quiet else None),
+            stderr=subprocess.PIPE,
             timeout=5,
         )
     except subprocess.TimeoutExpired:
@@ -32,9 +33,12 @@ def run_one(so_path, s, *, quiet):
             "A function has to reach a `ret`; an accidental loop with no way out spins forever."
         )
     if p.returncode != 0:
-        raise AssertionError(
-            f"The harness exited abnormally (status {p.returncode}) on input {s!r}."
-        )
+        stderr = p.stderr.decode("utf-8", errors="replace").strip()
+        details = f"\n\nHarness stderr:\n{stderr}" if stderr else ""
+        raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on input {s!r}.{details}")
+    if not quiet and p.stderr:
+        sys.stderr.write(p.stderr.decode("utf-8", errors="replace"))
+        sys.stderr.flush()
     if len(p.stdout) < 8:
         raise AssertionError("The harness never reported a result --- did your atoi_digit crash?")
     return int.from_bytes(p.stdout[-8:], "little")

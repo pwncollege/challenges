@@ -1,5 +1,6 @@
 import __main__ as checker
 import subprocess
+import sys
 
 # A shared-library challenge: the learner submits `itoa_digit` inside a .so. The
 # flag is dispensed by this (root) checker after it verifies the returned char.
@@ -26,6 +27,9 @@ def run_one(so_path, value, *, quiet):
         stderr = p.stderr.decode("utf-8", errors="replace").strip()
         details = f"\n\nHarness stderr:\n{stderr}" if stderr else ""
         raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on value {value}.{details}")
+    if not quiet and p.stderr:
+        sys.stderr.write(p.stderr.decode("utf-8", errors="replace"))
+        sys.stderr.flush()
     if len(p.stdout) < 8:
         raise AssertionError("The harness never reported a result --- did your itoa_digit crash?")
     return int.from_bytes(p.stdout[-8:], "little")
@@ -33,7 +37,7 @@ def run_one(so_path, value, *, quiet):
 
 check_runtime_prologue = "Let's hand your itoa_digit each value 0-9 and check the character it returns..."
 check_runtime_success = "Every digit turned into the right character!"
-check_runtime_failure = "That character wasn't right:\n"
+check_runtime_failure = "That's not right:\n"
 
 
 def check_runtime(so_path):

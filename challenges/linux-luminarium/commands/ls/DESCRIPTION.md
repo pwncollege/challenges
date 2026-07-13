@@ -19,3 +19,4 @@ hacker@dojo:~$
 
 In this challenge, we've named `/challenge/run` with some random name!
 List the files in `/challenge` to find it.
+Then invoke the discovered absolute path to get the flag.

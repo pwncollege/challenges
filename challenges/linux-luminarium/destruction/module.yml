@@ -7,6 +7,8 @@ resources:
 - type: challenge
   id: disk-doomsday
   name: Disk-Space Doomsday
+  visibility:
+    start: "2099-01-01T00:00:00+00:00"
 - type: challenge
   id: rm-rf-root
   name: rm -rf /

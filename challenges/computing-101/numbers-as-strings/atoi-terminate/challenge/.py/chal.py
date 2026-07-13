@@ -1,6 +1,7 @@
 import __main__ as checker
 import random
 import subprocess
+import sys
 
 # Shared-library challenge: the flag is dispensed by this (root) checker only
 # after it independently verifies the value `atoi` returned. The harness that
@@ -18,13 +19,20 @@ JUNK = "abcXYZ!.,;:/ +=_()@%"
 
 check_runtime_prologue = "Let's hand your atoi() numbers buried in trailing junk..."
 check_runtime_success = "You stopped at the right spot every time!"
-check_runtime_failure = "One of those conversions came back wrong:\n"
+check_runtime_failure = "That's not right:\n"
 
 
-def gen_case():
-    n = random.randint(-(2**31), 2**31 - 1)
+def gen_case(*, sign=None, trailing_junk=None):
+    if sign == "-":
+        n = random.randint(-(2**31), -1)
+    elif sign == "+":
+        n = random.randint(0, 2**31 - 1)
+    else:
+        n = random.randint(-(2**31), 2**31 - 1)
     s = str(n)
-    if random.random() < 0.8:
+    if trailing_junk is None:
+        trailing_junk = random.random() < 0.8
+    if trailing_junk:
         # Append a non-digit, then arbitrary trailing characters that atoi must ignore.
         s += random.choice(JUNK)
         s += "".join(random.choice(JUNK + "0123456789") for _ in range(random.randint(0, 5)))
@@ -40,7 +48,7 @@ def run_one(so_path, numstr, *, quiet):
         p = subprocess.run(
             ["/challenge/harness", so_path, numstr],
             stdout=subprocess.PIPE,
-            stderr=(subprocess.DEVNULL if quiet else None),
+            stderr=subprocess.PIPE,
             timeout=5,
         )
     except subprocess.TimeoutExpired:
@@ -49,9 +57,12 @@ def run_one(so_path, numstr, *, quiet):
             "If the loop doesn't advance the pointer (inc rdi) and stop at a non-digit, it spins forever."
         )
     if p.returncode != 0:
-        raise AssertionError(
-            f"The harness exited abnormally (status {p.returncode}) on input {numstr!r}."
-        )
+        stderr = p.stderr.decode("utf-8", errors="replace").strip()
+        details = f"\n\nHarness stderr:\n{stderr}" if stderr else ""
+        raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on input {numstr!r}.{details}")
+    if not quiet and p.stderr:
+        sys.stderr.write(p.stderr.decode("utf-8", errors="replace"))
+        sys.stderr.flush()
     if len(p.stdout) < 8:
         raise AssertionError("The harness never reported a result --- did your atoi crash?")
     return int.from_bytes(p.stdout[-8:], "little")
@@ -85,8 +96,10 @@ def check_runtime(so_path):
     checker.print_prompt()
     checker.slow_print(f'/challenge/harness {so_path} <number-then-junk>')
     print("")
+    forced = [("-", True), ("+", True), (None, False)]
     for i in range(ROUNDS):
-        numstr, expected = gen_case()
+        sign, trailing_junk = forced[i] if i < len(forced) else (None, None)
+        numstr, expected = gen_case(sign=sign, trailing_junk=trailing_junk)
         got = run_one(so_path, numstr, quiet=(i != 0))
         assert got == (expected & MASK), (
             f"atoi({numstr!r}) should be {expected} (stop at the first non-digit), "

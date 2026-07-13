@@ -12,8 +12,8 @@ hacker@dojo:~$
 
 Here, the `hacker` user is _only_ in the `hacker` group.
 The most common use-case for groups is to control access to different system resources.
-For example, "Privileged Mode" in pwn.college grants you root access to allow better debugging and so on.
-This is handled by giving you an extra group when you launch in Privileged Mode:
+For example, Practice Mode in pwn.college grants you root access to allow better debugging and so on.
+This is handled by giving you an extra group when you launch in Practice Mode:
 
 ```console
 hacker@dojo:~$ id
@@ -50,7 +50,7 @@ Consider the following:
 hacker@dojo:~$ id
 uid=1000(hacker) gid=1000(hacker) groups=1000(hacker)
 hacker@dojo:~$ ls -l /flag
--r--r----- 1 root root 53 Jul  4 04:47 /flag
+-r--r----- 1 root root ... /flag
 hacker@dojo:~$ cat /flag
 cat: /flag: Permission denied
 hacker@dojo:~$

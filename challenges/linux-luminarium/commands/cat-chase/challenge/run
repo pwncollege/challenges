@@ -1,3 +1,4 @@
 #!/bin/bash
 
-fold -s < /challenge/DESCRIPTION.md
+read -r FLAG_PATH < /tmp/.flag-path
+fold -s <<< "Use cat with the absolute path $FLAG_PATH/flag, without changing directories."

@@ -41,6 +41,9 @@ resources:
   id: accept
   name: Accept
 - type: challenge
+  id: read-request
+  name: Read Request
+- type: challenge
   id: static-response
   name: Static Response
 - type: challenge

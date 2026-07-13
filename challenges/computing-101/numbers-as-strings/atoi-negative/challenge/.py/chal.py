@@ -1,6 +1,7 @@
 import __main__ as checker
 import random
 import subprocess
+import sys
 
 # Shared-library challenge: the flag is dispensed by this (root) checker only
 # after it independently verifies the value `atoi` returned. The harness that
@@ -14,7 +15,7 @@ ROUNDS = 6
 
 check_runtime_prologue = "Let's hand your atoi() a batch of random numbers --- some negative..."
 check_runtime_success = "Every number converted correctly, sign and all!"
-check_runtime_failure = "One of those conversions came back wrong:\n"
+check_runtime_failure = "That's not right:\n"
 
 
 def gen_case(sign=None):
@@ -37,7 +38,7 @@ def run_one(so_path, numstr, *, quiet):
         p = subprocess.run(
             ["/challenge/harness", so_path, numstr],
             stdout=subprocess.PIPE,
-            stderr=(subprocess.DEVNULL if quiet else None),
+            stderr=subprocess.PIPE,
             timeout=5,
         )
     except subprocess.TimeoutExpired:
@@ -46,9 +47,12 @@ def run_one(so_path, numstr, *, quiet):
             "If the loop doesn't advance the pointer (inc rdi) and stop at the terminator, it spins forever."
         )
     if p.returncode != 0:
-        raise AssertionError(
-            f"The harness exited abnormally (status {p.returncode}) on input {numstr!r}."
-        )
+        stderr = p.stderr.decode("utf-8", errors="replace").strip()
+        details = f"\n\nHarness stderr:\n{stderr}" if stderr else ""
+        raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on input {numstr!r}.{details}")
+    if not quiet and p.stderr:
+        sys.stderr.write(p.stderr.decode("utf-8", errors="replace"))
+        sys.stderr.flush()
     if len(p.stdout) < 8:
         raise AssertionError("The harness never reported a result --- did your atoi crash?")
     return int.from_bytes(p.stdout[-8:], "little")

@@ -21,7 +21,7 @@ def cmd(p, s):
         p.write(b"\n")
     p.clean()
 
-def login(username, password):
+def login(username):
     print("Username:", end=" ", flush=True)
     slow_type(username+"\n")
     tty = os.ttyname(1)
@@ -31,10 +31,8 @@ def login(username, password):
         stderr=pwnlib.tubes.process.STDOUT,
     )
     p.clean()
-    slow_type(password+"\n", mask="*", to=p)
-    p.clean()
     return p
 
-p = login("zardus", open("/challenge/.victim_pass").read().strip())
+p = login("zardus")
 cmd(p, "exit\n")
 p.wait()

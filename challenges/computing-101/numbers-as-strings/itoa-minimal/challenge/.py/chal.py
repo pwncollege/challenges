@@ -1,6 +1,7 @@
 import __main__ as checker
 import random
 import subprocess
+import sys
 
 # A shared-library challenge: the learner submits `itoa` inside a .so. The flag
 # is dispensed by this (root) checker after it verifies the string itoa wrote.
@@ -27,12 +28,15 @@ def run_one(so_path, value, *, quiet):
         stderr = p.stderr.decode("utf-8", errors="replace").strip()
         details = f"\n\nHarness stderr:\n{stderr}" if stderr else ""
         raise AssertionError(f"The harness exited abnormally (status {p.returncode}) on value {value}.{details}")
+    if not quiet and p.stderr:
+        sys.stderr.write(p.stderr.decode("utf-8", errors="replace"))
+        sys.stderr.flush()
     return p.stdout
 
 
 check_runtime_prologue = "Let's hand your itoa each number 0-99 and check it writes no extra digit..."
 check_runtime_success = "Every number came out at exactly the right length!"
-check_runtime_failure = "That text wasn't right:\n"
+check_runtime_failure = "That's not right:\n"
 
 
 def diagnose(v, expected, got):
