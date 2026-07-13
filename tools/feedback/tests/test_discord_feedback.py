@@ -1,5 +1,7 @@
+import datetime
 import importlib.machinery
 import importlib.util
+import json
 import os
 import pathlib
 import signal
@@ -10,6 +12,8 @@ import time
 import unittest
 from unittest import mock
 
+from click.testing import CliRunner
+
 
 SCRIPT_PATH = pathlib.Path(__file__).resolve().parents[1] / "discord-feedback"
 LOADER = importlib.machinery.SourceFileLoader("discord_feedback", str(SCRIPT_PATH))
@@ -18,6 +22,210 @@ assert SPEC is not None
 discord_feedback = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = discord_feedback
 LOADER.exec_module(discord_feedback)
+
+
+class ResumeTests(unittest.TestCase):
+    def test_analysis_checkpoint_skips_discord_scrape_without_token(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            run_id = "20260712-052851"
+            artifact_dir = repo / ".discord-feedback" / run_id
+            artifact_dir.mkdir(parents=True)
+            (artifact_dir / "analysis.md").write_text("analysis complete\n")
+            (artifact_dir / "resume-state.json").write_text(
+                json.dumps({"completed_phases": ["analysis"]}) + "\n"
+            )
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(
+                    discord_feedback, "resolve_scrape_since"
+                ) as resolve_scrape_since,
+                mock.patch.object(discord_feedback, "DiscordAPI") as discord_api,
+                mock.patch.object(
+                    discord_feedback.GitHubAPI, "from_environment"
+                ) as github_api,
+                mock.patch.object(
+                    discord_feedback, "write_transcript"
+                ) as write_transcript,
+                mock.patch.object(discord_feedback, "run_agent") as run_agent,
+                mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": ""}),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    ["--resume", run_id],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn(
+                "Resume: reusing feedback artifacts (skipping Discord scrape)",
+                result.output,
+            )
+            resolve_scrape_since.assert_not_called()
+            discord_api.assert_not_called()
+            github_api.assert_not_called()
+            write_transcript.assert_not_called()
+            run_agent.assert_not_called()
+            state = json.loads((artifact_dir / "resume-state.json").read_text())
+            self.assertEqual(state["completed_phases"], ["analysis", "scrape"])
+
+    def test_analysis_checkpoint_requires_completed_analysis_artifact(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            run_id = "20260712-052851"
+            artifact_dir = repo / ".discord-feedback" / run_id
+            artifact_dir.mkdir(parents=True)
+            (artifact_dir / "resume-state.json").write_text(
+                json.dumps({"completed_phases": ["analysis"]}) + "\n"
+            )
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(
+                    discord_feedback, "resolve_scrape_since"
+                ) as resolve_scrape_since,
+                mock.patch.object(discord_feedback, "DiscordAPI") as discord_api,
+                mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": ""}),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    ["--resume", run_id],
+                )
+
+            self.assertEqual(result.exit_code, 1, result.output)
+            self.assertIn(
+                "analysis is checkpointed but analysis.md is missing or empty",
+                result.output,
+            )
+            resolve_scrape_since.assert_not_called()
+            discord_api.assert_not_called()
+
+    def test_uncheckpointed_resume_still_requires_discord_token(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            run_id = "20260712-052851"
+            artifact_dir = repo / ".discord-feedback" / run_id
+            artifact_dir.mkdir(parents=True)
+            (artifact_dir / "resume-state.json").write_text(
+                json.dumps({"completed_phases": []}) + "\n"
+            )
+            now = datetime.datetime(
+                2026, 7, 12, 5, 28, 51, tzinfo=datetime.timezone.utc
+            )
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "utc_now", return_value=now),
+                mock.patch.object(
+                    discord_feedback,
+                    "resolve_scrape_since",
+                    return_value=now - datetime.timedelta(hours=1),
+                ),
+                mock.patch.object(discord_feedback, "DiscordAPI") as discord_api,
+                mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": ""}),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    ["--resume", run_id],
+                )
+
+            self.assertEqual(result.exit_code, 1, result.output)
+            self.assertIn("DISCORD_BOT_TOKEN is not set", result.output)
+            discord_api.assert_not_called()
+
+    def test_scrape_checkpoint_skips_fetch_and_resumes_analysis(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            run_id = "20260712-052851"
+            artifact_dir = repo / ".discord-feedback" / run_id
+            artifact_dir.mkdir(parents=True)
+            (artifact_dir / "messages.jsonl").write_text("{}\n")
+            (artifact_dir / "transcript.md").write_text("transcript\n")
+            (artifact_dir / "run.json").write_text("{}\n")
+            pr_feedback_path = artifact_dir / "recent-pr-feedback.md"
+            pr_feedback_path.write_text("maintainer context\n")
+            (artifact_dir / "resume-state.json").write_text(
+                json.dumps({"completed_phases": ["scrape"]}) + "\n"
+            )
+            analysis_path = artifact_dir / "analysis.md"
+
+            def finish_analysis(*_args, **_kwargs):
+                analysis_path.write_text("analysis complete\n")
+                return analysis_path
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "DiscordAPI") as discord_api,
+                mock.patch.object(
+                    discord_feedback,
+                    "run_agent",
+                    side_effect=finish_analysis,
+                ) as run_agent,
+                mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": ""}),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    ["--resume", run_id],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            discord_api.assert_not_called()
+            run_agent.assert_called_once()
+            self.assertIn(str(pr_feedback_path), run_agent.call_args.args[1])
+            state = json.loads((artifact_dir / "resume-state.json").read_text())
+            self.assertEqual(state["completed_phases"], ["analysis", "scrape"])
+
+    def test_legacy_run_metadata_infers_completed_scrape(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            artifact_dir = pathlib.Path(temporary_directory)
+            (artifact_dir / "run.json").write_text("{}\n")
+
+            self.assertEqual(
+                discord_feedback.infer_completed_phases(artifact_dir),
+                ["scrape"],
+            )
+
+            (artifact_dir / "analysis.md").write_text("analysis complete\n")
+            self.assertEqual(
+                discord_feedback.infer_completed_phases(artifact_dir),
+                ["scrape", "analysis"],
+            )
+
+    def test_completed_scrape_is_checkpointed_before_fetch_only_returns(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            now = datetime.datetime(
+                2026, 7, 12, 5, 28, 51, tzinfo=datetime.timezone.utc
+            )
+            run_id = now.strftime("%Y%m%d-%H%M%S")
+            artifact_dir = repo / ".discord-feedback" / run_id
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "utc_now", return_value=now),
+                mock.patch.object(
+                    discord_feedback,
+                    "resolve_scrape_since",
+                    return_value=now - datetime.timedelta(hours=1),
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "discover_channels",
+                    return_value=([], {}),
+                ),
+                mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": "token"}),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    ["--fetch-only", "--no-pr-feedback"],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            state = json.loads((artifact_dir / "resume-state.json").read_text())
+            self.assertEqual(state["completed_phases"], ["scrape"])
+            self.assertTrue((artifact_dir / "messages.jsonl").is_file())
+            self.assertTrue((artifact_dir / "transcript.md").is_file())
+            self.assertTrue((artifact_dir / "run.json").is_file())
 
 
 class ValidationTests(unittest.TestCase):

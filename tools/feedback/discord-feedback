@@ -3338,6 +3338,7 @@ def save_resume_state(path: pathlib.Path, state: dict[str, Any]) -> None:
 # no standalone "passed" marker, but it runs before casts/pr-body/create-pr, so a later
 # artifact implies it completed. Used to resume runs created before resume-state.json existed.
 _RESUME_PHASE_MARKERS = [
+    ("scrape", "run.json"),
     ("analysis", "analysis.md"),
     ("implementation", "implementation-notes.md"),
     ("validation", None),
@@ -3617,9 +3618,9 @@ def feedback_command(
         raise click.ClickException("--create-pr requires --apply.")
     if create_pr and skip_tests:
         raise click.ClickException("--create-pr cannot be combined with --skip-tests.")
-    # The Discord token is only needed to scrape. A resume that skips the scrape (notably the
-    # fast-path that re-attaches to an already-opened PR) must not require it -- otherwise a
-    # fresh shell without the token can't even resume a watch. Validated at point-of-use below.
+    # The Discord token is only needed to scrape. A resume with a completed scrape or an
+    # already-opened PR must not require it -- otherwise a fresh shell without the token can't
+    # continue the run. Validated at point-of-use below.
     token = os.environ.get(token_env)
     resuming = bool(resume_run_id) or resume_latest
     if resume_run_id and resume_latest:
@@ -3708,123 +3709,163 @@ def feedback_command(
             "falling through to the normal flow."
         )
 
-    env_channel_ids = os.environ.get("PWN_FEEDBACK_DISCORD_CHANNEL_IDS")
-    selected_channel_ids = parse_channel_ids(channel_ids, env_channel_ids)
-    until = utc_now()
-    since = resolve_scrape_since(repo, until, hours, DEFAULT_FALLBACK_HOURS)
-
-    if not token:
+    analysis_path = artifact_dir / "analysis.md"
+    if resuming and phase_done("analysis") and (
+        not analysis_path.is_file() or analysis_path.stat().st_size == 0
+    ):
         raise click.ClickException(
-            f"{token_env} is not set. Create a Discord bot token and export it first."
+            "Cannot resume: analysis is checkpointed but analysis.md is missing or empty."
         )
-    api = DiscordAPI(token)
-    click.echo(f"Scraping Discord messages since {since.isoformat()} into {artifact_dir}")
-    channels, channels_by_id = discover_channels(
-        api, guild_id, selected_channel_ids, since, include_threads
-    )
-    click.echo(f"Discovered {len(channels)} readable channel(s)/thread(s)")
-    messages_by_channel: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
-    remaining = max_messages
-    for channel in channels:
-        if remaining <= 0:
-            break
-        messages = fetch_messages_since(api, channel, since, remaining)
-        remaining -= len(messages)
-        if messages:
-            messages_by_channel.append((channel, messages))
-            click.echo(
-                "Fetched "
-                f"{len(messages)} message(s) from "
-                f"{channel_display_name(channel, channels_by_id)}"
-            )
-            logger.info(
-                "fetched %d message(s) from %s",
-                len(messages),
-                channel_display_name(channel, channels_by_id),
-            )
 
-    messages = sanitize_messages(
-        messages_by_channel,
-        channels_by_id,
-        guild_id,
-        include_authors,
-        attachment_dir=artifact_dir / "attachments",
-    )
-    image_count = sum(
-        1
-        for message in messages
-        for attachment in message["attachments"]
-        if attachment.get("path")
-    )
-    if image_count:
+    scrape_complete = phase_done("scrape") or phase_done("analysis")
+    if resuming and scrape_complete:
+        # Analysis can only be checkpointed after these artifacts were written. Treat it as
+        # an implicit scrape checkpoint for runs created before the explicit phase existed.
+        if not phase_done("scrape"):
+            mark_phase_done("scrape")
+        jsonl_path = artifact_dir / "messages.jsonl"
+        transcript_path = artifact_dir / "transcript.md"
+        if not phase_done("analysis"):
+            missing = [
+                path.name
+                for path in (jsonl_path, transcript_path)
+                if not path.is_file()
+            ]
+            if missing:
+                raise click.ClickException(
+                    "Cannot resume: scrape is checkpointed but required artifact(s) "
+                    f"are missing: {', '.join(missing)}."
+                )
+        existing_pr_feedback = artifact_dir / "recent-pr-feedback.md"
+        pr_feedback_path = (
+            existing_pr_feedback
+            if existing_pr_feedback.is_file()
+            and existing_pr_feedback.stat().st_size > 0
+            else None
+        )
+        click.echo("Resume: reusing feedback artifacts (skipping Discord scrape)")
+    else:
+        env_channel_ids = os.environ.get("PWN_FEEDBACK_DISCORD_CHANNEL_IDS")
+        selected_channel_ids = parse_channel_ids(channel_ids, env_channel_ids)
+        until = utc_now()
+        since = resolve_scrape_since(repo, until, hours, DEFAULT_FALLBACK_HOURS)
+
+        if not token:
+            raise click.ClickException(
+                f"{token_env} is not set. Create a Discord bot token and export it first."
+            )
+        api = DiscordAPI(token)
         click.echo(
-            f"Downloaded {image_count} image attachment(s) into "
-            f"{artifact_dir / 'attachments'}"
+            f"Scraping Discord messages since {since.isoformat()} into {artifact_dir}"
         )
-    jsonl_path, transcript_path = write_transcript(artifact_dir, messages, since, until)
+        channels, channels_by_id = discover_channels(
+            api, guild_id, selected_channel_ids, since, include_threads
+        )
+        click.echo(f"Discovered {len(channels)} readable channel(s)/thread(s)")
+        messages_by_channel: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+        remaining = max_messages
+        for channel in channels:
+            if remaining <= 0:
+                break
+            messages = fetch_messages_since(api, channel, since, remaining)
+            remaining -= len(messages)
+            if messages:
+                messages_by_channel.append((channel, messages))
+                click.echo(
+                    "Fetched "
+                    f"{len(messages)} message(s) from "
+                    f"{channel_display_name(channel, channels_by_id)}"
+                )
+                logger.info(
+                    "fetched %d message(s) from %s",
+                    len(messages),
+                    channel_display_name(channel, channels_by_id),
+                )
 
-    pr_feedback_path: Optional[pathlib.Path] = None
-    pr_feedback_prs = 0
-    pr_feedback_events = 0
-    if pr_feedback:
-        pr_since = until - datetime.timedelta(hours=pr_feedback_hours)
-        try:
-            api = GitHubAPI.from_environment(repo)
-            owner, repo_name = github_repo_slug(repo)
-            recent_pulls = fetch_recent_pull_requests(
-                api, owner, repo_name, pr_since.isoformat()
-            )
-            maintainer_feedback = collect_maintainer_pr_feedback(
-                api, owner, repo_name, recent_pulls, {}
-            )
-            pr_feedback_path = write_pr_feedback(
-                artifact_dir, maintainer_feedback, pr_since, until
-            )
-            pr_feedback_prs = len(maintainer_feedback)
-            pr_feedback_events = sum(
-                len(pull["events"]) for pull in maintainer_feedback
-            )
+        messages = sanitize_messages(
+            messages_by_channel,
+            channels_by_id,
+            guild_id,
+            include_authors,
+            attachment_dir=artifact_dir / "attachments",
+        )
+        image_count = sum(
+            1
+            for message in messages
+            for attachment in message["attachments"]
+            if attachment.get("path")
+        )
+        if image_count:
             click.echo(
-                "Collected maintainer PR feedback: "
-                f"{pr_feedback_events} comment(s)/review(s) across "
-                f"{pr_feedback_prs} recent PR(s)"
+                f"Downloaded {image_count} image attachment(s) into "
+                f"{artifact_dir / 'attachments'}"
             )
-        except (click.ClickException, GitHubAPIError, OSError) as error:
-            click.echo(f"Skipping PR feedback collection: {error}")
-            pr_feedback_path = None
-
-    (artifact_dir / "run.json").write_text(
-        json.dumps(
-            {
-                "guild_id": guild_id,
-                "hours": hours,
-                "since": since.isoformat(),
-                "until": until.isoformat(),
-                "messages": len(messages),
-                "image_attachments": image_count,
-                "channels": len(channels),
-                "include_threads": include_threads,
-                "include_authors": include_authors,
-                "directions": directions,
-                "max_fix_attempts": max_fix_attempts,
-                "pr_feedback": pr_feedback,
-                "pr_feedback_hours": pr_feedback_hours,
-                "pr_feedback_prs": pr_feedback_prs,
-                "pr_feedback_events": pr_feedback_events,
-                "watch_pr": watch_pr,
-                "watch_pr_interval": watch_pr_interval,
-                "max_watch_fix_attempts": max_watch_fix_attempts,
-            },
-            indent=2,
-            sort_keys=True,
+        jsonl_path, transcript_path = write_transcript(
+            artifact_dir, messages, since, until
         )
-        + "\n"
-    )
-    click.echo(f"Wrote {len(messages)} sanitized message(s) to {transcript_path}")
+
+        pr_feedback_path: Optional[pathlib.Path] = None
+        pr_feedback_prs = 0
+        pr_feedback_events = 0
+        if pr_feedback:
+            pr_since = until - datetime.timedelta(hours=pr_feedback_hours)
+            try:
+                api = GitHubAPI.from_environment(repo)
+                owner, repo_name = github_repo_slug(repo)
+                recent_pulls = fetch_recent_pull_requests(
+                    api, owner, repo_name, pr_since.isoformat()
+                )
+                maintainer_feedback = collect_maintainer_pr_feedback(
+                    api, owner, repo_name, recent_pulls, {}
+                )
+                pr_feedback_path = write_pr_feedback(
+                    artifact_dir, maintainer_feedback, pr_since, until
+                )
+                pr_feedback_prs = len(maintainer_feedback)
+                pr_feedback_events = sum(
+                    len(pull["events"]) for pull in maintainer_feedback
+                )
+                click.echo(
+                    "Collected maintainer PR feedback: "
+                    f"{pr_feedback_events} comment(s)/review(s) across "
+                    f"{pr_feedback_prs} recent PR(s)"
+                )
+            except (click.ClickException, GitHubAPIError, OSError) as error:
+                click.echo(f"Skipping PR feedback collection: {error}")
+                pr_feedback_path = None
+
+        (artifact_dir / "run.json").write_text(
+            json.dumps(
+                {
+                    "guild_id": guild_id,
+                    "hours": hours,
+                    "since": since.isoformat(),
+                    "until": until.isoformat(),
+                    "messages": len(messages),
+                    "image_attachments": image_count,
+                    "channels": len(channels),
+                    "include_threads": include_threads,
+                    "include_authors": include_authors,
+                    "directions": directions,
+                    "max_fix_attempts": max_fix_attempts,
+                    "pr_feedback": pr_feedback,
+                    "pr_feedback_hours": pr_feedback_hours,
+                    "pr_feedback_prs": pr_feedback_prs,
+                    "pr_feedback_events": pr_feedback_events,
+                    "watch_pr": watch_pr,
+                    "watch_pr_interval": watch_pr_interval,
+                    "max_watch_fix_attempts": max_watch_fix_attempts,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        mark_phase_done("scrape")
+        click.echo(f"Wrote {len(messages)} sanitized message(s) to {transcript_path}")
     if fetch_only:
         return
 
-    analysis_path = artifact_dir / "analysis.md"
     if phase_done("analysis"):
         click.echo("Resume: reusing existing analysis.md")
     else:
