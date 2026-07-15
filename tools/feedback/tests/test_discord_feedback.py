@@ -33,22 +33,14 @@ class ResumeTests(unittest.TestCase):
             artifact_dir = repo / ".discord-feedback" / run_id
             artifact_dir.mkdir(parents=True)
             (artifact_dir / "analysis.md").write_text("analysis complete\n")
-            (artifact_dir / "resume-state.json").write_text(
-                json.dumps({"completed_phases": ["analysis"]}) + "\n"
-            )
+            (artifact_dir / "resume-state.json").write_text(json.dumps({"completed_phases": ["analysis"]}) + "\n")
 
             with (
                 mock.patch.object(discord_feedback, "git_root", return_value=repo),
-                mock.patch.object(
-                    discord_feedback, "resolve_scrape_since"
-                ) as resolve_scrape_since,
+                mock.patch.object(discord_feedback, "resolve_scrape_since") as resolve_scrape_since,
                 mock.patch.object(discord_feedback, "DiscordAPI") as discord_api,
-                mock.patch.object(
-                    discord_feedback.GitHubAPI, "from_environment"
-                ) as github_api,
-                mock.patch.object(
-                    discord_feedback, "write_transcript"
-                ) as write_transcript,
+                mock.patch.object(discord_feedback.GitHubAPI, "from_environment") as github_api,
+                mock.patch.object(discord_feedback, "write_transcript") as write_transcript,
                 mock.patch.object(discord_feedback, "run_agent") as run_agent,
                 mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": ""}),
             ):
@@ -76,15 +68,11 @@ class ResumeTests(unittest.TestCase):
             run_id = "20260712-052851"
             artifact_dir = repo / ".discord-feedback" / run_id
             artifact_dir.mkdir(parents=True)
-            (artifact_dir / "resume-state.json").write_text(
-                json.dumps({"completed_phases": ["analysis"]}) + "\n"
-            )
+            (artifact_dir / "resume-state.json").write_text(json.dumps({"completed_phases": ["analysis"]}) + "\n")
 
             with (
                 mock.patch.object(discord_feedback, "git_root", return_value=repo),
-                mock.patch.object(
-                    discord_feedback, "resolve_scrape_since"
-                ) as resolve_scrape_since,
+                mock.patch.object(discord_feedback, "resolve_scrape_since") as resolve_scrape_since,
                 mock.patch.object(discord_feedback, "DiscordAPI") as discord_api,
                 mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": ""}),
             ):
@@ -107,12 +95,8 @@ class ResumeTests(unittest.TestCase):
             run_id = "20260712-052851"
             artifact_dir = repo / ".discord-feedback" / run_id
             artifact_dir.mkdir(parents=True)
-            (artifact_dir / "resume-state.json").write_text(
-                json.dumps({"completed_phases": []}) + "\n"
-            )
-            now = datetime.datetime(
-                2026, 7, 12, 5, 28, 51, tzinfo=datetime.timezone.utc
-            )
+            (artifact_dir / "resume-state.json").write_text(json.dumps({"completed_phases": []}) + "\n")
+            now = datetime.datetime(2026, 7, 12, 5, 28, 51, tzinfo=datetime.timezone.utc)
 
             with (
                 mock.patch.object(discord_feedback, "git_root", return_value=repo),
@@ -145,9 +129,7 @@ class ResumeTests(unittest.TestCase):
             (artifact_dir / "run.json").write_text("{}\n")
             pr_feedback_path = artifact_dir / "recent-pr-feedback.md"
             pr_feedback_path.write_text("maintainer context\n")
-            (artifact_dir / "resume-state.json").write_text(
-                json.dumps({"completed_phases": ["scrape"]}) + "\n"
-            )
+            (artifact_dir / "resume-state.json").write_text(json.dumps({"completed_phases": ["scrape"]}) + "\n")
             analysis_path = artifact_dir / "analysis.md"
 
             def finish_analysis(*_args, **_kwargs):
@@ -195,9 +177,7 @@ class ResumeTests(unittest.TestCase):
     def test_completed_scrape_is_checkpointed_before_fetch_only_returns(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = pathlib.Path(temporary_directory)
-            now = datetime.datetime(
-                2026, 7, 12, 5, 28, 51, tzinfo=datetime.timezone.utc
-            )
+            now = datetime.datetime(2026, 7, 12, 5, 28, 51, tzinfo=datetime.timezone.utc)
             run_id = now.strftime("%Y%m%d-%H%M%S")
             artifact_dir = repo / ".discord-feedback" / run_id
 
@@ -394,17 +374,11 @@ class OperatorFeedbackTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             feedback_path = pathlib.Path(temporary_directory) / "feedback.jsonl"
 
-            first = discord_feedback.append_operator_feedback(
-                feedback_path, "  Prefer the smaller fix.  "
-            )
-            second = discord_feedback.append_operator_feedback(
-                feedback_path, "Keep Unicode: ☃"
-            )
+            first = discord_feedback.append_operator_feedback(feedback_path, "  Prefer the smaller fix.  ")
+            second = discord_feedback.append_operator_feedback(feedback_path, "Keep Unicode: ☃")
 
             entries = discord_feedback.load_operator_feedback(feedback_path)
-            self.assertEqual(
-                [entry["id"] for entry in entries], [first["id"], second["id"]]
-            )
+            self.assertEqual([entry["id"] for entry in entries], [first["id"], second["id"]])
             self.assertEqual(entries[0]["text"], "Prefer the smaller fix.")
             self.assertEqual(entries[1]["text"], "Keep Unicode: ☃")
             self.assertEqual(entries[0]["source"], "terminal")
@@ -471,9 +445,7 @@ class OperatorFeedbackTests(unittest.TestCase):
                 str(artifact_dir / discord_feedback.OPERATOR_FEEDBACK_FILENAME),
                 streamed_prompt,
             )
-            self.assertIn(
-                "re-read the file immediately before finalizing", streamed_prompt
-            )
+            self.assertIn("re-read the file immediately before finalizing", streamed_prompt)
             self.assertIn("Later entries supersede earlier entries", streamed_prompt)
 
     def test_reconciliation_leaves_feedback_arriving_mid_agent_pending(self):
@@ -491,9 +463,7 @@ class OperatorFeedbackTests(unittest.TestCase):
                 nonlocal arriving
                 response_path = artifact_dir / "operator-feedback-response-001.md"
                 response_path.write_text("addressed\n")
-                arriving = discord_feedback.append_operator_feedback(
-                    feedback_path, "arrived while the agent ran"
-                )
+                arriving = discord_feedback.append_operator_feedback(feedback_path, "arrived while the agent ran")
                 return artifact_dir / "operator-feedback-agent-001.log"
 
             with mock.patch.object(
@@ -675,25 +645,16 @@ class OperatorFeedbackTests(unittest.TestCase):
 
             self.assertEqual(result.exit_code, 0, result.output)
             run_terminal_ui.assert_called_once()
-            self.assertEqual(
-                run_terminal_ui.call_args.kwargs["run_id"], "20260713-010203"
-            )
+            self.assertEqual(run_terminal_ui.call_args.kwargs["run_id"], "20260713-010203")
             self.assertTrue(
-                (
-                    repo
-                    / ".discord-feedback"
-                    / "20260713-010203"
-                    / discord_feedback.OPERATOR_FEEDBACK_FILENAME
-                ).is_file()
+                (repo / ".discord-feedback" / "20260713-010203" / discord_feedback.OPERATOR_FEEDBACK_FILENAME).is_file()
             )
             self.assertIn("discord-feedback exited with code 0", result.output)
 
     def test_cli_tui_failure_keeps_resume_command_visible(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = pathlib.Path(temporary_directory)
-            now = datetime.datetime(
-                2026, 7, 13, 1, 2, 3, tzinfo=datetime.timezone.utc
-            )
+            now = datetime.datetime(2026, 7, 13, 1, 2, 3, tzinfo=datetime.timezone.utc)
 
             with (
                 mock.patch.object(discord_feedback, "git_root", return_value=repo),
@@ -727,8 +688,7 @@ class OperatorFeedbackTests(unittest.TestCase):
             (artifact_dir / "analysis.md").write_text("analysis complete\n")
             (artifact_dir / "implementation-notes.md").write_text("implemented\n")
             (artifact_dir / "resume-state.json").write_text(
-                json.dumps({"completed_phases": ["analysis", "implementation"]})
-                + "\n"
+                json.dumps({"completed_phases": ["analysis", "implementation"]}) + "\n"
             )
 
             invalidation_seen_by_agent = False
@@ -736,12 +696,8 @@ class OperatorFeedbackTests(unittest.TestCase):
             def write_agent_output(*_args, **kwargs):
                 nonlocal invalidation_seen_by_agent
                 if kwargs["output_name"].startswith("operator-feedback-agent-"):
-                    checkpoint = json.loads(
-                        (artifact_dir / "resume-state.json").read_text()
-                    )
-                    invalidation_seen_by_agent = (
-                        "validation" not in checkpoint["completed_phases"]
-                    )
+                    checkpoint = json.loads((artifact_dir / "resume-state.json").read_text())
+                    invalidation_seen_by_agent = "validation" not in checkpoint["completed_phases"]
                 output_path = artifact_dir / kwargs["output_name"]
                 output_path.write_text("# Summary\n\nValidated changes.\n")
                 return output_path
@@ -811,9 +767,7 @@ class OperatorFeedbackTests(unittest.TestCase):
             (artifact_dir / "analysis.md").write_text("analysis complete\n")
             (artifact_dir / "implementation-notes.md").write_text("implemented\n")
             (artifact_dir / "pr-body.md").write_text("old body\n")
-            (artifact_dir / "pr-url.txt").write_text(
-                "https://github.com/pwncollege/challenges/pull/123\n"
-            )
+            (artifact_dir / "pr-url.txt").write_text("https://github.com/pwncollege/challenges/pull/123\n")
             (artifact_dir / "resume-state.json").write_text(
                 json.dumps(
                     {
@@ -885,9 +839,7 @@ class OperatorFeedbackTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.output)
             commit_and_push.assert_called_once_with(repo, "Address operator feedback")
             self.assertIn("Pushed resumed feedback changes", result.output)
-            watch_state = json.loads(
-                (artifact_dir / "pr-watch-state.json").read_text()
-            )
+            watch_state = json.loads((artifact_dir / "pr-watch-state.json").read_text())
             self.assertIn(feedback["id"], watch_state["handled_operator_feedback"])
 
     def test_existing_pr_recovery_pushes_a_clean_branch_ahead_of_origin(self):
