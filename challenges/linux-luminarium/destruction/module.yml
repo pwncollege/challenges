@@ -8,12 +8,6 @@ resources:
   id: disk-doomsday
   name: Disk-Space Doomsday
 - type: challenge
-  id: disk-doomsday-test
-  name: Disk-Space Doomsday (Test)
-  required: false
-  visibility:
-    start: "2099-01-01T00:00:00+00:00"
-- type: challenge
   id: rm-rf-root
   name: rm -rf /
 - type: challenge

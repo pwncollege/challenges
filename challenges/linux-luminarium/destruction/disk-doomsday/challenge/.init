@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+
+mount -t tmpfs -o size=128M,mode=0755,nosuid,nodev tmpfs /home/hacker
+chown hacker:hacker /home/hacker

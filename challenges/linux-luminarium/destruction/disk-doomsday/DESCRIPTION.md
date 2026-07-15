@@ -35,6 +35,10 @@ The process:
 4. Run `/challenge/check` a second time.  If it can now create the temporary file (i.e., you successfully cleaned up your home directory), you’ll receive the flag.
 
 ----
+**NOTE:**
+For this challenge, `/home/hacker` is a small, temporary home directory.
+Your existing home-directory files will not be available here, and files you save here will not persist after the challenge ends.
+
 **Why two stages?**
 Your home directory persists across challenge instances.
 If we let you keep it full, your pwn.college will stop working.
