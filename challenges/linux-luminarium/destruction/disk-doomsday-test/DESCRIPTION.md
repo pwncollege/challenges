@@ -36,11 +36,11 @@ The process:
 
 ----
 **Why two stages?**
-For local runs, this challenge gives you a temporary, size-limited home directory for the exercise.
-On pwn.college, your home directory persists across challenge instances.
-If we let you keep it full, your pwn.college will stop working.
+This challenge temporarily replaces `/home/hacker` with a size-limited workspace for the exercise.
+Your normal persistent home is left untouched and returns when you leave the challenge.
+If we let you keep your normal home full, your pwn.college would stop working.
 This is _by far_ the most common cause of weird issues on pwn.college!
 
 **HELP IT BROKE!**
-If you fill the disk and don't clean it up afterwards, you'll need to `ssh` in to fix things (by removing that file).
-This is a bit tricky, but we describe how to do it under "Connecting over SSH" in the [Getting Started](/welcome/welcome) module.
+If you lose your connection after filling the temporary workspace, restart the challenge to reset it.
+To earn the flag, you must fill and clean up the workspace in the same challenge instance.
