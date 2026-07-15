@@ -3,8 +3,6 @@
   lib ? pkgs.lib,
   workspaceRuntime,
   publicKey ? null,
-  dataDir ? "/var/lib/pwn.college",
-  runDir ? "/run/pwn.college",
   daemonListenAddress ? "127.0.0.1:8000",
   egressAddress ? "192.0.2.1",
   egressDomains ? [ "example.com" ],
@@ -14,6 +12,8 @@
 
 let
   name = "pwn-workspace";
+  dataDir = "/var/lib/pwn.college";
+  runDir = "/run/pwn.college";
   unitName = component: "${name}-${component}";
 
   network = import ./network {
@@ -26,7 +26,7 @@ let
       workspaceSubnet
       ;
   };
-  container = import ./container {
+  containerd = import ./containerd.nix {
     inherit
       pkgs
       lib
@@ -39,6 +39,16 @@ let
       networkPolicy
       egressPolicyServiceName
       ;
+  };
+  buildkit = import ./buildkit.nix {
+    inherit
+      pkgs
+      lib
+      name
+      dataDir
+      runDir
+      ;
+    inherit (containerd) containerdSockPath;
   };
   store = import ./store.nix {
     inherit
@@ -61,7 +71,7 @@ let
       ;
     egressAddress = network.egressAddress;
     egressServiceName = network.egressServiceName;
-    inherit (container) containerdSockPath seccompProfile;
+    inherit (containerd) containerdSockPath seccompProfile;
     inherit (store) nixStorePath;
   };
 in
@@ -76,7 +86,13 @@ in
     workspaceSubnet
     ;
   daemonURL = daemon.url;
-  inherit (container)
+  buildkitURL = "unix://${buildkit.buildkitSockPath}";
+  inherit (buildkit)
+    buildkitDataDir
+    buildkitRunDir
+    buildkitSockPath
+    ;
+  inherit (containerd)
     containerdDataDir
     containerdRunDir
     containerdSockPath
@@ -84,15 +100,14 @@ in
 
   sockets = { };
 
-  services = network.services // container.services // {
-    "${unitName "store"}" = store.service;
-    "${unitName "daemon"}" = daemon.service;
-  };
+  services =
+    network.services
+    // containerd.services
+    // {
+      "${unitName "buildkit"}" = buildkit.service;
+      "${unitName "store"}" = store.service;
+      "${unitName "daemon"}" = daemon.service;
+    };
 
-  tmpfilesRules = [
-    "d ${runDir} 0711 root root -"
-  ]
-  ++ store.tmpfilesRules
-  ++ network.tmpfilesRules
-  ++ container.tmpfilesRules;
+  tmpfilesRules = store.tmpfilesRules ++ network.tmpfilesRules;
 }

@@ -11,8 +11,6 @@ let
     inherit pkgs lib;
     inherit (cfg)
       workspaceRuntime
-      dataDir
-      runDir
       daemonListenAddress
       egressAddress
       egressDomains
@@ -35,18 +33,6 @@ in
       type = lib.types.nullOr (lib.types.strMatching "[0-9a-fA-F]{64}");
       default = null;
       description = "Optional hex-encoded raw Ed25519 control-plane public key used to authenticate API requests.";
-    };
-
-    dataDir = lib.mkOption {
-      type = lib.types.str;
-      default = "/var/lib/pwn.college";
-      description = "Persistent state directory for the dedicated container runtime.";
-    };
-
-    runDir = lib.mkOption {
-      type = lib.types.str;
-      default = "/run/pwn.college";
-      description = "Runtime state directory for sockets and process state.";
     };
 
     daemonListenAddress = lib.mkOption {

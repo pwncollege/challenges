@@ -16,8 +16,8 @@ let
   containerdRunDir = "${runDir}/containerd";
   containerdSockPath = "${containerdRunDir}/containerd.sock";
 
-  kataConfig = import ./kata.nix { inherit pkgs; };
-  seccompProfile = import ./seccomp.nix { inherit pkgs; };
+  kataConfig = import ./container/kata.nix { inherit pkgs; };
+  seccompProfile = import ./container/seccomp.nix { inherit pkgs; };
 
   containerdConfig = pkgs.writeText "${name}-containerd-config.toml" ''
     version = 4
@@ -62,12 +62,20 @@ in
     "${unitName "containerd"}" = {
       description = "pwn.college workspace container runtime";
       requires = [ "${egressPolicyServiceName}.service" ];
-      after = [ "${egressPolicyServiceName}.service" "local-fs.target" ];
+      after = [
+        "${egressPolicyServiceName}.service"
+        "local-fs.target"
+      ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "notify";
         ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfig}";
-        Environment = "PATH=${lib.makeBinPath [ pkgs.kata-runtime pkgs.runc ]}";
+        Environment = "PATH=${
+          lib.makeBinPath [
+            pkgs.kata-runtime
+            pkgs.runc
+          ]
+        }";
         Restart = "on-failure";
         TimeoutStartSec = 60;
         NotifyAccess = "all";
@@ -77,12 +85,12 @@ in
         LimitCORE = "infinity";
         TasksMax = "infinity";
         OOMScoreAdjust = -500;
+        RuntimeDirectory = "pwn.college/containerd";
+        RuntimeDirectoryMode = "0711";
+        RuntimeDirectoryPreserve = "restart";
+        StateDirectory = "pwn.college/containerd";
+        StateDirectoryMode = "0711";
       };
     };
   };
-
-  tmpfilesRules = [
-    "d ${containerdRunDir} 0711 root root -"
-    "d ${containerdDataDir} 0711 root root -"
-  ];
 }

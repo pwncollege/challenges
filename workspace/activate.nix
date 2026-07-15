@@ -75,11 +75,13 @@ pkgs.writeShellApplication {
     current_systemd_units='${platform.runDir}/current-systemd-units'
 
     emit_environment() {
+      printf 'export BUILDKIT_HOST=%q\n' '${platform.buildkitURL}'
       printf 'export PWN_WORKSPACE_DAEMON_URL=%q\n' '${platform.daemonURL}'
     }
 
     check_health() {
-      curl --fail --silent '${platform.daemonURL}/api/health' >/dev/null 2>&1
+      curl --fail --silent '${platform.daemonURL}/api/health' >/dev/null 2>&1 \
+        && '${pkgs.buildkit}/bin/buildctl' --addr '${platform.buildkitURL}' debug workers >/dev/null 2>&1
     }
 
     wait_for_health() {
@@ -104,16 +106,10 @@ pkgs.writeShellApplication {
       done
     }
 
-    install -d -m 0711 -o root -g root '${platform.runDir}'
-
     if [[ "$(readlink -f "$current_systemd_units" 2>/dev/null || true)" == '${unitDirectory}' ]] && check_health; then
       emit_environment
       exit 0
     fi
-
-    install -d -m 0711 -o root -g root \
-      '${platform.containerdRunDir}' \
-      '${platform.containerdDataDir}'
 
     mkdir -p /nix/var/nix/gcroots
     ln -sfn "$0" '/nix/var/nix/gcroots/${platform.name}'
