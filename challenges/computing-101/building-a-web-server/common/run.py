@@ -375,6 +375,8 @@ def validate_static_response():
                 if not chunk:
                     break
                 response += chunk
+            if len(response) == len(expected):
+                response += client.recv(1)
         except TimeoutError as e:
             return f"Static response: Timed out ({type(e).__name__}: {e})"
 
