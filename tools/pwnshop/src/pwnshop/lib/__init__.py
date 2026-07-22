@@ -145,6 +145,7 @@ def run_challenge(
                 "--env=PWN_USER=hacker",
                 f"--env=PATH={container_path}",
                 "--volume=/nix:/nix:ro",
+                "--volume=/nix/store:/nix/store:ro",
                 *runtime_options,
                 *[f"--volume={volume}:{volume}:ro" for volume in (volumes or [])],
                 challenge_image,
