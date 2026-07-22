@@ -20,12 +20,12 @@ runs:
       with:
         script: |
           let ref = "";
+          const { owner, repo } = context.repo;
+          const branch = context.ref.replace("refs/heads/", "");
           if (context.eventName === "pull_request") {
             ref = context.payload.pull_request.base.sha;
           } else if (context.eventName === "push") {
             const workflowFile = process.env.GITHUB_WORKFLOW_REF.split("@")[0].split("/").pop();
-            const branch = context.ref.replace("refs/heads/", "");
-            const { owner, repo } = context.repo;
             const runs = await github.rest.actions.listWorkflowRuns({
               owner,
               repo,
@@ -36,6 +36,22 @@ runs:
             });
             const [latest] = runs.data.workflow_runs;
             ref = latest ? latest.head_sha : "";
+          }
+          if (ref) {
+            try {
+              const comparison = await github.rest.repos.compareCommitsWithBasehead({
+                owner,
+                repo,
+                basehead: `${ref}...${context.sha}`,
+              });
+              if (!["ahead", "identical"].includes(comparison.data.status)) {
+                core.warning(`${ref} is not an ancestor of the current commit; branch history may have changed`);
+                ref = "";
+              }
+            } catch {
+              core.warning(`${ref} could not be compared with the current commit`);
+              ref = "";
+            }
           }
           core.setOutput("ref", ref);
 
