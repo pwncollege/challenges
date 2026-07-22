@@ -1,7 +1,6 @@
-The available space in `/home/hacker` in this container is a measly **1 gigabyte**.
-In this level you will clog up `/home/hacker` with so much junk that even a tiny 1 megabyte file can't be created.
-When this happens, your workspace becomes unusable.
-We'll practice inducing this in this challenge, and then expand on it a bit later.
+In this challenge, `/home/hacker` is backed by a small temporary filesystem.
+You will clog it with so much junk that even a tiny 1 megabyte file can't be created.
+Then you will clean up the junk and restore the available space.
 
 How to fill the disk?
 There are so many ways.
@@ -22,9 +21,9 @@ y
 hacker@dojo:~$
 ```
 
-The `yes` outputs `y` over and over forever.
+The `yes` command outputs `y` over and over forever.
 The typical usage is to automate confirmation prompts ("Are you sure you want to delete this file?") using piping, but we'll use it here to make a massive file full of "y" lines.
-Just redirect `yes` to a file in your home directory, and you'll fill your disk in a minute or two!
+Just redirect `yes` to a file in your home directory, and it will keep growing until the temporary filesystem fills up!
 
 This challenge forces you to fill the disk and then clean up.
 The process:
@@ -36,14 +35,8 @@ The process:
 
 ----
 **NOTE:**
-For this challenge, `/home/hacker` is a small, temporary home directory.
 Your existing home-directory files will not be available here, and files you save here will not persist after the challenge ends.
 
 **Why two stages?**
-Your home directory persists across challenge instances.
-If we let you keep it full, your pwn.college will stop working.
-This is _by far_ the most common cause of weird issues on pwn.college!
-
-**HELP IT BROKE!**
-If you fill the disk and don't clean it up afterwards, you'll need to `ssh` in to fix things (by removing that file).
-This is a bit tricky, but we describe how to do it under "Connecting over SSH" in the [Getting Started](/welcome/welcome) module.
+Filling a filesystem is only half the exercise.
+The second stage teaches you to clean up after exhausting a system resource, even though this sandbox keeps the experiment away from your persistent home directory.

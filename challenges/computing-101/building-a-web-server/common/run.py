@@ -13,6 +13,7 @@ import struct
 import signal
 import fcntl
 import ctypes
+import time
 import tempfile
 import pathlib
 import contextlib
@@ -32,7 +33,7 @@ strace_expected_parent = r"""
 3..10   bind(3, {sa_family=AF_INET, sin_port=htons(<bind_port>), sin_addr=inet_addr("<bind_address>")}, 16) = 0
 4..10   listen(3, 0) = 0
 5..10   accept(3, NULL, NULL) = 4
-6..8    read(4, <read_request>, <read_request_count>) = <read_request_result>
+7..8    read(4, <read_request>, <read_request_count>) = <read_request_result>
 7..8    open("<open_path>", O_RDONLY) = 5
 7..8    read(5, <read_file>, <read_file_count>) = <read_file_result>
 7..8    close(5) = 0
@@ -354,12 +355,31 @@ def connect():
         pass
 
 
-def validate_connect():
-    session = retry_session()
-    try:
-        session.get("http://localhost", timeout=1)
-    except requests.exceptions.RequestException as e:
-        return request_failure("Connect", e)
+def validate_static_response():
+    expected = b"HTTP/1.0 200 OK\r\n\r\n"
+
+    for attempt in range(5):
+        try:
+            client = socket.create_connection(("localhost", 80), timeout=1)
+            break
+        except ConnectionRefusedError as e:
+            if attempt == 4:
+                return f"Static response: Failed to connect ({type(e).__name__}: {e})"
+            time.sleep(0.1)
+
+    with client:
+        response = b""
+        try:
+            while len(response) < len(expected):
+                chunk = client.recv(len(expected) - len(response))
+                if not chunk:
+                    break
+                response += chunk
+        except TimeoutError as e:
+            return f"Static response: Timed out ({type(e).__name__}: {e})"
+
+    if response != expected:
+        return "Static response: Response not correct"
 
 
 def validate_get(data=None):
@@ -401,7 +421,7 @@ def challenge():
         3: "bind an address to a socket",
         4: "listen on a socket",
         5: "accept a connection",
-        6: "respond to an http request",
+        6: "send a static HTTP response to a client",
         7: "respond to a GET request for the contents of a specified file",
         8: "accept multiple requests",
         9: "concurrently accept multiple requests",
@@ -451,14 +471,14 @@ $ {sys.argv[0]} ./server
 
         operation_names = {
             connect: "connect",
-            validate_connect: "validated connect",
+            validate_static_response: "static HTTP response",
             validate_get: "HTTP GET request",
             validate_post: "HTTP POST request",
         }
 
         operations = {
             5: [connect],
-            6: [validate_connect],
+            6: [validate_static_response],
             7: [validate_get],
             8: [validate_get, connect],
             9: [validate_get, connect],
