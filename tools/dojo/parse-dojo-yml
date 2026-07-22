@@ -49,7 +49,9 @@ class RawDojoYml(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9-]{1,32}$")
 
     name: Optional[str] = None
+    url: Optional[str] = None
     type: Optional[str] = None
+    password: Optional[str] = Field(default=None, pattern=r"^[\S ]{8,128}$")
     award: Optional[dict] = None
     description: Optional[str] = None
     visibility: Optional[Visibility] = None
@@ -147,6 +149,7 @@ class DojoSpec(BaseModel):
     name: str
 
     type: Optional[str] = None
+    password: Optional[str] = Field(default=None, pattern=r"^[\S ]{8,128}$")
     award: Optional[dict] = None
     description: Optional[str] = None
     visibility: Optional[Visibility] = None
@@ -325,6 +328,7 @@ def main() -> int:
             "id": raw_dojo.id,
             "name": dojo_name,
             "type": raw_dojo.type,
+            "password": raw_dojo.password,
             "award": raw_dojo.award,
             "description": raw_dojo.description or dojo_description_md,
             "visibility": raw_dojo.visibility.model_dump(exclude_none=True) if raw_dojo.visibility else None,
@@ -339,6 +343,8 @@ def main() -> int:
             return print_validation_errors("", error)
 
         spec = validated.model_dump(mode="json", exclude_none=True)
+        if raw_dojo.url is not None:
+            spec["url"] = raw_dojo.url
 
     except Exception as error:
         print(f"Error: failed to parse {dojo_yml}: {error}", file=sys.stderr)

@@ -2,7 +2,6 @@
 # /// script
 # requires-python = ">=3.9"
 # dependencies = [
-#   "pyyaml>=6.0",
 #   "requests>=2.0",
 # ]
 # ///
@@ -13,6 +12,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import urllib.parse
 
 import requests
 
@@ -25,12 +25,6 @@ def main() -> int:
 
     dojo_url = os.environ.get("DOJO_URL")
     dojo_token = os.environ.get("DOJO_TOKEN")
-    if not dojo_url:
-        print("Error: missing DOJO_URL env var.", file=sys.stderr)
-        return 2
-    if not dojo_token:
-        print("Error: missing DOJO_TOKEN env var.", file=sys.stderr)
-        return 2
 
     dojo_yml = args.dojo_yml
     dojo_prefix = "/".join(dojo_yml.parts[1:-1])
@@ -50,6 +44,23 @@ def main() -> int:
         return 0
 
     spec = json.loads(parse_result.stdout)
+    dojo_yml_url = spec.pop("url", None)
+    dojo_url_id = None
+    if dojo_yml_url:
+        parsed_url = urllib.parse.urlparse(dojo_yml_url)
+        path_parts = [part for part in parsed_url.path.split("/") if part]
+        if not parsed_url.scheme or not parsed_url.netloc or not path_parts:
+            print(f"Error: invalid dojo url in {dojo_yml}: {dojo_yml_url}", file=sys.stderr)
+            return 1
+        dojo_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        dojo_url_id = path_parts[1] if path_parts[0] == "dojo" and len(path_parts) > 1 else path_parts[0]
+
+    if not dojo_url:
+        print("Skipping: missing DOJO_URL env var and dojo.yml url.", file=sys.stderr)
+        return 0
+    if not dojo_token:
+        print("Error: missing DOJO_TOKEN env var.", file=sys.stderr)
+        return 2
 
     for module in spec.get("modules", []):
         module_id = module.get("id")
@@ -60,7 +71,7 @@ def main() -> int:
             slug = f"{dojo_prefix}/{module_id}/{challenge_id}"
             resource["image"] = f"{args.registry}/{slug}:latest"
 
-    dojo_id = spec["id"]
+    dojo_id = dojo_url_id or spec["id"]
     update_url = f"{dojo_url}/pwncollege_api/v1/dojos/{dojo_id}/update"
     try:
         response = requests.post(
