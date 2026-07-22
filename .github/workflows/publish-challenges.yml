@@ -121,7 +121,7 @@ jobs:
         echo "::endgroup::"
 
     - name: Update dojo
-      if: ${{ vars.DOJO_URL != '' && hashFiles(format('challenges/{0}/dojo.yml', matrix.challenges)) != '' }}
+      if: ${{ hashFiles(format('challenges/{0}/dojo.yml', matrix.challenges)) != '' }}
       shell: 'nix shell nixpkgs#uv --command bash --noprofile --norc -euo pipefail {0}'
       env:
         CHALLENGES_DIR: challenges/${{ matrix.challenges }}
