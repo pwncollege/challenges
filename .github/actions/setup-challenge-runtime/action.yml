@@ -9,7 +9,7 @@ runs:
         echo "::group::Disk usage"
         df -h
         echo "::endgroup::"
-        sudo sysctl -w kernel.core_pattern=core
-        sudo mkdir -p /mnt/pwn.college
-        sudo ln -s /mnt/pwn.college /var/lib/pwn.college
+        [ "$(sysctl -n kernel.core_pattern)" = "core" ] || sudo sysctl -w kernel.core_pattern=core
+        [ -d /mnt/pwn.college ] || sudo mkdir -p /mnt/pwn.college
+        [ "$(readlink /var/lib/pwn.college 2>/dev/null || true)" = "/mnt/pwn.college" ] || sudo ln -sfnT /mnt/pwn.college /var/lib/pwn.college
         nix develop -c bash -lc 'echo DOCKER_HOST=$DOCKER_HOST'
