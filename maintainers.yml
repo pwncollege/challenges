@@ -57,3 +57,27 @@
     oAE=
     =JOas
     -----END PGP PUBLIC KEY BLOCK-----
+
+
+- name: adamd
+  email: doupe@asu.edu
+  github: adamdoupe
+  groups: ["*"]
+  key: |
+    -----BEGIN PGP PUBLIC KEY BLOCK-----
+
+    mDMEamKe9hYJKwYBBAHaRw8BAQdA9Nt7ghncLAZjxbCGmMWG3TcIZJCU4k9I9E+I
+    ISiqFOe0LEFkYW0gRG91cGUgKHB3bi5jb2xsZWdlIGRldikgPGRvdXBlQGFzdS5l
+    ZHU+iLUEExYKAF0WIQSyoJaUkLftRj3kdQvpq+3F2RbklgUCamKe9hsUgAAAAAAE
+    AA5tYW51MiwyLjUrMS4xMiwwLDMCGwEFCQPCZwAFCwkIBwICIgIGFQoJCAsCBBYC
+    AwECHgcCF4AACgkQ6avtxdkW5JafEwEAtXeRU2vs/jTupn9RfOf1BQU/76vu3ws8
+    2JZ43qsbTCoA/0z06Iq1Hho3IC+ZWlqzCrxSJTBpzHS66CunxM9aqjkMiF0EEBEI
+    AB0WIQTJnTDDa60aWfKIWyfRb0j2d574HwUCamKfiQAKCRDRb0j2d574HwrqAJ9/
+    w+UktxTPIQIqQHEcEULQ3dGUKACggRwFst8o9MmH0tGtarPC2XlNrX24OARqYp8f
+    EgorBgEEAZdVAQUBAQdAbiStv+Ljbxiw5hQADgf7bRdowafn1OAA3CNToG6YqjwD
+    AQgHiJoEGBYKAEIWIQSyoJaUkLftRj3kdQvpq+3F2RbklgUCamKfHxsUgAAAAAAE
+    AA5tYW51MiwyLjUrMS4xMiwwLDMCGwwFCQPCZwAACgkQ6avtxdkW5JY6OAEAl3wk
+    48RjIQ7GJXeHthvn2IDAzbK5QMPkbzPzd+BL2v4BAJot3Mg3lSGaDgOr32B/VJc2
+    ORrvJGYD03ICi4toHT4D
+    =7Hrl
+    -----END PGP PUBLIC KEY BLOCK-----
