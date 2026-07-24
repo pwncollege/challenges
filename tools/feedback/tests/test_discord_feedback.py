@@ -958,6 +958,79 @@ class OperatorFeedbackTests(unittest.TestCase):
             watch_state = json.loads((artifact_dir / "pr-watch-state.json").read_text())
             self.assertIn(feedback["id"], watch_state["handled_operator_feedback"])
 
+    def test_empty_feedback_run_completes_without_opening_pr(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            run_id = "20260724-061106"
+            artifact_dir = repo / ".discord-feedback" / run_id
+            artifact_dir.mkdir(parents=True)
+            test_log = artifact_dir / "pwnshop-test-attempt-1.log"
+            test_log.write_text("No challenges found since origin/main\n")
+            (artifact_dir / "analysis.md").write_text("No changes needed.\n")
+            (artifact_dir / "implementation-notes.md").write_text(
+                "No changes needed.\n"
+            )
+            (artifact_dir / "pr-body.md").write_text("No changes needed.\n")
+            (artifact_dir / "resume-state.json").write_text(
+                json.dumps(
+                    {
+                        "completed_phases": [
+                            "scrape",
+                            "analysis",
+                            "implementation",
+                            "validation",
+                            "casts",
+                            "pr-body",
+                        ],
+                        "test_log": str(test_log),
+                    }
+                )
+                + "\n"
+            )
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "prepare_branch"),
+                mock.patch.object(
+                    discord_feedback,
+                    "changed_challenges_since",
+                    return_value=[],
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "existing_pr_url",
+                    return_value=None,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "repository_has_pr_changes",
+                    return_value=False,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "create_pull_request",
+                ) as create_pull_request,
+                mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": ""}),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    [
+                        "--resume",
+                        run_id,
+                        "--apply",
+                        "--create-pr",
+                        "--no-watch-pr",
+                        "--skip-casts",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("no repository changes were needed", result.output)
+            self.assertIn("no PR was opened", result.output)
+            create_pull_request.assert_not_called()
+            state = json.loads((artifact_dir / "resume-state.json").read_text())
+            self.assertIn("no-changes", state["completed_phases"])
+
     def test_existing_pr_recovery_pushes_a_clean_branch_ahead_of_origin(self):
         repo = pathlib.Path("/repo")
 

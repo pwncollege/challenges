@@ -3948,6 +3948,15 @@ def create_pull_request(
     return pr_url
 
 
+def repository_has_pr_changes(repo: pathlib.Path, base_ref: str) -> bool:
+    """Whether opening a PR would carry any tracked work relative to its base."""
+    if git_output(["status", "--porcelain"], repo):
+        return True
+    return bool(
+        git_output(["diff", "--name-only", f"{base_ref}...HEAD", "--"], repo)
+    )
+
+
 def load_resume_state(path: pathlib.Path) -> dict[str, Any]:
     if path.exists():
         try:
@@ -4754,6 +4763,13 @@ def feedback_command(
             pr_url = pr_url_path.read_text().strip() or None
         if not pr_url and resuming:
             pr_url = existing_pr_url(repo)
+        if not pr_url and not repository_has_pr_changes(repo, base_ref):
+            mark_phase_done("no-changes")
+            click.echo(
+                "Feedback run complete: no repository changes were needed, so no PR "
+                f"was opened. Artifacts: {artifact_dir}"
+            )
+            return
         if pr_url:
             click.echo(f"Resume: reusing existing PR {pr_url}")
             update_message = (
