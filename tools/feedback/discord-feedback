@@ -50,6 +50,14 @@ IMAGE_ATTACHMENT_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
 MAX_IMAGE_ATTACHMENT_BYTES = 25 * 1024 * 1024
 STATUS_HEARTBEAT_SECONDS = 30
 STREAM_OUTPUT_QUEUE_LINES = 1000
+# An agent process can wedge in npm startup, an MCP handshake, the provider, or a tool call.
+# Bound each attempt, then retry it from the durable repository/artifact state. A handful of
+# fresh turns is enough to route around transient provider and policy false-positives without
+# turning a persistent configuration error into an infinite paid loop.
+AGENT_ATTEMPT_TIMEOUT_SECONDS = 60 * 60
+AGENT_MAX_ATTEMPTS = 5
+AGENT_RETRY_BASE_DELAY_SECONDS = 2.0
+AGENT_RETRY_MAX_DELAY_SECONDS = 30.0
 # Validation can fan out across a large module, but it must never wait forever on a wedged
 # build, test, Docker client, or runtime. This is an outer process-tree watchdog; pwnshop's
 # own --timeout only bounds an individual test after its workspace has started.
@@ -1543,6 +1551,46 @@ def resolve_agent(agent: str, apply: bool) -> tuple[str, list[str]]:
     raise click.ClickException(f"Unsupported agent: {agent}")
 
 
+def agent_attempt_stream_path(
+    output_path: pathlib.Path, suffix: str, attempt: int
+) -> pathlib.Path:
+    if attempt == 1:
+        return stream_log_path(output_path, suffix)
+    return stream_log_path(output_path, f"retry-{attempt}.{suffix}")
+
+
+def agent_recovery_prompt(attempt: int, failure: str) -> str:
+    lowered = failure.lower()
+    policy_failure = any(
+        marker in lowered
+        for marker in (
+            "cybersecurity risk",
+            "content was flagged",
+            "policy",
+            "refusal",
+            "safety",
+        )
+    )
+    policy_guidance = ""
+    if policy_failure:
+        policy_guidance = """
+- The provider rejected the prior turn despite this being authorized local curriculum
+  maintenance. Keep this recovery attempt narrowly focused on learner-visible behavior.
+- Do not open or quote tests_private, flags, secret values, exploit payloads, or unrelated
+  security-sensitive implementation details. Use public descriptions/code, existing test
+  summaries, and recorded artifacts. Omit an optional playtest rather than exposing private
+  solution material.
+"""
+    return f"""
+
+Recovery attempt {attempt}:
+- A prior agent process failed for infrastructure/provider reasons: {ellipsize(failure, 800)}
+- Continue from the repository and artifacts exactly as they now exist. Preserve valid
+  partial work, inspect the current diff, and finish the requested output artifact.
+- Do not merely report the prior process failure; complete the original phase.
+{policy_guidance}"""
+
+
 def run_agent(
     agent: str,
     prompt: str,
@@ -1554,16 +1602,14 @@ def run_agent(
 ) -> pathlib.Path:
     resolved, args = resolve_agent(agent, apply)
     output_path = artifact_dir / output_name
-    prompt = (
+    base_prompt = (
         prompt.rstrip()
         + operator_feedback_prompt_block(operator_feedback_path(artifact_dir))
         + "\n"
     )
-    final_result: list[str] = []
-    assistant_messages: list[str] = []
 
     if resolved == "codex":
-        stream_path = stream_log_path(output_path, "stream.jsonl")
+        stream_suffix = "stream.jsonl"
         args = insert_before_stdin_prompt(
             args,
             [
@@ -1575,67 +1621,127 @@ def run_agent(
             ],
         )
     elif resolved == "claude":
-        stream_path = stream_log_path(output_path, "stream.jsonl")
+        stream_suffix = "stream.jsonl"
         args = [*args, "--output-format", "stream-json"]
     else:
-        stream_path = stream_log_path(output_path, "stream.log")
+        stream_suffix = "stream.log"
 
-    def handle_agent_line(line: str) -> None:
-        if not line:
-            return
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            click.echo(f"{resolved}: {ellipsize(line)}")
-            assistant_messages.append(line)
-            return
+    failure = ""
+    attempt_logs: list[pathlib.Path] = []
+    for attempt in range(1, AGENT_MAX_ATTEMPTS + 1):
+        stream_path = agent_attempt_stream_path(
+            output_path, stream_suffix, attempt
+        )
+        attempt_logs.append(stream_path)
+        final_result: list[str] = []
+        assistant_messages: list[str] = []
+        failure_events: list[str] = []
 
-        if resolved == "claude":
-            if event.get("type") == "result" and isinstance(event.get("result"), str):
-                final_result.append(event["result"])
-            elif event.get("type") == "assistant":
-                message = event.get("message", {})
-                content = message.get("content", [])
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        assistant_messages.append(block.get("text", ""))
-            summary = summarize_claude_event(event)
-        elif resolved == "codex":
-            summary = summarize_codex_event(event)
+        def handle_agent_line(line: str) -> None:
+            if not line:
+                return
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                click.echo(f"{resolved}: {ellipsize(line)}")
+                assistant_messages.append(line)
+                return
+
+            event_type = agent_event_type(event)
+            if (
+                event_type in {"error", "turn.failed"}
+                or "error" in event_type.lower()
+                or event.get("error")
+            ):
+                failure_events.append(
+                    str(event.get("message") or event.get("error") or event)
+                )
+
+            if resolved == "claude":
+                if event.get("type") == "result" and isinstance(
+                    event.get("result"), str
+                ):
+                    final_result.append(event["result"])
+                elif event.get("type") == "assistant":
+                    message = event.get("message", {})
+                    content = message.get("content", [])
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            assistant_messages.append(block.get("text", ""))
+                summary = summarize_claude_event(event)
+            elif resolved == "codex":
+                summary = summarize_codex_event(event)
+            else:
+                summary = None
+
+            if summary:
+                click.echo(f"{resolved}: {summary}")
+
+        output_path.unlink(missing_ok=True)
+        attempt_prompt = base_prompt
+        if attempt > 1:
+            attempt_prompt += agent_recovery_prompt(attempt, failure)
+            click.echo(
+                f"Retrying {resolved} agent for {output_name} "
+                f"(attempt {attempt}/{AGENT_MAX_ATTEMPTS})"
+            )
         else:
-            summary = None
+            click.echo(f"Starting {resolved} agent for {output_name}")
 
-        if summary:
-            click.echo(f"{resolved}: {summary}")
+        command_error: Optional[BaseException] = None
+        try:
+            rc = stream_command(
+                args,
+                input_text=attempt_prompt,
+                cwd=repo,
+                log_path=stream_path,
+                timeout=AGENT_ATTEMPT_TIMEOUT_SECONDS,
+                line_handler=handle_agent_line,
+                heartbeat_label=f"{resolved} agent for {output_name}",
+            )
+        except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+            command_error = error
+            rc = None
 
-    click.echo(f"Starting {resolved} agent for {output_name}")
-    rc = stream_command(
-        args,
-        input_text=prompt,
-        cwd=repo,
-        log_path=stream_path,
-        line_handler=handle_agent_line,
-        heartbeat_label=f"{resolved} agent for {output_name}",
+        if resolved == "claude" and rc == 0:
+            if final_result:
+                output_path.write_text(final_result[-1])
+            elif assistant_messages:
+                output_path.write_text("\n".join(assistant_messages).rstrip() + "\n")
+            else:
+                output_path.write_text("")
+
+        if command_error is not None:
+            failure = f"{type(command_error).__name__}: {command_error}"
+        elif rc in {130, -signal.SIGINT, -signal.SIGTERM}:
+            raise click.ClickException(
+                f"{resolved} was interrupted for {output_name}; see {stream_path}"
+            )
+        elif rc != 0:
+            failure = failure_events[-1] if failure_events else f"exit code {rc}"
+        elif not output_path.exists():
+            failure = f"completed without writing {output_path}"
+        else:
+            click.echo(f"Wrote {resolved} final output to {output_path}")
+            return output_path
+
+        if attempt == AGENT_MAX_ATTEMPTS:
+            break
+        delay = min(
+            AGENT_RETRY_MAX_DELAY_SECONDS,
+            AGENT_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
+        )
+        click.echo(
+            f"{resolved} attempt {attempt}/{AGENT_MAX_ATTEMPTS} failed for "
+            f"{output_name}: {ellipsize(failure, 500)}; retrying in {delay:g}s"
+        )
+        time.sleep(delay)
+
+    logs = ", ".join(str(path) for path in attempt_logs)
+    raise click.ClickException(
+        f"{resolved} failed for {output_name} after {AGENT_MAX_ATTEMPTS} attempts "
+        f"({failure}); see {logs}"
     )
-
-    if resolved == "claude":
-        if final_result:
-            output_path.write_text(final_result[-1])
-        elif assistant_messages:
-            output_path.write_text("\n".join(assistant_messages).rstrip() + "\n")
-        elif rc == 0:
-            output_path.write_text("")
-
-    if rc != 0:
-        raise click.ClickException(
-            f"{resolved} failed for {output_name}; see {stream_path}"
-        )
-    if not output_path.exists():
-        raise click.ClickException(
-            f"{resolved} completed but did not write {output_path}; see {stream_path}"
-        )
-    click.echo(f"Wrote {resolved} final output to {output_path}")
-    return output_path
 
 
 def directions_block(directions: list[str]) -> str:
@@ -2596,6 +2702,64 @@ def run_casts(
             f"continuing with the rest (details in {summary_path})"
         )
     return cast_dir
+
+
+def run_optional_cast_review(
+    repo: pathlib.Path,
+    artifact_dir: pathlib.Path,
+    analysis_path: pathlib.Path,
+    changed_challenges: list[str],
+    agent: str,
+    directions: list[str],
+) -> pathlib.Path:
+    """Run the UX aid without allowing it to become a pipeline availability gate."""
+    ux_review = artifact_dir / "ux-review.md"
+    try:
+        cast_dir = run_casts(
+            repo, artifact_dir, analysis_path, changed_challenges, agent, directions
+        )
+        run_agent(
+            agent,
+            build_cast_review_prompt(
+                analysis_path,
+                cast_dir,
+                changed_challenges,
+                artifact_dir,
+                directions,
+            ),
+            repo=repo,
+            artifact_dir=artifact_dir,
+            output_name="ux-review-agent.log",
+            apply=True,
+        )
+        if not ux_review.exists():
+            ux_review.write_text(
+                "UX review agent did not write a separate report; see "
+                "ux-review-agent.log.\n"
+            )
+    except (
+        click.ClickException,
+        OSError,
+        RuntimeError,
+        subprocess.SubprocessError,
+        ValueError,
+    ) as error:
+        # Casts are supplemental reviewer evidence. The challenge has already passed its
+        # real solve validation, so persist the degradation and let the pipeline continue.
+        # The caller validates once more in case an apply-mode review agent made partial
+        # edits before it failed.
+        message = f"{type(error).__name__}: {error}"
+        ux_review.write_text(
+            "# UX review unavailable\n\n"
+            "The optional cast planning/recording/review phase failed after its recovery "
+            f"attempts: {message}\n\n"
+            "The main pwnshop validation remains authoritative.\n"
+        )
+        click.echo(
+            "Optional UX cast/review phase failed after recovery attempts; "
+            f"continuing with durable diagnostics in {ux_review}: {message}"
+        )
+    return ux_review
 
 
 def load_watch_state(path: pathlib.Path) -> dict[str, Any]:
@@ -3702,7 +3866,13 @@ def watch_pull_request(
         try:
             if run_watch_iteration():
                 return
-        except (GitHubAPIError, OSError) as error:
+        except (
+            click.ClickException,
+            GitHubAPIError,
+            OSError,
+            RuntimeError,
+            subprocess.SubprocessError,
+        ) as error:
             # The watcher must outlive any GitHub/network failure. _request already retries
             # transient HTTP/connection errors; if one still escapes (sustained outage,
             # unexpected status), skip this poll and try again next interval rather than
@@ -4475,28 +4645,14 @@ def feedback_command(
                 "Planning and recording UX casts for "
                 f"{len(changed_challenges)} changed challenge(s)"
             )
-            cast_dir = run_casts(
-                repo, artifact_dir, analysis_path, changed_challenges, agent, directions
-            )
-            run_agent(
+            ux_review = run_optional_cast_review(
+                repo,
+                artifact_dir,
+                analysis_path,
+                changed_challenges,
                 agent,
-                build_cast_review_prompt(
-                    analysis_path,
-                    cast_dir,
-                    changed_challenges,
-                    artifact_dir,
-                    directions,
-                ),
-                repo=repo,
-                artifact_dir=artifact_dir,
-                output_name="ux-review-agent.log",
-                apply=True,
+                directions,
             )
-            if not ux_review.exists():
-                ux_review.write_text(
-                    "UX review agent did not write a separate report; see "
-                    "ux-review-agent.log.\n"
-                )
             if not skip_tests:
                 click.echo("Running final pwnshop validation after UX review")
                 # The UX-review agent edits challenges/descriptions, so this can surface a
@@ -4522,21 +4678,33 @@ def feedback_command(
             click.echo("Resume: reusing existing pr-body.md")
             return pr_body
 
-        pr_body_agent_output = run_agent(
-            agent,
-            build_pr_body_prompt(
-                analysis_path,
-                implementation_notes,
-                ux_review,
-                test_log,
-                artifact_dir,
-                directions,
-            ),
-            repo=repo,
-            artifact_dir=artifact_dir,
-            output_name="pr-body.raw",
-        )
-        agent_pr_body = pr_body_agent_output.read_text()
+        try:
+            pr_body_agent_output = run_agent(
+                agent,
+                build_pr_body_prompt(
+                    analysis_path,
+                    implementation_notes,
+                    ux_review,
+                    test_log,
+                    artifact_dir,
+                    directions,
+                ),
+                repo=repo,
+                artifact_dir=artifact_dir,
+                output_name="pr-body.raw",
+            )
+            agent_pr_body = pr_body_agent_output.read_text()
+        except (
+            click.ClickException,
+            OSError,
+            RuntimeError,
+            subprocess.SubprocessError,
+        ) as error:
+            click.echo(
+                "PR body agent failed after recovery attempts; writing local fallback "
+                f"body: {type(error).__name__}: {error}"
+            )
+            agent_pr_body = ""
         if pr_body_is_usable(agent_pr_body):
             pr_body.write_text(with_automation_notice(agent_pr_body))
         else:

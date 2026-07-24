@@ -13,6 +13,7 @@ import time
 import unittest
 from unittest import mock
 
+import click
 from click.testing import CliRunner
 
 
@@ -370,6 +371,121 @@ class ValidationTests(unittest.TestCase):
 
 
 class OperatorFeedbackTests(unittest.TestCase):
+    def test_agent_retries_policy_failure_with_recovery_prompt(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            artifact_dir = root / "artifacts"
+            artifact_dir.mkdir()
+            output_path = artifact_dir / "agent.md"
+            prompts = []
+
+            def stream_agent(_command, **kwargs):
+                prompts.append(kwargs["input_text"])
+                if len(prompts) == 1:
+                    kwargs["line_handler"](
+                        json.dumps(
+                            {
+                                "type": "turn.failed",
+                                "error": {
+                                    "message": "This content was flagged for possible cybersecurity risk."
+                                },
+                            }
+                        )
+                    )
+                    return 1
+                output_path.write_text("recovered\n")
+                return 0
+
+            with (
+                mock.patch.object(
+                    discord_feedback,
+                    "resolve_agent",
+                    return_value=("codex", ["codex", "exec", "-"]),
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "stream_command",
+                    side_effect=stream_agent,
+                ) as stream_command,
+                mock.patch.object(discord_feedback.time, "sleep") as sleep,
+            ):
+                result = discord_feedback.run_agent(
+                    "codex",
+                    "Do the phase.",
+                    repo=root,
+                    artifact_dir=artifact_dir,
+                    output_name=output_path.name,
+                )
+
+            self.assertEqual(result, output_path)
+            self.assertEqual(output_path.read_text(), "recovered\n")
+            self.assertEqual(stream_command.call_count, 2)
+            self.assertNotIn("Recovery attempt", prompts[0])
+            self.assertIn("Recovery attempt 2", prompts[1])
+            self.assertIn("Do not open or quote tests_private", prompts[1])
+            self.assertEqual(
+                stream_command.call_args_list[0].kwargs["timeout"],
+                discord_feedback.AGENT_ATTEMPT_TIMEOUT_SECONDS,
+            )
+            sleep.assert_called_once_with(
+                discord_feedback.AGENT_RETRY_BASE_DELAY_SECONDS
+            )
+
+    def test_interrupted_agent_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            artifact_dir = root / "artifacts"
+            artifact_dir.mkdir()
+
+            with (
+                mock.patch.object(
+                    discord_feedback,
+                    "resolve_agent",
+                    return_value=("codex", ["codex", "exec", "-"]),
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "stream_command",
+                    return_value=130,
+                ) as stream_command,
+                mock.patch.object(discord_feedback.time, "sleep") as sleep,
+            ):
+                with self.assertRaisesRegex(click.ClickException, "interrupted"):
+                    discord_feedback.run_agent(
+                        "codex",
+                        "Do the phase.",
+                        repo=root,
+                        artifact_dir=artifact_dir,
+                        output_name="agent.md",
+                    )
+
+            stream_command.assert_called_once()
+            sleep.assert_not_called()
+
+    def test_optional_cast_review_records_failure_and_continues(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            artifact_dir = root / "artifacts"
+            artifact_dir.mkdir()
+
+            with mock.patch.object(
+                discord_feedback,
+                "run_casts",
+                side_effect=click.ClickException("provider stayed unavailable"),
+            ):
+                result = discord_feedback.run_optional_cast_review(
+                    root,
+                    artifact_dir,
+                    artifact_dir / "analysis.md",
+                    ["challenges/example/one"],
+                    "codex",
+                    [],
+                )
+
+            self.assertEqual(result, artifact_dir / "ux-review.md")
+            self.assertIn("UX review unavailable", result.read_text())
+            self.assertIn("provider stayed unavailable", result.read_text())
+
     def test_feedback_is_appended_as_durable_jsonl(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             feedback_path = pathlib.Path(temporary_directory) / "feedback.jsonl"
