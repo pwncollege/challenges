@@ -1,0 +1,18 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+target=/home/hacker/README.txt
+
+if ! [ -f "$target" ]; then
+    fold -s <<< "The file $target is missing. Restart the challenge to restore it, then edit it with nano."
+    exit 1
+fi
+
+if ! cmp -s "$target" <(printf '%s\n' \
+    'Add a second line below this one.' \
+    'Editing in nano works!'); then
+    fold -s <<< "That file does not match yet. Keep its original first line and add the requested second line exactly."
+    exit 1
+fi
+
+fold -s <<< "You saved the edited file. Here is your flag:"
+cat /flag

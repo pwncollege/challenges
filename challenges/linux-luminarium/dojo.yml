@@ -15,6 +15,7 @@ modules:
 - id: processes
 - id: users
 - id: permissions
+- id: text-editing
 - id: chaining
 - id: terminal-multiplexing
 - id: path
