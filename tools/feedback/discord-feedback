@@ -41,6 +41,10 @@ PWN_COLLEGE_GITHUB_ORG = "pwncollege"
 TEXT_CHANNEL_TYPES = {0, 5}
 PUBLIC_THREAD_TYPES = {10, 11}
 THREAD_PARENT_TYPES = {0, 5, 15, 16}
+# Keep ordinary posts, replies, application-command responses, thread starters, and context
+# menu responses. Other Discord message types are generated system events rather than
+# learner-authored discussion.
+FEEDBACK_MESSAGE_TYPES = {0, 19, 20, 21, 23}
 MAX_DISCORD_PAGE_SIZE = 100
 MAX_DISCORD_SERVER_ERROR_RETRIES = 5
 # Image attachments are downloaded so the analysis agent can view screenshots that carry
@@ -640,11 +644,10 @@ def fetch_messages_since(
     api: DiscordAPI,
     channel: dict[str, Any],
     cutoff: datetime.datetime,
-    max_messages: int,
 ) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     params: dict[str, Any] = {"limit": MAX_DISCORD_PAGE_SIZE}
-    while len(messages) < max_messages:
+    while True:
         try:
             page = api.request(f"/channels/{channel['id']}/messages", params)
         except (DiscordPermissionError, DiscordServerError) as error:
@@ -667,13 +670,51 @@ def fetch_messages_since(
             oldest_time = (
                 message_time if oldest_time is None else min(oldest_time, message_time)
             )
-            if message_time >= cutoff:
+            if message_time >= cutoff and message_has_feedback_content(message):
                 messages.append(message)
 
         if oldest_id is None or oldest_time is None or oldest_time < cutoff:
-            return messages[:max_messages]
+            return messages
         params["before"] = str(oldest_id)
-    return messages[:max_messages]
+
+
+def message_has_feedback_content(message: dict[str, Any]) -> bool:
+    """Whether a Discord message carries content useful to the feedback analysis.
+
+    Discord system events such as member joins have an author and timestamp but no actual
+    message payload. Do not let those empty events crowd learner feedback out of the global
+    retention limit.
+    """
+    if message.get("type", 0) not in FEEDBACK_MESSAGE_TYPES:
+        return False
+    return bool(
+        (message.get("content") or "").strip()
+        or message.get("attachments")
+        or message.get("embeds")
+    )
+
+
+def retain_most_recent_messages(
+    messages_by_channel: list[tuple[dict[str, Any], list[dict[str, Any]]]],
+    max_messages: int,
+) -> list[tuple[dict[str, Any], list[dict[str, Any]]]]:
+    """Apply the message limit globally after every channel has been scanned."""
+    candidates = [
+        (channel, message)
+        for channel, messages in messages_by_channel
+        for message in messages
+    ]
+    candidates.sort(
+        key=lambda item: (parse_iso8601(item[1]["timestamp"]), int(item[1]["id"])),
+        reverse=True,
+    )
+
+    retained_by_channel: OrderedDict[
+        str, tuple[dict[str, Any], list[dict[str, Any]]]
+    ] = OrderedDict()
+    for channel, message in candidates[:max_messages]:
+        retained_by_channel.setdefault(channel["id"], (channel, []))[1].append(message)
+    return list(retained_by_channel.values())
 
 
 def sanitize_content(content: str, channels_by_id: dict[str, dict[str, Any]]) -> str:
@@ -4432,14 +4473,10 @@ def feedback_command(
         channels, channels_by_id = discover_channels(
             api, guild_id, selected_channel_ids, since, include_threads
         )
-        click.echo(f"Discovered {len(channels)} readable channel(s)/thread(s)")
+        click.echo(f"Discovered {len(channels)} channel(s)/thread(s) to scan")
         messages_by_channel: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
-        remaining = max_messages
         for channel in channels:
-            if remaining <= 0:
-                break
-            messages = fetch_messages_since(api, channel, since, remaining)
-            remaining -= len(messages)
+            messages = fetch_messages_since(api, channel, since)
             if messages:
                 messages_by_channel.append((channel, messages))
                 click.echo(
@@ -4453,6 +4490,17 @@ def feedback_command(
                     channel_display_name(channel, channels_by_id),
                 )
 
+        matching_message_count = sum(
+            len(channel_messages) for _channel, channel_messages in messages_by_channel
+        )
+        messages_by_channel = retain_most_recent_messages(
+            messages_by_channel, max_messages
+        )
+        click.echo(
+            f"Scanned all {len(channels)} channel(s)/thread(s); retaining the most "
+            f"recent {min(matching_message_count, max_messages)} of "
+            f"{matching_message_count} non-empty message(s)"
+        )
         messages = sanitize_messages(
             messages_by_channel,
             channels_by_id,
@@ -4513,6 +4561,8 @@ def feedback_command(
                     "since": since.isoformat(),
                     "until": until.isoformat(),
                     "messages": len(messages),
+                    "matching_messages": matching_message_count,
+                    "max_messages": max_messages,
                     "image_attachments": image_count,
                     "channels": len(channels),
                     "include_threads": include_threads,

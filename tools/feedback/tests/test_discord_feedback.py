@@ -210,6 +210,147 @@ class ResumeTests(unittest.TestCase):
             self.assertTrue((artifact_dir / "run.json").is_file())
 
 
+class DiscordScrapeTests(unittest.TestCase):
+    @staticmethod
+    def message(message_id, timestamp, content="", **overrides):
+        message = {
+            "id": str(message_id),
+            "timestamp": timestamp,
+            "content": content,
+            "attachments": [],
+            "embeds": [],
+            "author": {"id": f"author-{message_id}"},
+        }
+        message.update(overrides)
+        return message
+
+    def test_fetch_scans_to_cutoff_and_discards_empty_system_events(self):
+        cutoff = datetime.datetime(2026, 7, 24, tzinfo=datetime.timezone.utc)
+        channel = {"id": "123", "name": "help"}
+        api = mock.Mock()
+        api.request.side_effect = [
+            [
+                self.message(
+                    5,
+                    "2026-07-24T00:05:00+00:00",
+                    type=7,
+                ),
+                self.message(4, "2026-07-24T00:04:00+00:00", "new feedback"),
+            ],
+            [
+                self.message(3, "2026-07-24T00:03:00+00:00", "more feedback"),
+                self.message(2, "2026-07-23T23:59:00+00:00", "before cutoff"),
+            ],
+        ]
+
+        messages = discord_feedback.fetch_messages_since(api, channel, cutoff)
+
+        self.assertEqual([message["id"] for message in messages], ["4", "3"])
+        self.assertEqual(api.request.call_count, 2)
+        self.assertEqual(api.request.call_args_list[1].args[1]["before"], "4")
+
+    def test_feedback_content_includes_text_attachments_and_embeds(self):
+        timestamp = "2026-07-24T00:00:00+00:00"
+
+        self.assertFalse(
+            discord_feedback.message_has_feedback_content(
+                self.message(1, timestamp, "  ", type=7)
+            )
+        )
+        self.assertFalse(
+            discord_feedback.message_has_feedback_content(
+                self.message(5, timestamp, "rendered system text", type=6)
+            )
+        )
+        self.assertTrue(
+            discord_feedback.message_has_feedback_content(
+                self.message(2, timestamp, "learner feedback")
+            )
+        )
+        self.assertTrue(
+            discord_feedback.message_has_feedback_content(
+                self.message(3, timestamp, attachments=[{"id": "attachment"}])
+            )
+        )
+        self.assertTrue(
+            discord_feedback.message_has_feedback_content(
+                self.message(4, timestamp, embeds=[{"title": "feedback"}])
+            )
+        )
+
+    def test_cli_scans_every_channel_then_keeps_global_newest_messages(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            now = datetime.datetime(
+                2026, 7, 24, 1, 0, 0, tzinfo=datetime.timezone.utc
+            )
+            run_id = now.strftime("%Y%m%d-%H%M%S")
+            artifact_dir = repo / ".discord-feedback" / run_id
+            channels = [
+                {"id": "channel-a", "name": "a"},
+                {"id": "channel-b", "name": "b"},
+                {"id": "channel-c", "name": "c"},
+            ]
+            messages = {
+                "channel-a": [self.message(1, "2026-07-24T00:10:00+00:00", "oldest")],
+                "channel-b": [self.message(4, "2026-07-24T00:40:00+00:00", "newest")],
+                "channel-c": [
+                    self.message(2, "2026-07-24T00:20:00+00:00", "older"),
+                    self.message(3, "2026-07-24T00:30:00+00:00", "newer"),
+                ],
+            }
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "utc_now", return_value=now),
+                mock.patch.object(
+                    discord_feedback,
+                    "resolve_scrape_since",
+                    return_value=now - datetime.timedelta(hours=1),
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "discover_channels",
+                    return_value=(channels, {item["id"]: item for item in channels}),
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "fetch_messages_since",
+                    side_effect=lambda _api, channel, _since: messages[channel["id"]],
+                ) as fetch_messages_since,
+                mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": "token"}),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    [
+                        "--fetch-only",
+                        "--no-pr-feedback",
+                        "--max-messages",
+                        "2",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(fetch_messages_since.call_count, len(channels))
+            self.assertEqual(
+                [call.args[1]["id"] for call in fetch_messages_since.call_args_list],
+                ["channel-a", "channel-b", "channel-c"],
+            )
+            retained = [
+                json.loads(line)
+                for line in (artifact_dir / "messages.jsonl").read_text().splitlines()
+            ]
+            self.assertEqual([message["id"] for message in retained], ["3", "4"])
+            run = json.loads((artifact_dir / "run.json").read_text())
+            self.assertEqual(run["matching_messages"], 4)
+            self.assertEqual(run["messages"], 2)
+            self.assertEqual(run["max_messages"], 2)
+            self.assertIn(
+                "Scanned all 3 channel(s)/thread(s); retaining the most recent 2 of 4",
+                result.output,
+            )
+
+
 class ValidationTests(unittest.TestCase):
     def test_primary_and_serial_validation_have_inner_and_outer_timeouts(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
