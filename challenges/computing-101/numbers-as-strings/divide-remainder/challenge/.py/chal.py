@@ -18,10 +18,15 @@ check_runtime_failure = "That didn't come out right:\n"
 
 
 def check_disassembly(disas):
-    assert any(insn.mnemonic == "div" for insn in disas), (
-        "Use the unsigned `div` instruction to split the value into a quotient and remainder."
+    for insn in disas:
+        if insn.mnemonic == "div":
+            return True
+        if insn.mnemonic == "ret":
+            break
+    raise AssertionError(
+        "Use the unsigned `div` instruction to split the value into a quotient and remainder "
+        "before your function returns."
     )
-    return True
 
 
 def run_one(so_path, value, *, quiet):
