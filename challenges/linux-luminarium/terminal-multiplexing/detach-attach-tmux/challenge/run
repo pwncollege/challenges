@@ -1,9 +1,32 @@
 #!/usr/bin/exec-suid --real -- /bin/bash -p
 
-TMUX_SESSION=$(su -c 'tmux ls' hacker 2>/dev/null | head -1 | cut -d: -f1)
+as_hacker() {
+    sudo -u hacker -- "$@"
+}
+
+list_tmux_sessions() {
+    as_hacker timeout 1 tmux list-sessions -F '#{session_id} #{session_attached}' 2>/dev/null || true
+}
+
+TMUX_SESSION=
+TMUX_LIST=
+for _ in {1..20}; do
+    TMUX_LIST=$(list_tmux_sessions)
+    TMUX_SESSION=$(awk '$2 == 0 { print $1; exit }' <<<"$TMUX_LIST")
+    [ -n "$TMUX_SESSION" ] && break
+    sleep 0.1
+done
 
 if [ -z "$TMUX_SESSION" ]; then
-    echo "No tmux session found!"
+    if [ -n "$TMUX_LIST" ]; then
+        echo "Your tmux session is still attached!"
+        echo ""
+        echo "You need to detach from your tmux session first."
+        echo "Press Ctrl-B then d to detach."
+        exit 1
+    fi
+
+    echo "No detached tmux session found!"
     echo ""
     echo "You need to:"
     echo "1. Launch tmux with: tmux"
@@ -12,22 +35,24 @@ if [ -z "$TMUX_SESSION" ]; then
     exit 1
 fi
 
-if su -c "tmux ls" hacker 2>/dev/null | grep -q "(attached)"; then
-    echo "Your tmux session is still attached!"
-    echo ""
-    echo "You need to detach from your tmux session first."
-    echo "Press Ctrl-B then d to detach."
+FLAG_DATA=$(base64 --wrap=0 /flag) || {
+    echo "Could not read the flag. Please restart the challenge and try again."
     exit 1
-fi
+}
+FLAG_COMMAND="printf '%s' '$FLAG_DATA' | base64 --decode"
 
 echo "Found detached tmux session: $TMUX_SESSION"
 echo "Sending flag to your tmux session..."
 
-# Send command with leading space to avoid history (works with default HISTCONTROL)
-su -c 'tmux send-keys -t "'$TMUX_SESSION'" " echo Congratulations, here is your flag: '$(</flag)'" Enter' hacker
+if ! as_hacker timeout 3 tmux send-keys -t "$TMUX_SESSION" -l "$FLAG_COMMAND" ||
+    ! as_hacker timeout 3 tmux send-keys -t "$TMUX_SESSION" Enter; then
+    echo "Could not send the flag to that session."
+    echo "The session may have changed. Make sure it is detached, then run /challenge/run again."
+    exit 1
+fi
 
 echo ""
 echo "Flag sent! Now reattach to your tmux session with:"
-echo "  tmux attach"
+printf "  tmux attach-session -t '%s'\n" "$TMUX_SESSION"
 echo ""
 echo "You'll find the flag waiting for you there!"

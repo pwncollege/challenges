@@ -31,15 +31,16 @@ You can see a few things:
 
 In this challenge, you will write your first assembly.
 You must move the value `60` into `rax`.
-Write your program in a file with a `.s` extension, such as `rax-challenge.s` (while not mandatory, `.s` is the typical extension for assembly files).
-Pass that `.s` file to the checker as an argument:
+Save your program in a file such as `rax-challenge.s`.
+The `.s` extension is typical for assembly files, but the checker does not require it.
+Pass the source file to the checker as an argument:
 
 ```console
 hacker@dojo:~$ /challenge/check rax-challenge.s
 ```
 
 The `.s` file is input to the checker; do not try to run it directly.
-You can use either your favorite text editor or the text editor in pwn.college's VSCode Workspace to implement your `.s` file!
+You can use your favorite text editor or pwn.college's VSCode Workspace; revisit Getting Started's [Using the VSCode Workspace](/welcome/welcome/vscode) lesson if you need help opening it.
 
 ----
 **ERRATA:**

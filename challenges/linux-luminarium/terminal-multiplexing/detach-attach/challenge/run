@@ -1,10 +1,33 @@
 #!/usr/bin/exec-suid --real -- /bin/bash -p
-export SCREENDIR=/run/screen/S-hacker
+SCREENDIR=/run/screen/S-hacker
 
-SCREEN_SESSION=$(su -c 'screen -ls' hacker | grep -E "Detached|Attached" | head -1 | awk '{print $1}')
+as_hacker() {
+    sudo -u hacker -- env SCREENDIR="$SCREENDIR" "$@"
+}
+
+list_screens() {
+    as_hacker timeout 1 screen -ls 2>/dev/null || true
+}
+
+SCREEN_SESSION=
+SCREEN_LIST=
+for _ in {1..20}; do
+    SCREEN_LIST=$(list_screens)
+    SCREEN_SESSION=$(awk '/\(Detached\)/ { print $1; exit }' <<<"$SCREEN_LIST")
+    [ -n "$SCREEN_SESSION" ] && break
+    sleep 0.1
+done
 
 if [ -z "$SCREEN_SESSION" ]; then
-    echo "No screen session found!"
+    if grep -q "(Attached)" <<<"$SCREEN_LIST"; then
+        echo "Your screen session is still attached!"
+        echo ""
+        echo "You need to detach from your screen session first."
+        echo "Press Ctrl-A then d to detach."
+        exit 1
+    fi
+
+    echo "No detached screen session found!"
     echo ""
     echo "You need to:"
     echo "1. Launch screen with: screen"
@@ -13,23 +36,24 @@ if [ -z "$SCREEN_SESSION" ]; then
     exit 1
 fi
 
-if ! su -c 'screen -ls' hacker | grep -q "Detached"; then
-    echo "Your screen session is still attached!"
-    echo ""
-    echo "You need to detach from your screen session first."
-    echo "Press Ctrl-A then d to detach."
+FLAG_DATA=$(base64 --wrap=0 /flag) || {
+    echo "Could not read the flag. Please restart the challenge and try again."
     exit 1
-fi
+}
+FLAG_COMMAND="printf '%s' '$FLAG_DATA' | base64 --decode"
 
 echo "Found detached screen session: $SCREEN_SESSION"
 echo "Sending flag to your screen session..."
 
-read FLAG </flag
-su -c 'screen -S "'$SCREEN_SESSION'" -X eval "stuff \\015" "stuff \"echo Yes! Flag is: '$FLAG'\\015\""' hacker &>/dev/null
+if ! as_hacker timeout 3 screen -S "$SCREEN_SESSION" -p 0 -X stuff "$FLAG_COMMAND"$'\r' &>/dev/null; then
+    echo "Could not send the flag to that session."
+    echo "The session may have changed. Make sure it is detached, then run /challenge/run again."
+    exit 1
+fi
 
 echo ""
 echo "Flag sent! Now reattach to your screen session with:"
 echo ""
-echo "  screen -r"
+printf '  screen -r %q\n' "$SCREEN_SESSION"
 echo ""
 echo "You'll find the flag waiting for you there!"
