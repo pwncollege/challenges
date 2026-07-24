@@ -31,3 +31,4 @@ Commands succeeded!
 
 Now, you try it!
 This process' `/challenge/pwn` must be piped into `/challenge/college`, but you'll need to intercept the data to see what `pwn` needs from you!
+Use `tee` to duplicate your first attempt into a file, inspect the saved output, and then retry the pipeline with what you learned.
