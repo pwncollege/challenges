@@ -13,6 +13,7 @@ import time
 import unittest
 from unittest import mock
 
+import click
 from click.testing import CliRunner
 
 
@@ -370,6 +371,117 @@ class ValidationTests(unittest.TestCase):
 
 
 class OperatorFeedbackTests(unittest.TestCase):
+    def test_agent_retries_policy_failure_with_recovery_prompt(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            artifact_dir = root / "artifacts"
+            artifact_dir.mkdir()
+            output_path = artifact_dir / "agent.md"
+            prompts = []
+
+            def stream_agent(_command, **kwargs):
+                prompts.append(kwargs["input_text"])
+                if len(prompts) == 1:
+                    kwargs["line_handler"](
+                        json.dumps(
+                            {
+                                "type": "turn.failed",
+                                "error": {"message": "This content was flagged for possible cybersecurity risk."},
+                            }
+                        )
+                    )
+                    return 1
+                output_path.write_text("recovered\n")
+                return 0
+
+            with (
+                mock.patch.object(
+                    discord_feedback,
+                    "resolve_agent",
+                    return_value=("codex", ["codex", "exec", "-"]),
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "stream_command",
+                    side_effect=stream_agent,
+                ) as stream_command,
+                mock.patch.object(discord_feedback.time, "sleep") as sleep,
+            ):
+                result = discord_feedback.run_agent(
+                    "codex",
+                    "Do the phase.",
+                    repo=root,
+                    artifact_dir=artifact_dir,
+                    output_name=output_path.name,
+                )
+
+            self.assertEqual(result, output_path)
+            self.assertEqual(output_path.read_text(), "recovered\n")
+            self.assertEqual(stream_command.call_count, 2)
+            self.assertNotIn("Recovery attempt", prompts[0])
+            self.assertIn("Recovery attempt 2", prompts[1])
+            self.assertIn("Do not open or quote tests_private", prompts[1])
+            self.assertEqual(
+                stream_command.call_args_list[0].kwargs["timeout"],
+                discord_feedback.AGENT_ATTEMPT_TIMEOUT_SECONDS,
+            )
+            sleep.assert_called_once_with(discord_feedback.AGENT_RETRY_BASE_DELAY_SECONDS)
+
+    def test_interrupted_agent_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            artifact_dir = root / "artifacts"
+            artifact_dir.mkdir()
+
+            with (
+                mock.patch.object(
+                    discord_feedback,
+                    "resolve_agent",
+                    return_value=("codex", ["codex", "exec", "-"]),
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "stream_command",
+                    return_value=130,
+                ) as stream_command,
+                mock.patch.object(discord_feedback.time, "sleep") as sleep,
+            ):
+                with self.assertRaisesRegex(click.ClickException, "interrupted"):
+                    discord_feedback.run_agent(
+                        "codex",
+                        "Do the phase.",
+                        repo=root,
+                        artifact_dir=artifact_dir,
+                        output_name="agent.md",
+                    )
+
+            stream_command.assert_called_once()
+            sleep.assert_not_called()
+
+    def test_optional_cast_review_records_failure_and_continues(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            artifact_dir = root / "artifacts"
+            artifact_dir.mkdir()
+
+            with mock.patch.object(
+                discord_feedback,
+                "run_casts",
+                side_effect=click.ClickException("provider stayed unavailable"),
+            ):
+                result = discord_feedback.run_optional_cast_review(
+                    root,
+                    artifact_dir,
+                    artifact_dir / "analysis.md",
+                    ["challenges/example/one"],
+                    "codex",
+                    [],
+                )
+
+            self.assertEqual(result, artifact_dir / "ux-review.md")
+            self.assertIn("UX review unavailable", result.read_text())
+            self.assertIn("provider stayed unavailable", result.read_text())
+
     def test_feedback_is_appended_as_durable_jsonl(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             feedback_path = pathlib.Path(temporary_directory) / "feedback.jsonl"
@@ -841,6 +953,77 @@ class OperatorFeedbackTests(unittest.TestCase):
             self.assertIn("Pushed resumed feedback changes", result.output)
             watch_state = json.loads((artifact_dir / "pr-watch-state.json").read_text())
             self.assertIn(feedback["id"], watch_state["handled_operator_feedback"])
+
+    def test_empty_feedback_run_completes_without_opening_pr(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            run_id = "20260724-061106"
+            artifact_dir = repo / ".discord-feedback" / run_id
+            artifact_dir.mkdir(parents=True)
+            test_log = artifact_dir / "pwnshop-test-attempt-1.log"
+            test_log.write_text("No challenges found since origin/main\n")
+            (artifact_dir / "analysis.md").write_text("No changes needed.\n")
+            (artifact_dir / "implementation-notes.md").write_text("No changes needed.\n")
+            (artifact_dir / "pr-body.md").write_text("No changes needed.\n")
+            (artifact_dir / "resume-state.json").write_text(
+                json.dumps(
+                    {
+                        "completed_phases": [
+                            "scrape",
+                            "analysis",
+                            "implementation",
+                            "validation",
+                            "casts",
+                            "pr-body",
+                        ],
+                        "test_log": str(test_log),
+                    }
+                )
+                + "\n"
+            )
+
+            with (
+                mock.patch.object(discord_feedback, "git_root", return_value=repo),
+                mock.patch.object(discord_feedback, "prepare_branch"),
+                mock.patch.object(
+                    discord_feedback,
+                    "changed_challenges_since",
+                    return_value=[],
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "existing_pr_url",
+                    return_value=None,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "repository_has_pr_changes",
+                    return_value=False,
+                ),
+                mock.patch.object(
+                    discord_feedback,
+                    "create_pull_request",
+                ) as create_pull_request,
+                mock.patch.dict(os.environ, {"DISCORD_BOT_TOKEN": ""}),
+            ):
+                result = CliRunner().invoke(
+                    discord_feedback.feedback_command,
+                    [
+                        "--resume",
+                        run_id,
+                        "--apply",
+                        "--create-pr",
+                        "--no-watch-pr",
+                        "--skip-casts",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("no repository changes were needed", result.output)
+            self.assertIn("no PR was opened", result.output)
+            create_pull_request.assert_not_called()
+            state = json.loads((artifact_dir / "resume-state.json").read_text())
+            self.assertIn("no-changes", state["completed_phases"])
 
     def test_existing_pr_recovery_pushes_a_clean_branch_ahead_of_origin(self):
         repo = pathlib.Path("/repo")
