@@ -386,9 +386,7 @@ class OperatorFeedbackTests(unittest.TestCase):
                         json.dumps(
                             {
                                 "type": "turn.failed",
-                                "error": {
-                                    "message": "This content was flagged for possible cybersecurity risk."
-                                },
+                                "error": {"message": "This content was flagged for possible cybersecurity risk."},
                             }
                         )
                     )
@@ -427,9 +425,7 @@ class OperatorFeedbackTests(unittest.TestCase):
                 stream_command.call_args_list[0].kwargs["timeout"],
                 discord_feedback.AGENT_ATTEMPT_TIMEOUT_SECONDS,
             )
-            sleep.assert_called_once_with(
-                discord_feedback.AGENT_RETRY_BASE_DELAY_SECONDS
-            )
+            sleep.assert_called_once_with(discord_feedback.AGENT_RETRY_BASE_DELAY_SECONDS)
 
     def test_interrupted_agent_is_not_retried(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -967,9 +963,7 @@ class OperatorFeedbackTests(unittest.TestCase):
             test_log = artifact_dir / "pwnshop-test-attempt-1.log"
             test_log.write_text("No challenges found since origin/main\n")
             (artifact_dir / "analysis.md").write_text("No changes needed.\n")
-            (artifact_dir / "implementation-notes.md").write_text(
-                "No changes needed.\n"
-            )
+            (artifact_dir / "implementation-notes.md").write_text("No changes needed.\n")
             (artifact_dir / "pr-body.md").write_text("No changes needed.\n")
             (artifact_dir / "resume-state.json").write_text(
                 json.dumps(
