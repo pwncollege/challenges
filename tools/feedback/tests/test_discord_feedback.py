@@ -252,38 +252,24 @@ class DiscordScrapeTests(unittest.TestCase):
     def test_feedback_content_includes_text_attachments_and_embeds(self):
         timestamp = "2026-07-24T00:00:00+00:00"
 
+        self.assertFalse(discord_feedback.message_has_feedback_content(self.message(1, timestamp, "  ", type=7)))
         self.assertFalse(
-            discord_feedback.message_has_feedback_content(
-                self.message(1, timestamp, "  ", type=7)
-            )
+            discord_feedback.message_has_feedback_content(self.message(5, timestamp, "rendered system text", type=6))
         )
-        self.assertFalse(
-            discord_feedback.message_has_feedback_content(
-                self.message(5, timestamp, "rendered system text", type=6)
-            )
-        )
-        self.assertTrue(
-            discord_feedback.message_has_feedback_content(
-                self.message(2, timestamp, "learner feedback")
-            )
-        )
+        self.assertTrue(discord_feedback.message_has_feedback_content(self.message(2, timestamp, "learner feedback")))
         self.assertTrue(
             discord_feedback.message_has_feedback_content(
                 self.message(3, timestamp, attachments=[{"id": "attachment"}])
             )
         )
         self.assertTrue(
-            discord_feedback.message_has_feedback_content(
-                self.message(4, timestamp, embeds=[{"title": "feedback"}])
-            )
+            discord_feedback.message_has_feedback_content(self.message(4, timestamp, embeds=[{"title": "feedback"}]))
         )
 
     def test_cli_scans_every_channel_then_keeps_global_newest_messages(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = pathlib.Path(temporary_directory)
-            now = datetime.datetime(
-                2026, 7, 24, 1, 0, 0, tzinfo=datetime.timezone.utc
-            )
+            now = datetime.datetime(2026, 7, 24, 1, 0, 0, tzinfo=datetime.timezone.utc)
             run_id = now.strftime("%Y%m%d-%H%M%S")
             artifact_dir = repo / ".discord-feedback" / run_id
             channels = [
@@ -336,10 +322,7 @@ class DiscordScrapeTests(unittest.TestCase):
                 [call.args[1]["id"] for call in fetch_messages_since.call_args_list],
                 ["channel-a", "channel-b", "channel-c"],
             )
-            retained = [
-                json.loads(line)
-                for line in (artifact_dir / "messages.jsonl").read_text().splitlines()
-            ]
+            retained = [json.loads(line) for line in (artifact_dir / "messages.jsonl").read_text().splitlines()]
             self.assertEqual([message["id"] for message in retained], ["3", "4"])
             run = json.loads((artifact_dir / "run.json").read_text())
             self.assertEqual(run["matching_messages"], 4)
