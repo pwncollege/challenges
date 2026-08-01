@@ -26,6 +26,8 @@ const workspaceProfileBin = "/run/workspace/profile/bin"
 const workspaceProfileScript = "/run/workspace/profile/etc/profile.d/99-pwn-workspace.sh"
 const workspaceUserRunDir = "/run/workspace/user"
 const workspaceServicesDir = "/run/workspace/user/services"
+const legacyDojoWorkspaceDir = "/run/dojo/sys/workspace"
+const legacyDojoPrivilegedFile = "/run/dojo/sys/workspace/privileged"
 const systemProfileScript = "/etc/profile.d/99-pwn-workspace.sh"
 const userShell = "/run/workspace/profile/bin/bash"
 
@@ -141,6 +143,9 @@ func prepareWorkspace(config workspaceConfig) error {
 	if err := setupRunDirectories(); err != nil {
 		return err
 	}
+	if err := setupLegacyDojoWorkspace(); err != nil {
+		return err
+	}
 	if err := setupSystemEnvironment(); err != nil {
 		return err
 	}
@@ -180,6 +185,16 @@ func setupRunDirectories() error {
 		return err
 	}
 	return linkServiceDefinitions()
+}
+
+func setupLegacyDojoWorkspace() error {
+	if err := os.MkdirAll(legacyDojoWorkspaceDir, 0755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(legacyDojoPrivilegedFile, []byte("0\n"), 0444); err != nil {
+		return err
+	}
+	return os.Chmod(legacyDojoPrivilegedFile, 0444)
 }
 
 func linkChallengeBin() error {
