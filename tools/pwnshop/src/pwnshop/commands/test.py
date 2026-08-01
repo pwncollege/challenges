@@ -9,6 +9,7 @@ from typing import Optional, Sequence
 
 import click
 import requests
+import yaml
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -22,6 +23,35 @@ from .. import lib
 from ..console import console
 
 logger = logging.getLogger(__name__)
+
+UNSUPPORTED_TEST_EXIT_CODE = 77
+
+
+def _read_metadata(path: pathlib.Path) -> dict:
+    if not path.is_file():
+        return {}
+    metadata = yaml.safe_load(path.read_text()) or {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _read_pwnshop_metadata(path: pathlib.Path) -> dict:
+    auxiliary = _read_metadata(path).get("auxiliary")
+    if not isinstance(auxiliary, dict):
+        return {}
+    metadata = auxiliary.get("pwnshop")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _allows_unsupported_tests(challenge_path: pathlib.Path) -> bool:
+    return _read_pwnshop_metadata(challenge_path / "challenge.yml").get("allow_unsupported_tests") is True
+
+
+def _challenge_requires_solve(challenge_path: pathlib.Path) -> bool:
+    module = _read_metadata(challenge_path.parent / "module.yml")
+    for resource in module.get("resources", []):
+        if resource.get("type") == "challenge" and resource.get("id") == challenge_path.name:
+            return resource.get("required", True) is not False
+    return True
 
 
 def run_workspace_command(
@@ -73,7 +103,7 @@ def run_workspace_command(
     default=None,
     help="Timeout in seconds for each individual test.",
 )
-@click.option("--require-solved", is_flag=True, help="Fail if any challenge is unsolved.")
+@click.option("--require-solved", is_flag=True, help="Fail if any required challenge is unsolved.")
 @click.option(
     "--log-failures",
     metavar="DIR",
@@ -110,15 +140,17 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_solve
         challenge_path = pathlib.Path(challenge_path)
         rendered = None
         try:
+            allow_unsupported_tests = _allows_unsupported_tests(challenge_path)
+            requires_solve = _challenge_requires_solve(challenge_path)
             rendered = lib.render_challenge(challenge_path)
             image_id = lib.build_challenge(challenge_path)
             tests = sorted(rendered.rglob("test*/test_*"))
             if not tests:
                 logger.warning("no tests found for %s", challenge_path)
-                return {"path": challenge_path, "tests": [], "solved": False}
+                return {"path": challenge_path, "tests": [], "solved": not requires_solve}
             logger.info("running %d test(s) for %s", len(tests), challenge_path)
             results = []
-            solved = False
+            solved = not requires_solve
             for test in tests:
                 test_name = test.relative_to(rendered)
                 logger.debug("running test %s in %s", test_name, challenge_path)
@@ -126,6 +158,7 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_solve
                 last_output = ""
                 failed_attempt_outputs = []
                 for attempt in range(1, attempts + 1):
+                    test_unsupported = False
                     logger.debug("running test %s in %s (attempt %d/%d)", test_name, challenge_path, attempt, attempts)
                     with lib.run_challenge(challenge_path, image_id, volumes=[test]) as (
                         _container,
@@ -148,17 +181,18 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_solve
                                 last_output += e.stderr
                             passed = False
                         else:
-                            passed = run.returncode == 0
+                            test_unsupported = allow_unsupported_tests and run.returncode == UNSUPPORTED_TEST_EXIT_CODE
                             last_output = (run.stdout or "") + (run.stderr or "")
+                            passed = run.returncode == 0 or test_unsupported
                             logger.debug(
                                 "test %s %s (rc=%d, attempt %d/%d)",
                                 test_name,
-                                "PASSED" if passed else "FAILED",
+                                "UNSUPPORTED" if test_unsupported else "PASSED" if passed else "FAILED",
                                 run.returncode,
                                 attempt,
                                 attempts,
                             )
-                    solved = solved or flag in last_output
+                    solved = solved or test_unsupported or flag in last_output
                     if passed:
                         if attempt > 1:
                             logger.info(
@@ -217,7 +251,8 @@ def test_command(targets, modified_since, jobs, attempts, timeout, require_solve
                 else:
                     console.print(f"[red]FAIL[/] {challenge}: {error}")
             elif not tests:
-                unsolved.add(challenge)
+                if not solved:
+                    unsolved.add(challenge)
                 passed_count += 1
             else:
                 for test_path, passed, output in tests:
