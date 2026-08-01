@@ -91,6 +91,7 @@ class ChallengeResource(BaseModel):
     progression_locked: Optional[bool] = None
     interfaces: Optional[list] = None
     visibility: Optional[Visibility] = None
+    auxiliary: Optional[dict] = None
 
 
 class HeaderResource(BaseModel):
