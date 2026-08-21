@@ -1,7 +1,9 @@
 function check_cmd {
 	BCMD=($BASH_COMMAND)
+	
 
 	[ "${#BCMD[@]}" -eq 1 ] || return 0
+	BCMD[0]="${BCMD[0]/#\~/$HOME}"
 	[ -f "${BCMD[0]}" ] || return 0
 	FILE=$(realpath ${BCMD[0]})
 	[[ "$FILE" == $HOME/* ]] || return 0
