@@ -81,3 +81,51 @@
     ORrvJGYD03ICi4toHT4D
     =7Hrl
     -----END PGP PUBLIC KEY BLOCK-----
+
+
+- name: fish
+  email: fishw@asu.edu
+  github: ltfish
+  groups: ["*"]
+  key: |
+    -----BEGIN PGP PUBLIC KEY BLOCK-----
+
+    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
+    vzusRoEbZRXZxi9rZHBbRJc=
+    =7IJW
+    -----END PGP PUBLIC KEY BLOCK-----
