@@ -129,3 +129,25 @@
     vzusRoEbZRXZxi9rZHBbRJc=
     =7IJW
     -----END PGP PUBLIC KEY BLOCK-----
+
+
+- name: zion
+  email: zion@zionbasque.com
+  github: mahaloz
+  groups: ["*"]
+  key: |
+    -----BEGIN PGP PUBLIC KEY BLOCK-----
+
+    mDMEapMejRYJKwYBBAHaRw8BAQdAcbyNLp7u0Qjw/+9M4YaI+N3yk3vZCW9zHgbJ
+    C8BLFg20IVppb24gQmFzcXVlIDx6aW9uQHppb25iYXNxdWUuY29tPoi1BBMWCgBd
+    FiEEIeqJ6qq3ua47LQbZ1VHGKNwhZMIFAmqTHo0bFIAAAAAABAAObWFudTIsMi41
+    KzEuMTIsMCwzAhsDBQkJZgGABQsJCAcCAiICBhUKCQgLAgQWAgMBAh4HAheAAAoJ
+    ENVRxijcIWTCY/kBAOdT43n7AFILpVEXBPNRRc+oID/InasEBRUNZtssg6HcAQCb
+    +LQjtlkXgJ0XaknhLSVHmMp4oh0LOosxZlpU+XU2BLg4BGqTHo0SCisGAQQBl1UB
+    BQEBB0CdZZErMPl+9XbhNLk4tvCNQ5ejcbJKHR9InZmRTEv4VwMBCAeImgQYFgoA
+    QhYhBCHqieqqt7muOy0G2dVRxijcIWTCBQJqkx6NGxSAAAAAAAQADm1hbnUyLDIu
+    NSsxLjEyLDAsMwIbDAUJCWYBgAAKCRDVUcYo3CFkwulYAP94VXEFipluZtLoVL1n
+    ENbvYVDswmLyyqJNz8kbNOo1gAEApI7t3r6r6Q+tYuUpwi/DTx+6MZTlzf5A09Hk
+    fOrjvQ0=
+    =q4BZ
+    -----END PGP PUBLIC KEY BLOCK-----
