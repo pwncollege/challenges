@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from typing import Iterable, Iterator, List, Optional, Sequence
 
@@ -21,6 +22,8 @@ import yaml
 logger = logging.getLogger(__name__)
 
 CHALLENGE_SEED = int(os.environ.get("CHALLENGE_SEED", "0"))
+
+_KATA_TRANSITION_LOCK = threading.Lock()
 
 clang_format = shutil.which("clang-format")
 if not clang_format:
@@ -100,6 +103,13 @@ def image_path(challenge_image: str) -> str:
     return ""
 
 
+def _run_with_transition_lock(runtime: str, function, *args, **kwargs):
+    if runtime != "kata":
+        return function(*args, **kwargs)
+    with _KATA_TRANSITION_LOCK:
+        return function(*args, **kwargs)
+
+
 @contextlib.contextmanager
 def run_challenge(
     challenge_path: pathlib.Path,
@@ -135,7 +145,9 @@ def run_challenge(
     )
     container = None
     try:
-        container = subprocess.check_output(
+        container = _run_with_transition_lock(
+            runtime,
+            subprocess.check_output,
             [
                 "docker",
                 "run",
@@ -203,7 +215,9 @@ def run_challenge(
     finally:
         if container:
             logger.debug("removing container %s", container[:12])
-            subprocess.run(
+            _run_with_transition_lock(
+                runtime,
+                subprocess.run,
                 ["docker", "rm", "--force", container],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
