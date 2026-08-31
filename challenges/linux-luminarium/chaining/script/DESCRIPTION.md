@@ -32,6 +32,4 @@ You can see that the shell script executed both commands, creating and printing 
 Now, it's your turn!
 Same as last level, run `/challenge/pwn` and then `/challenge/college`, but this time in a shell script called `x.sh`, then run it with `bash`!
 
----
-**NOTE:** We haven't yet talked about Linux's amazing array of competent command line file editors.
-For now, feel free to use the `Text Editor` application in Desktop mode (`Applications->Accessories->Text Editor`) or the default editor in the VSCode Workspace!
+You can create `x.sh` directly in the terminal with the `nano` editor you practiced in [Terminal Text Editing](/linux-luminarium/text-editing).

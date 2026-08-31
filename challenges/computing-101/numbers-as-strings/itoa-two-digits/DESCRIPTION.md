@@ -1,86 +1,25 @@
-One digit was easy.
-A two-digit number like `42` needs *splitting* into its tens (`4`) and ones (`2`) --- and splitting is division: `42 / 10 = 4` (the quotient), and `42 % 10 = 2` (the remainder).
+In [Divide and Remainder](/computing-101/numbers-as-strings/divide-remainder), you split a two-digit number into its tens digit in `rax` and its ones digit in `rdx`.
+Now you will turn both digits back into text and write them into an output buffer.
 
-x86 gives you *both* results from one `div`, but `div` is a fussy instruction worth learning carefully.
-`div rcx` divides the **128-bit** value resulting by concatenating `rdx:rax` by `rcx`, leaving the quotient in `rax` and the remainder in `rdx`.
-Three things follow from that:
+Your `itoa_digit` returned one character directly in `rax`.
+A string is instead written as a sequence of bytes in memory, so the caller gives `itoa` a pointer to writable memory in `rsi`.
+Each ASCII character is one byte, so each store must write only the low byte of the register holding that character.
 
-- It divides `rdx:rax`, not just `rax`, so you must clear `rdx` first (`xor rdx, rdx`) --- otherwise `div` treats leftover garbage as the high half of your number (and may crash).
-- The divisor comes from a register, not an immediate, so load the `10` into one (e.g., `mov rcx, 10; div rcx`).
-- You don't control the dividend: it's _always_ `rdx:rax`.
-
-After the `div`, `rax` holds the tens and `rdx` holds the ones.
-Turn each into a character the way `itoa_digit` did (add `0x30`) and store the two of them.
-
-Write `itoa(value, buf)`, which we'll call from the challenge.
-This function should take a value (`10`-`99`) in `rdi` and a pointer to the "output" buffer in `rsi`.
-Split the number in `rdi` with `div`, convert the two digits as above, and write their characters to that buffer.
-Then return the number of characters written (in this case, 2).
-Remember to `.global itoa`.
-
-**Writing characters.**
-Your `itoa_digit` function from the last level returned the result (in `rax`), and you didn't have to deal with writing it to a buffer.
-Now, you do.
-Your actual character is _one byte_ (8 bits), whereas the register you're holding it in is 64 bits (8 bytes) long.
-You just want the last ("least significant") byte, and you can directly access it through _partial register aliases_, depending on the register:
-
-| register | least significant byte |
-| -------- | ---------------------- |
-| `rax`    | `al`                   |
-| `rbx`    | `bl`                   |
-| `rcx`    | `cl`                   |
-| `rdx`    | `dl`                   |
-| `rsi`    | `sil`                  |
-| `rdi`    | `dil`                  |
-| `rbp`    | `bpl`                  |
-| `rsp`    | `spl`                  |
-| `r8`     | `r8b`                  |
-| `r9`     | `r9b`                  |
-| `r10`    | `r10b`                 |
-| `r11`    | `r11b`                 |
-| `r12`    | `r12b`                 |
-| `r13`    | `r13b`                 |
-| `r14`    | `r14b`                 |
-| `r15`    | `r15b`                 |
-
-So, if your character is in `rax`, and the buffer is pointed to by `rsi`, you'll need to do `mov [rsi], al`.
-
-This is tricky, but do it carefully, and the flag is your reward!
-
-----
-
-**Debugging:**
-This can get tricky to get right.
-To debug this challenge, our advice is to add a `_start` in your code, as so:
+The low byte of `rax` is named `al`, and the low byte of `rdx` is named `dl`.
+For example, this stores only the character in `al`, leaving the surrounding bytes untouched:
 
 ```asm
-.global _start
-_start:
-    mov rdi, 42     # you'll pass 42 as the first argument to your function
-    push 0          # this pushes eight 0 bytes to the stack, clearing what will be your output buffer
-    mov rsi, rsp    # the output buffer as the second argument to itoa
-    int3            # this is optional, if you want gdb to break here without having to set a breakpoint!
-    call itoa       # there we go!
-
-    mov rax, 60     # exit cleanly, like a cultured individual
-    syscall
+mov BYTE PTR [rsi], al
 ```
 
-Assemble and link it as a normal executable (no `-shared` --- this version has an entry point), then load it in `gdb`:
+Write `itoa(value, buf)`, with a value from `10` through `99` in `rdi` and the buffer pointer in `rsi`.
+Use the division you just practiced, convert both digits to their ASCII characters, write the tens character to `buf[0]` and the ones character to `buf[1]`, and return `2` in `rax`.
+Export the function with `.global itoa`.
+
+Build it into a shared library and hand it to the grader:
 
 ```console
-hacker@dojo:~$ as -o debug.o debug.s
-hacker@dojo:~$ ld -o debug debug.o
-hacker@dojo:~$ gdb ./debug
-(gdb) run
+hacker@dojo:~$ as -o your-solve.o your-solve.s
+hacker@dojo:~$ ld -shared -o your-solve.so your-solve.o
+hacker@dojo:~$ /challenge/check your-solve.so
 ```
-
-Execution stops at your `int3`, and from there you can step through with the techniques you learned in [Software Introspection](/computing-101/introspecting), looking at memory on the stack, registers, etc, until things work!
-You can also debug the native harness that loads your `.so`:
-
-```console
-hacker@dojo:~$ gdb --args /challenge/harness your-solve.so 42
-(gdb) run
-```
-
-The first argument after `/challenge/harness` is your library, and the second is the stand-in number passed to `itoa`.

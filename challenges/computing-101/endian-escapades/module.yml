@@ -105,6 +105,9 @@ resources:
     To avoid this confusion, there is another term often used for a 16-bit value: a _short_.
     So, `byte`, `short`, `dword`, and `qword` don't have this problem --- they always mean 8, 16, 32, and 64 bits.
 - type: challenge
+  id: zero-extension
+  name: "Zero Extension"
+- type: challenge
   id: sign-extension
   name: "Sign Extension"
 - type: challenge

@@ -27,8 +27,11 @@ resources:
   id: itoa-digit
   name: "A Single Digit, Back to Text"
 - type: challenge
-  id: itoa-two-digits
+  id: divide-remainder
   name: "Divide and Remainder"
+- type: challenge
+  id: itoa-two-digits
+  name: "Two Digits, Back to Text"
 - type: challenge
   id: itoa-minimal
   name: "Drop the Leading Zero"
