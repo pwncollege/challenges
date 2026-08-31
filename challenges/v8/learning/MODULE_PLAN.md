@@ -59,10 +59,10 @@ The ramp works backward from what the final exploit needs:
 
 1. First show the native process-memory finish from a provided absolute
    `read32`/`write32` primitive.
-2. Then show the issue 514157844 imported-tag escape from guarded access to the
+2. Then teach the heap-cage primitive contract and guarded Sandbox access that
+   the V8-specific corruption ramps use.
+3. Then show the issue 514157844 imported-tag escape from guarded access to the
    WasmFX objects it corrupts.
-3. Then teach the heap-cage primitive contract that a first-stage V8 bug must
-   eventually provide.
 4. Then teach the Wasm encoding, reference, GC-array, and optimized-tiering
    bedrock needed to understand the real first stages.
 5. Then replace the modeled first-stage effects with the real CVE-2026-7899
@@ -147,47 +147,47 @@ task to be one positive, gradable concept.
     revision-specific gadgets, lay out `/challenge/catflag` and `argv`, and write
     the final return chain.
 
-### Issue 514157844 Imported-Tag Escape From Guarded Access
-
-12. `ramp-wasmfx-tag-identity-field`
-    Concept: a `WebAssembly.Tag` wrapper contains an internal identity field.
-    Task: locate that field in real tag wrappers and copy one tag identity into
-    another wrapper with guarded `Sandbox.MemoryView`.
-13. `ramp-wasmfx-imported-tag-handler`
-    Concept: imported WasmFX handlers match on tag identity.
-    Task: instantiate a real WasmFX module whose handler catches a suspension
-    because two tag identities were made equal.
-14. `ramp-wasmfx-tag-native-leak`
-    Concept: imported-tag confusion can reinterpret a Wasm reference as an
-    integer pointer.
-    Task: store the tagged proof-box pointer leaked by the native path.
-15. `ramp-wasmfx-tag-native-read`
-    Concept: imported-tag confusion can read through a leaked proof-box pointer.
-    Task: convert the leaked pointer with the named helper and read the proof
-    field.
-16. `ramp-wasmfx-tag-native-write`
-    Concept: imported-tag confusion can write through a leaked proof-box pointer.
-    Task: convert the leaked pointer with the named helper and mutate the proof
-    field.
-
 ### Heap-Cage Primitive Contract
 
-17. `ramp-v8-cage-boundary`
+12. `ramp-v8-cage-boundary`
     Concept: a caged V8 heap write is weaker than a process-memory write.
     Task: derive a proof-field cage offset in a normal JS object and mutate it
     with guarded `Sandbox.MemoryView`.
-18. `ramp-tagged-pointers`
+13. `ramp-tagged-pointers`
     Concept: a leaked heap-object reference carries the low heap-object tag bit.
     Task: convert a tagged reference into an object start before writing the
     proof field.
-19. `ramp-type-confusion-effect`
+14. `ramp-type-confusion-effect`
     Concept: type confusion can retarget an object-reference field.
     Task: retarget a frozen reference cell from a decoy object to the proof
     object, then call the normal proof method.
-20. `ramp-caged-rw-interface`
+15. `ramp-caged-rw-interface`
     Concept: different first stages should normalize to one cage-offset contract.
     Task: adapt differently shaped caged primitives behind `read32` and
     `write32`.
+
+### Issue 514157844 Imported-Tag Escape From Guarded Access
+
+16. `ramp-wasmfx-tag-identity-field`
+    Concept: a `WebAssembly.Tag` wrapper contains an internal identity field.
+    Task: locate that field in real tag wrappers and copy one tag identity into
+    another wrapper with guarded `Sandbox.MemoryView`.
+17. `ramp-wasmfx-imported-tag-handler`
+    Concept: imported WasmFX handlers match on tag identity.
+    Task: instantiate a real WasmFX module whose handler catches a suspension
+    because two tag identities were made equal.
+18. `ramp-wasmfx-tag-native-leak`
+    Concept: imported-tag confusion can reinterpret a Wasm reference as an
+    integer pointer.
+    Task: store the tagged proof-box pointer leaked by the native path.
+19. `ramp-wasmfx-tag-native-read`
+    Concept: imported-tag confusion can read through a leaked proof-box pointer.
+    Task: convert the leaked pointer with the named helper and read the proof
+    field.
+20. `ramp-wasmfx-tag-native-write`
+    Concept: imported-tag confusion can write through a leaked proof-box pointer.
+    Task: convert the leaked pointer with the named helper and mutate the proof
+    field.
 
 ### Wasm Encoding and Reference Foundations
 
@@ -341,15 +341,17 @@ task to be one positive, gradable concept.
 ## Gap Audit
 
 - The native finish is self-contained and appears before any V8-specific first stage.
-- Issue 514157844 is introduced first through guarded access to its corrupted
-  WasmFX state, so learners see the process-memory effect before replacing the
-  guarded write with a real first-stage primitive.
-- Heap-cage mechanics appear before learners must use a CVE-derived caged
-  primitive against the imported-tag escape.
+- Heap-cage mechanics and guarded Sandbox access appear before learners must
+  inspect or mutate V8 object fields.
+- Issue 514157844 is introduced through guarded access to its corrupted WasmFX
+  state, so learners see the process-memory effect before replacing the guarded
+  write with a real first-stage primitive.
 - Wasm binary encoding and reference mechanics appear before learners synthesize
   the real CVE trigger modules.
 - Modeled optimized-Wasm array effects appear before the real CVE-2026-7899
   trigger.
+- The native return-chain layout ramp names the multi-pop gadget consumption
+  order before learners must write the chain.
 - CVE-2026-9973 is introduced as a narrow first-stage swap after the 7899 chain
   is complete.
 - Issue 505751230 is introduced as a narrow escape swap after the imported-tag
@@ -368,6 +370,12 @@ Current structural expectations:
 - Public tests are smoke checks, not solve writeups.
 - Private tests execute the reference solve and check the real flag.
 - `tools/dojo/parse-dojo-yml challenges/v8/dojo.yml` accepts the module.
+- Focused post-review check:
+  `nix develop --command pwnshop test challenges/v8/learning-2/ramp-js-to-wasm-wrapper challenges/v8/learning/ramp-syscall-chain-layout`
+  passed for 2 challenges / 4 testcases.
+- Combined post-review full-suite check:
+  `nix develop --command pwnshop test challenges/v8/learning challenges/v8/learning-2 --jobs 1 --timeout 300`
+  passed for 96 challenges / 194 testcases.
 
 Current full-suite command:
 
@@ -377,4 +385,5 @@ nix develop -c pwnshop test \
   --jobs 1 --timeout 300
 ```
 
-No post-reorder full-suite result has been recorded in this file yet.
+The combined post-review full-suite result above covers this module and
+`learning-2`.

@@ -56,6 +56,20 @@ resources:
     type: challenge
     description: "Rebase live d8 and stack leaks under ASLR, resolve imports, and lay out the validated ret-aligned catflag chain."
   - type: header
+    content: Caged Primitive Bedrock
+  - id: ramp-v8-cage-boundary
+    name: V8 Cage Boundary
+    type: challenge
+    description: "Allocate a normal JavaScript object, derive a proof-field cage offset, and mutate it with guarded Sandbox.MemoryView."
+  - id: ramp-tagged-pointers
+    name: Tagged Pointers
+    type: challenge
+    description: "Convert a tagged heap-object reference into an object start, then mutate a proof field with guarded Sandbox.MemoryView."
+  - id: ramp-caged-rw-interface
+    name: Caged Read/Write Interface
+    type: challenge
+    description: "Normalize differently shaped caged primitives behind one cage-offset read32/write32 interface."
+  - type: header
     content: Dispatch Escape Backward From Its Effect
   - id: ramp-import-wrapper-sig-state
     name: Imported Wrapper Signature State
@@ -73,20 +87,6 @@ resources:
     name: Wasm Table Grow Target Handle
     type: challenge
     description: "Derive a dispatch-table target handle from nearby table handles and stage it before table growth."
-  - type: header
-    content: Caged Primitive Bedrock
-  - id: ramp-v8-cage-boundary
-    name: V8 Cage Boundary
-    type: challenge
-    description: "Allocate a normal JavaScript object, derive a proof-field cage offset, and mutate it with guarded Sandbox.MemoryView."
-  - id: ramp-tagged-pointers
-    name: Tagged Pointers
-    type: challenge
-    description: "Convert a tagged heap-object reference into an object start, then mutate a proof field with guarded Sandbox.MemoryView."
-  - id: ramp-caged-rw-interface
-    name: Caged Read/Write Interface
-    type: challenge
-    description: "Normalize differently shaped caged primitives behind one cage-offset read32/write32 interface."
   - type: header
     content: Wasm And Custom-Descriptor Bedrock
   - id: ramp-wasm-sectioned-module
@@ -113,6 +113,10 @@ resources:
     name: Exact Reference Types
     type: challenge
     description: "Route exact and subtype-compatible references through the matching real Wasm API path."
+  - id: ramp-js-to-wasm-wrapper
+    name: JS-to-Wasm Wrapper
+    type: challenge
+    description: "Pass a JavaScript object through a real Wasm externref export wrapper unchanged."
   - id: ramp-js-values-as-wasm-refs
     name: JS Values as Wasm Refs
     type: challenge

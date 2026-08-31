@@ -12,5 +12,8 @@ The first arc builds a full chain from a Wasm custom-descriptor first stage into
 The second arc swaps the escape while keeping the first stage.
 The third arc swaps the first stage while keeping the escape.
 
+The path first teaches the native finish and the heap-cage and guarded Sandbox access model.
+Then, it uses those basics for the dispatch-table escape and the Wasm custom-descriptor first stages.
+
 The path is standalone.
 It does not assume that you completed the older V8 learning module.

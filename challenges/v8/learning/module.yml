@@ -56,6 +56,24 @@ resources:
     type: challenge
     description: "Rebase live d8 and stack leaks under ASLR, resolve imports, and lay out the validated ret-aligned catflag chain from only native read32/write32."
   - type: header
+    content: Heap-Cage Primitive Contract
+  - id: ramp-v8-cage-boundary
+    name: V8 Cage Boundary
+    type: challenge
+    description: "Allocate a normal JavaScript object, derive a proof-field cage offset, and mutate it with guarded Sandbox.MemoryView."
+  - id: ramp-tagged-pointers
+    name: Tagged Pointers
+    type: challenge
+    description: "Convert a tagged heap-object reference into an object start, then mutate a proof field with guarded Sandbox.MemoryView."
+  - id: ramp-type-confusion-effect
+    name: Type Confusion Effect
+    type: challenge
+    description: "Retarget a frozen object-reference slot with guarded Sandbox.MemoryView, then call the object's normal proof method."
+  - id: ramp-caged-rw-interface
+    name: Caged Read/Write Interface
+    type: challenge
+    description: "Normalize differently shaped caged primitives behind one cage-offset read32/write32 interface."
+  - type: header
     content: Issue 514157844 Imported-Tag Escape From Guarded Access
   - id: ramp-wasmfx-tag-identity-field
     name: WasmFX Tag Identity Field
@@ -77,24 +95,6 @@ resources:
     name: WasmFX Imported Tag Native Write
     type: challenge
     description: "Use imported-tag confusion to write a 32-bit proof field after deriving the proof-field address from the leaked tagged pointer."
-  - type: header
-    content: Heap-Cage Primitive Contract
-  - id: ramp-v8-cage-boundary
-    name: V8 Cage Boundary
-    type: challenge
-    description: "Allocate a normal JavaScript object, derive a proof-field cage offset, and mutate it with guarded Sandbox.MemoryView."
-  - id: ramp-tagged-pointers
-    name: Tagged Pointers
-    type: challenge
-    description: "Convert a tagged heap-object reference into an object start, then mutate a proof field with guarded Sandbox.MemoryView."
-  - id: ramp-type-confusion-effect
-    name: Type Confusion Effect
-    type: challenge
-    description: "Retarget a frozen object-reference slot with guarded Sandbox.MemoryView, then call the object's normal proof method."
-  - id: ramp-caged-rw-interface
-    name: Caged Read/Write Interface
-    type: challenge
-    description: "Normalize differently shaped caged primitives behind one cage-offset read32/write32 interface."
   - type: header
     content: Wasm Encoding and Reference Foundations
   - id: ramp-wasm-sectioned-module
