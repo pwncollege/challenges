@@ -1,0 +1,8 @@
+{%- extends "../../common/tests_public/service.py.j2" -%}
+
+{% block assertions %}
+assert response.status_code == 200
+response = session.get(base_url + "/admin", headers={"X-Real-IP": "203.0.113.10"})
+assert response.status_code == 403
+assert "pwn.college{" not in response.text
+{% endblock %}

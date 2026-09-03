@@ -1,0 +1,6 @@
+{%- extends "../../common/tests_public/service.py.j2" -%}
+
+{% block assertions %}
+assert response.status_code == 200
+assert response.text == "Public site\n"
+{% endblock %}

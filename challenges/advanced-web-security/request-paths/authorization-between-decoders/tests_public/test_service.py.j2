@@ -1,0 +1,13 @@
+{%- extends "../../common/tests_public/service.py.j2" -%}
+
+{% block assertions %}
+status, body = raw_request("/admin/flag")
+assert status == 403
+assert b"pwn.college{" not in body
+status, body = raw_request("/admin%2Fflag")
+assert status == 403
+assert b"pwn.college{" not in body
+status, body = raw_request("/admin%252Fpanel")
+assert status == 404
+assert b"pwn.college{" not in body
+{% endblock %}

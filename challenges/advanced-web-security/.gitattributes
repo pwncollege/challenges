@@ -1,0 +1,3 @@
+**/challenge/** filter=git-crypt-advanced-web-security diff=git-crypt-advanced-web-security
+**/common/** filter=git-crypt-advanced-web-security diff=git-crypt-advanced-web-security
+**/tests_private/** filter=git-crypt-advanced-web-security diff=git-crypt-advanced-web-security
