@@ -127,7 +127,7 @@ else:
         print("Alert triggered! Your reward:")
         print(flag)
     else:
-        print("It looks like the alert did not come from {challenge_url}/ephemeral?")
+        print(f"It looks like the alert did not come from {challenge_url}/ephemeral?")
 {% elif challenge.visit_attacker %}
 time.sleep(3)
 print("Visited! Go check if the attack worked!")
