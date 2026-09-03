@@ -1,0 +1,13 @@
+{%- extends "../../common/tests_public/service.py.j2" -%}
+
+{% block assertions %}
+assert response.status_code == 200
+response = session.post(
+    base_url + "/request-reset",
+    headers={"Host": "challenge.localhost"},
+    data={"username": "admin"},
+)
+response.raise_for_status()
+assert "token=" not in response.text
+assert "pwn.college{" not in response.text
+{% endblock %}

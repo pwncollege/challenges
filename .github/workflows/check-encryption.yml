@@ -12,12 +12,22 @@ jobs:
     - uses: actions/checkout@v6
     - uses: ./.github/actions/setup-nix
 
-    - name: Ensure tests_private files are encrypted
+    - name: Ensure git-crypt files are encrypted
       shell: 'nix shell nixpkgs#git nixpkgs#git-crypt --command bash --noprofile --norc -euo pipefail {0}'
       run: |
-        unencrypted=$(git crypt status | grep tests_private | grep "^not" || true)
+        encryption_status=$(git crypt status)
+        unencrypted=$(
+          {
+            printf '%s\n' "$encryption_status" \
+              | sed -n '\|^not encrypted: .*/tests_private/|s/^not encrypted: //p'
+            printf '%s\n' "$encryption_status" \
+              | sed -n 's/^not encrypted: //p' \
+              | git check-attr --stdin filter \
+              | sed -n '\|: filter: git-crypt-|s/: filter:.*//p'
+          } | sort -u
+        )
         if [ -n "$unencrypted" ]; then
-          echo "::error::Unencrypted tests_private files detected:"
+          echo "::error::Unencrypted files required to use git-crypt detected:"
           echo "$unencrypted"
           exit 1
         fi

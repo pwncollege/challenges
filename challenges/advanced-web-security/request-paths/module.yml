@@ -1,0 +1,40 @@
+name: Request Paths
+resources:
+- type: header
+  content: Path Namespaces
+- type: challenge
+  id: path-preservation
+  name: Path Preservation
+- type: challenge
+  id: prefix-rewriting
+  name: Prefix Rewriting
+- type: challenge
+  id: rewritten-authorization
+  name: Rewritten Authorization
+- type: header
+  content: Path Representations
+- type: challenge
+  id: raw-and-normalized
+  name: Raw and Normalized Paths
+- type: challenge
+  id: encoded-separators
+  name: Encoded Separators
+- type: header
+  content: Decoding Stages
+- type: challenge
+  id: decoding-stages
+  name: Decoding Stages
+- type: challenge
+  id: authorization-between-decoders
+  name: Authorization Between Decoders
+- type: header
+  content: Dot Segments and Ordering
+- type: challenge
+  id: dot-segments
+  name: Dot Segments
+- type: challenge
+  id: encoded-dot-segments
+  name: Encoded Dot Segments
+- type: challenge
+  id: normalization-order
+  name: Normalization Order

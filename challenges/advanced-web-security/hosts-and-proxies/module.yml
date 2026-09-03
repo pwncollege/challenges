@@ -1,0 +1,29 @@
+name: Hosts and Proxies
+resources:
+- type: header
+  content: Virtual Hosting
+- type: challenge
+  id: virtual-hosting-1
+  name: Virtual Hosting
+- type: challenge
+  id: virtual-hosting-2
+  name: Host-Generated URLs
+- type: header
+  content: Reverse Proxies and Client Addresses
+- type: challenge
+  id: reverse-proxy-1
+  name: The Proxy's Peer
+- type: challenge
+  id: reverse-proxy-2
+  name: Forwarded Client Address
+- type: challenge
+  id: reverse-proxy-3
+  name: Forwarded Address Chains
+- type: challenge
+  id: reverse-proxy-4
+  name: Trusted Proxy Counts
+- type: header
+  content: Forwarded Authority
+- type: challenge
+  id: forwarded-host
+  name: Forwarded Authority
