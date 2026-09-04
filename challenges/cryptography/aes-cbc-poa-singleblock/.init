@@ -1,0 +1,5 @@
+#!/bin/bash
+
+dd if=/dev/urandom of=/challenge/.key bs=16 count=1
+cat /dev/urandom | tr -cd '0-9A-Za-z' | head -c$((RANDOM%8+8)) > /challenge/.pw
+chmod 600 /challenge/.key /challenge/.pw

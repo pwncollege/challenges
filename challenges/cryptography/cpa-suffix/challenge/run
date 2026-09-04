@@ -1,0 +1,25 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from Crypto.Random import get_random_bytes
+
+flag = open("/flag", "rb").read().strip()
+
+key = get_random_bytes(16)
+cipher = AES.new(key=key, mode=AES.MODE_ECB)
+
+while True:
+    print("Choose an action?")
+    print("1. Encrypt chosen plaintext.")
+    print("2. Encrypt the tail end of the flag.")
+    if (choice := int(input("Choice? "))) == 1:
+        pt = input("Data? ").strip().encode()
+    elif choice == 2:
+        length = int(input("Length? "))
+        pt = flag[-length:]
+    else:
+        break
+
+    ct = cipher.encrypt(pad(pt, cipher.block_size))
+    print(f"Result: {ct.hex()}")

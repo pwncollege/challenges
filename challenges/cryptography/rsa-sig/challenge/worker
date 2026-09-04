@@ -1,0 +1,21 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+import sys
+
+from base64 import b64decode
+
+n = int(open("/challenge/key-n").read(), 16)
+e = int(open("/challenge/key-e").read(), 16)
+
+if len(sys.argv) < 2:
+    print(f"Usage: {sys.argv[0]} [signature-b64]")
+    sys.exit(1)
+
+signature = b64decode(sys.argv[1])
+c = int.from_bytes(signature, "little")
+assert c < n, "Message too big!"
+command = pow(c, e, n).to_bytes(256, "little").rstrip(b"\x00")
+
+print(f"Received signed command: {command}")
+if command == b"flag":
+    print(open("/flag").read())
