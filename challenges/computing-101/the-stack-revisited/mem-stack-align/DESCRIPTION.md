@@ -4,22 +4,22 @@ The same layout applies here:
 ```text
      Address    │ Contents
    +────────────────────────+
-   │ rsp + 0    │ 1         │ ◀─── argc
+   │ rsp + 0    │ 1         │ ◀────   argc
    +────────────────────────+
-   │ rsp + 8    │ rsp + 128 │───────┐  argv[0]: pointer to the program name
-   +────────────────────────+       │
-   │ rsp + 16   │ 0         │       │  NULL (end of argv)
-   +────────────────────────+       │
-   │ rsp + 24   │ rsp + 200 │─────┐ │  envp[0]: pointer to the first env var
-   +────────────────────────+     │ │
-   │ rsp + 32   │ 0         │     │ │  NULL (end of envp)
-   +────────────────────────+     │ │
-                                  │ │
-  ┌───────────────────────────────│─┘
-  │                               │
-  │   Address   │ Contents        │
-  │ +──────────────────────────+  │
-  │ │ rsp + 128 │ "/tmp/..."   │◀─┘ the program name
+   │ rsp + 8    │ rsp + 128 │──────┐  argv[0]: pointer to the program name
+   +────────────────────────+      │  
+   │ rsp + 16   │ 0         │      │  NULL (end of argv)
+   +────────────────────────+      │  
+   │ rsp + 24   │ rsp + 200 │───┐  │  envp[0]: pointer to the first env var
+   +────────────────────────+   │  │ 
+   │ rsp + 32   │ 0         │   │  │  NULL (end of envp)
+   +────────────────────────+   │  │
+                                │  │ 
+  ┌─────────────────────────────┘  │
+  │                                │
+  │   Address   │ Contents         │
+  │ +──────────────────────────+   │
+  │ │ rsp + 128 │ "/tmp/..."   │◀──┘ the program name
   │ +──────────────────────────+
   │ │ ...       │ ...          │
   │ +──────────────────────────+
