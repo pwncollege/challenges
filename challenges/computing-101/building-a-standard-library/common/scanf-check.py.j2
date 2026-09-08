@@ -18,6 +18,36 @@ check_runtime_success = "Your scanner put every result in the right place!"
 check_runtime_failure = "Your scanner needs another look:\n"
 
 
+def display(value):
+    if isinstance(value, list):
+        return "[" + ", ".join(map(display, value)) + "]"
+    if isinstance(value, (str, bytes)) and len(value) > 64:
+        return f"{value[:32]!r}...{value[-16:]!r} ({len(value)} bytes)"
+    return repr(value)
+
+
+def input_context(text, fmt):
+    return f"input {display(text)}" + (f", format {display(fmt)}" if fmt else "")
+
+
+def integer_mismatch(output, value):
+    if output[:8] == SENTINEL * 8:
+        return (
+            "but its eight bytes still contain the checker's initial 0xa5 fill. "
+            "Store the parsed integer through the destination pointer."
+        )
+    packed = struct.pack("<q", value)
+    for width in (1, 2, 4):
+        if output[:width] == packed[:width] and output[width:8] == SENTINEL * (8 - width):
+            unit = "byte" if width == 1 else "bytes"
+            return (
+                f"but only the first {width} {unit} {'matches' if width == 1 else 'match'} the result; "
+                f"the remaining {8 - width} bytes still contain the checker's initial 0xa5 fill. "
+                "Store the full eight-byte integer."
+            )
+    return f"but contains {struct.unpack_from('<q', output)[0]}."
+
+
 def cases():
     if MODE == "parse-integer":
         for text, value, count in [
@@ -69,6 +99,7 @@ def cases():
 
 
 def run_one(filename, text, fmt):
+    context = input_context(text, fmt)
     try:
         result = subprocess.run(
             ["/challenge/harness", filename, text, fmt],
@@ -77,10 +108,9 @@ def run_one(filename, text, fmt):
         )
     except subprocess.TimeoutExpired:
         raise AssertionError(
-            f"{solve_symbol} did not return on input {text!r}, format {fmt!r}. "
+            f"{solve_symbol} did not return for {context}. "
             "Check that each loop advances its input or format position and eventually returns."
         )
-    context = f"input {text!r}" + (f", format {fmt!r}" if fmt else "")
     if result.returncode:
         if result.returncode < 0:
             signum = -result.returncode
@@ -88,8 +118,13 @@ def run_one(filename, text, fmt):
             detail = f"stopped with {name}"
             hint = "Check your destination pointers and the stack used by your function calls."
         else:
+            if result.stderr:
+                raise AssertionError(
+                    f"For {context}, the harness reported:\n"
+                    + result.stderr.decode(errors="replace").strip()
+                )
             detail = f"exited with status {result.returncode}"
-            hint = result.stderr.decode(errors="replace").strip()
+            hint = "Return to the caller instead of exiting the process."
         raise AssertionError(f"Your function {detail} for {context}.\n{hint}")
     assert len(result.stdout) == 8 + MAX_OUTPUTS * CAPACITY, (
         f"The harness did not receive a complete result for {context}. "
@@ -103,7 +138,7 @@ def run_one(filename, text, fmt):
 def check_runtime(filename):
     for text, fmt, expected, count in cases():
         returned, outputs = run_one(filename, text, fmt)
-        context = f"input {text!r}" + (f", format {fmt!r}" if fmt else "")
+        context = input_context(text, fmt)
         for i, output in enumerate(outputs):
             if i >= len(expected):
                 assert output == SENTINEL * CAPACITY, (
@@ -115,10 +150,7 @@ def check_runtime(filename):
                 got = struct.unpack_from("<q", output)[0]
                 assert got == value, (
                     f"For {context}, destination {i + 1} should contain the 64-bit integer {value}, "
-                    f"but contains {got}. "
-                    + ("Store the parsed integer through the destination pointer; rax carries the byte count."
-                       if MODE == "parse-integer" else
-                       "Use each pointer in the destination array and advance the input after each conversion.")
+                    + integer_mismatch(output, value)
                 )
                 used = 8
             else:
@@ -142,5 +174,5 @@ def check_runtime(filename):
                if MODE == "parse-integer" else
                "Return the number of conversions; the helper's consumed-byte count advances the input internally.")
         )
-        print(f"  ok: {context} -> {expected!r}; returned {returned}")
+        print(f"  ok: {context} -> {display(expected)}; returned {returned}")
     return True

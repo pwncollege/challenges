@@ -15,7 +15,7 @@ executable = True
 give_flag = True
 LEVEL = {{ level }}
 PROMPT = b"$ "
-check_runtime_prologue = "Let's try your shell and follow the processes it creates..."
+check_runtime_prologue = "Let's try your shell..."
 check_runtime_success = "Your shell ran the commands with the right process behavior!"
 check_runtime_failure = "Your shell needs an adjustment:\n"
 
@@ -107,6 +107,19 @@ def check_trace(traces, commands, binary_path, finished):
                 )
             executed.append((stamp, pid, path, argv, match[3]))
     executed.sort()
+    if LEVEL >= 4:
+        eof_reads = [when for when, body in parent_events
+                     if body.startswith("read(0,") and re.search(r"\)\s+= 0$", body)]
+        assert not any(when > eof and body.startswith(("fork()", "execve("))
+                       for eof in eof_reads for when, body in parent_events), (
+            "read returned 0, but the parent tried to run another command. "
+            "End the parent with status 0 instead of reusing the input buffer."
+        )
+    if LEVEL >= 6:
+        assert not any(path == "exit" for _, _, path, _, _ in executed), (
+            "Your shell tried to execute 'exit' as an external command. "
+            "The exit builtin must end the original parent without fork or execve."
+        )
     if LEVEL >= 2:
         assert not any(pid == parent for _, pid, _, _, _ in executed), (
             "The parent executed the command and replaced itself. "
@@ -213,6 +226,7 @@ def check_trace(traces, commands, binary_path, finished):
 
 
 def session(binary_path, cases, *, builtin=False):
+    print("Starting a fresh shell for this session:", flush=True)
     # The trace is root-owned, while strace -u runs the submitted program as the
     # learner. A submitted program cannot turn fabricated output into a solve.
     user = pwd.getpwuid(os.geteuid()).pw_name
@@ -240,10 +254,7 @@ def session(binary_path, cases, *, builtin=False):
 
         def pump(deadline):
             remaining = deadline - time.monotonic()
-            assert remaining > 0, (
-                "Your shell stopped making progress. "
-                "Check its prompt, the parent/child branches, and whether read is waiting for input."
-            )
+            assert remaining > 0, "Your shell stopped making progress."
             ready = selector.select(min(remaining, 0.1))
             for key, _ in ready:
                 data = os.read(key.fd, 4096)
