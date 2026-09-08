@@ -78,6 +78,14 @@ class RawModuleYml(BaseModel):
     challenges: Optional[list] = None
 
 
+class ChallengeTransfer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dojo: Optional[str] = Field(default=None, pattern=r"^[a-z0-9-~]{1,128}$")
+    module: Optional[str] = Field(default=None, pattern=r"^[a-z0-9-]{1,32}$")
+    challenge: str = Field(pattern=r"^[a-z0-9-]{1,32}$")
+
+
 class ChallengeResource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -92,6 +100,7 @@ class ChallengeResource(BaseModel):
     interfaces: Optional[list] = None
     visibility: Optional[Visibility] = None
     auxiliary: Optional[dict] = None
+    transfer: Optional[ChallengeTransfer] = None
 
 
 class HeaderResource(BaseModel):
