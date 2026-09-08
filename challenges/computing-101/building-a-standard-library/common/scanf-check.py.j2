@@ -1,0 +1,146 @@
+import __main__ as checker
+import random
+import signal
+import struct
+import subprocess
+
+shared = True
+give_flag = True
+solve_symbol = "{{ symbol }}"
+MODE = "{{ mode }}"
+CAPACITY = 256
+MAX_OUTPUTS = 8
+SENTINEL = b"\xa5"
+WHITESPACE = " \t\n\r\v\f"
+
+check_runtime_prologue = "Let's check the values your scanner stores and the result it returns..."
+check_runtime_success = "Your scanner put every result in the right place!"
+check_runtime_failure = "Your scanner needs another look:\n"
+
+
+def cases():
+    if MODE == "parse-integer":
+        for text, value, count in [
+            ("42 rest", 42, 2),
+            ("-42 rest", -42, 3),
+            ("0", 0, 1),
+            ("0007!", 7, 4),
+            ("-0 more", 0, 2),
+            ("-2147483648;", -2147483648, 11),
+            ("2147483647abc", 2147483647, 10),
+        ]:
+            yield text, "", [value], count
+        for _ in range(6):
+            value = random.randint(-(2**31), 2**31 - 1)
+            text = str(value)
+            yield text + random.choice(["", " end", ",73", "xyz"]), "", [value], len(text)
+        return
+    for text, value in [("42", 42), ("-42!", -42), ("0", 0), ("0007 rest", 7),
+                        ("-2147483648", -(2**31)), ("2147483647", 2**31 - 1)]:
+        yield text, "%d", [value], 1
+    if MODE == "sscanf-number":
+        for _ in range(6):
+            value = random.randint(-1000000, 1000000)
+            yield str(value), "%d", [value], 1
+        return
+    for space in WHITESPACE:
+        yield space + "-73" + space, "%d", [-73], 1
+        yield space + "51", " \t%d", [51], 1
+    yield "92", " %d ", [92], 1
+    if MODE == "sscanf-whitespace":
+        return
+    yield "12 -34", "%d %d", [12, -34], 2
+    yield "12-34", "%d%d", [12, -34], 2
+    yield "1\t2\n-3  0\r9", "%d %d %d %d %d", [1, 2, -3, 0, 9], 5
+    for count in [3, 8]:
+        values = [random.randint(-100000, 100000) for _ in range(count)]
+        yield "  ".join(map(str, values)), "%d " * count, values, count
+    if MODE == "sscanf-values":
+        return
+    for word in ["hacker", "+", "a%b\\c", "x" * 255]:
+        yield word, "%s", [word], 1
+    yield "\t hello \n", " %s ", ["hello"], 1
+    yield "-17 + 29", "%d %s %d", [-17, "+", 29], 3
+    yield "one\ttwo\nthree", "%s%s%s", ["one", "two", "three"], 3
+    for space in WHITESPACE:
+        yield "left" + space + "right", "%s%s", ["left", "right"], 2
+    yield "123 word -90 tail", "%d %s %d %s", [123, "word", -90, "tail"], 4
+    yield " ".join("abcdefgh"), "%s " * 8, list("abcdefgh"), 8
+
+
+def run_one(filename, text, fmt):
+    try:
+        result = subprocess.run(
+            ["/challenge/harness", filename, text, fmt],
+            input=text.encode() if MODE == "scanf" else b"",
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            f"{solve_symbol} did not return on input {text!r}, format {fmt!r}. "
+            "Check that each loop advances its input or format position and eventually returns."
+        )
+    context = f"input {text!r}" + (f", format {fmt!r}" if fmt else "")
+    if result.returncode:
+        if result.returncode < 0:
+            signum = -result.returncode
+            name = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else f"signal {signum}"
+            detail = f"stopped with {name}"
+            hint = "Check your destination pointers and the stack used by your function calls."
+        else:
+            detail = f"exited with status {result.returncode}"
+            hint = result.stderr.decode(errors="replace").strip()
+        raise AssertionError(f"Your function {detail} for {context}.\n{hint}")
+    assert len(result.stdout) == 8 + MAX_OUTPUTS * CAPACITY, (
+        f"The harness did not receive a complete result for {context}. "
+        "Return to your caller without printing output or exiting the process."
+    )
+    returned = struct.unpack_from("<q", result.stdout)[0]
+    outputs = [result.stdout[8 + i * CAPACITY:8 + (i + 1) * CAPACITY] for i in range(MAX_OUTPUTS)]
+    return returned, outputs
+
+
+def check_runtime(filename):
+    for text, fmt, expected, count in cases():
+        returned, outputs = run_one(filename, text, fmt)
+        context = f"input {text!r}" + (f", format {fmt!r}" if fmt else "")
+        for i, output in enumerate(outputs):
+            if i >= len(expected):
+                assert output == SENTINEL * CAPACITY, (
+                    f"For {context}, you changed destination {i + 1}, which this call does not use."
+                )
+                continue
+            value = expected[i]
+            if isinstance(value, int):
+                got = struct.unpack_from("<q", output)[0]
+                assert got == value, (
+                    f"For {context}, destination {i + 1} should contain the 64-bit integer {value}, "
+                    f"but contains {got}. "
+                    + ("Store the parsed integer through the destination pointer; rax carries the byte count."
+                       if MODE == "parse-integer" else
+                       "Use each pointer in the destination array and advance the input after each conversion.")
+                )
+                used = 8
+            else:
+                raw = output.split(b"\0", 1)[0]
+                assert b"\0" in output, (
+                    f"For {context}, destination {i + 1} has no NUL terminator. "
+                    "%s must finish the copied word with a zero byte."
+                )
+                assert raw == value.encode(), (
+                    f"For {context}, destination {i + 1} should contain {value!r}, "
+                    f"but contains {raw!r}. %s stops at whitespace or NUL."
+                )
+                used = len(value) + 1
+            assert output[used:] == SENTINEL * (CAPACITY - used), (
+                f"For {context}, destination {i + 1} changed bytes beyond its result. "
+                "Store eight bytes for an integer, or the word and its one NUL byte for a string."
+            )
+        assert returned == count, (
+            f"For {context}, {solve_symbol} returned {returned}; expected {count}. "
+            + ("Return bytes consumed, including the minus sign and leading zeroes, but excluding the delimiter."
+               if MODE == "parse-integer" else
+               "Return the number of conversions; the helper's consumed-byte count advances the input internally.")
+        )
+        print(f"  ok: {context} -> {expected!r}; returned {returned}")
+    return True

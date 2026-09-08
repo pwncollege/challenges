@@ -1,0 +1,96 @@
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <err.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/random.h>
+#include <unistd.h>
+
+#define CAPACITY 256
+#define MAX_OUTPUTS 8
+#define SENTINEL 0xa5
+
+extern long call_fn2(void *, const void *, void *);
+extern long call_fn3(void *, const void *, const void *, void *);
+extern void dirty_stack(void);
+extern uint64_t cc_seen[6], cc_incoming[8], cc_expected_rsp, cc_seen_rsp;
+
+struct output {
+    unsigned char before[16];
+    unsigned char data[CAPACITY];
+    unsigned char after[16];
+};
+
+static void check_call(void) {
+    static const uint64_t expected[] = {
+        0x1111111111111111ULL, 0xb0b0b0b0b0b0b0b0ULL, 0x1212121212121212ULL,
+        0x1313131313131313ULL, 0x1414141414141414ULL, 0x1515151515151515ULL
+    };
+    static const char *names[] = {"rbx", "rbp", "r12", "r13", "r14", "r15"};
+    for (size_t i = 0; i < 6; ++i)
+        if (cc_seen[i] != expected[i])
+            errx(1, "your function changed callee-saved register %s; restore it before returning", names[i]);
+    if (cc_seen_rsp != cc_expected_rsp)
+        errx(1, "your function returned with a different stack pointer; balance its stack before returning");
+}
+
+int main(int argc, char **argv) {
+    if (argc != 4)
+        errx(2, "usage: /challenge/harness library.so input format");
+    setvbuf(stderr, NULL, _IONBF, 0);
+    /* Internal calls to sscanf must reach the learner's function, not libc's. */
+    void *library = dlopen(argv[1], RTLD_NOW | RTLD_DEEPBIND);
+    if (!library)
+        errx(2, "cannot load your library: %s", dlerror());
+    void *fn = dlsym(library, "{{ symbol }}");
+    if (!fn)
+        errx(2, "missing {{ symbol }}; export it with .global {{ symbol }}");
+    if (!dlsym(library, "parse_integer"))
+        errx(2, "missing parse_integer; export your helper with .global parse_integer");
+{% if symbol == "scanf" %}
+    if (!dlsym(library, "sscanf"))
+        errx(2, "missing sscanf; export your scanner with .global sscanf");
+{% endif %}
+    char *original_input = strdup(argv[2]);
+    char *original_format = strdup(argv[3]);
+    if (!original_input || !original_format)
+        err(2, "save input");
+
+    struct output outputs[MAX_OUTPUTS];
+    void *destinations[MAX_OUTPUTS];
+    memset(outputs, SENTINEL, sizeof outputs);
+    for (int i = 0; i < MAX_OUTPUTS; ++i)
+        destinations[i] = outputs[i].data;
+    if (getrandom(cc_incoming, sizeof cc_incoming, 0) != sizeof cc_incoming)
+        err(2, "getrandom");
+    for (size_t i = 0; i < 8; ++i)
+        cc_incoming[i] = (cc_incoming[i] & 0x0000ffffffffffffULL) | 0x5a5a000000000000ULL;
+
+    dirty_stack();
+{% if symbol == "parse_integer" %}
+    long result = call_fn2(fn, argv[2], destinations[0]);
+{% elif symbol == "scanf" %}
+    long result = call_fn2(fn, argv[3], destinations);
+{% else %}
+    long result = call_fn3(fn, argv[2], argv[3], destinations);
+{% endif %}
+    check_call();
+    if (strcmp(original_input, argv[2]) || strcmp(original_format, argv[3]))
+        errx(1, "your function changed the input or format; write results only in the destinations");
+    free(original_input);
+    free(original_format);
+    for (int i = 0; i < MAX_OUTPUTS; ++i)
+        for (int j = 0; j < 16; ++j)
+            if (outputs[i].before[j] != SENTINEL || outputs[i].after[j] != SENTINEL)
+                errx(1, "destination %d was overwritten outside its 256-byte buffer", i + 1);
+
+    /* Only the separate checker has the flag and decides if these results pass. */
+    if (write(STDOUT_FILENO, &result, sizeof result) != sizeof result)
+        err(2, "report return value");
+    for (int i = 0; i < MAX_OUTPUTS; ++i)
+        if (write(STDOUT_FILENO, outputs[i].data, CAPACITY) != CAPACITY)
+            err(2, "report destination");
+    return 0;
+}

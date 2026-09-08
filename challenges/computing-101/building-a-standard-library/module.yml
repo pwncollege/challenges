@@ -1,0 +1,105 @@
+name: Building a Standard Library
+resources:
+- type: header
+  content: "printf"
+- type: markdown
+  expandable: False
+  name: "printf"
+  content: |
+    Programs rarely print just one fixed string.
+    They print messages assembled from fixed words and changing values: `answer: 13`, `hello, hacker`, `opened 3 files`, and so on.
+    You could write each message by hand, but then every new message shape needs its own copy loops, number conversions, and `write` calls.
+    A **format string** is a compact recipe for building those messages.
+    Ordinary characters in the recipe are printed as-is, while special markers say where the next value should go.
+    The code that follows such a recipe is called a **formatter**.
+    `printf` is the traditional name for a formatter that prints its result.
+
+    This mini-module will have you build `printf`.
+    Your version will be special: it's yours!
+    Many other versions of `printf` exist as well.
+    For example, the "standard C library", which includes useful functions to use when writing applications in the C programming language, includes an implementation, and your commandline has it too:
+
+    ```console
+    hacker@dojo:~$ printf Hello
+    Hello
+    hacker@dojo:~$
+    ```
+
+    We'll build up that idea in small steps: literal text, the ASCII newline byte, escaped syntax characters, decimal numbers, repeated values, strings, and finally arbitrary bytes.
+- type: challenge
+  id: printf-literal
+  name: "Literal Output"
+  transfer:
+    module: numbers-as-strings
+    challenge: printf-literal
+- type: challenge
+  id: printf-newline
+  name: "Newline Escapes"
+  transfer:
+    module: numbers-as-strings
+    challenge: printf-newline
+- type: challenge
+  id: printf-escapes
+  name: "Escaped Syntax"
+  transfer:
+    module: numbers-as-strings
+    challenge: printf-escapes
+- type: challenge
+  id: printf-number
+  name: "Decimal Markers"
+  transfer:
+    module: numbers-as-strings
+    challenge: printf-number
+- type: challenge
+  id: printf-numbers
+  name: "Multiple Decimal Markers"
+  transfer:
+    module: numbers-as-strings
+    challenge: printf-numbers
+- type: challenge
+  id: printf-string
+  name: "String Markers"
+  transfer:
+    module: numbers-as-strings
+    challenge: printf-string
+- type: challenge
+  id: printf-hex
+  name: "Hex Byte Escapes"
+  transfer:
+    module: numbers-as-strings
+    challenge: printf-hex
+- type: header
+  content: "scanf"
+- type: markdown
+  expandable: False
+  name: "scanf"
+  content: |
+    Your formatter turns values into text by following a format string.
+    You can use a format string in the other direction too: to describe the values you want to extract from some text.
+    A **scanner** follows that description, converts each value, and stores it for the caller.
+
+    We'll first build `sscanf`, which scans a string already in memory.
+    Your `atoi` supplies the number conversion, and your `itoa` already showed you how a function can write its output through a pointer while returning a count.
+    Once the string scanner works, you'll combine it with `read` to build `scanf` and use it in your calculator.
+    These functions have small interfaces of our own; each level describes the arguments and results it needs.
+- type: challenge
+  id: parse-integer
+  name: "A Value and a Length"
+- type: challenge
+  id: sscanf-number
+  name: "Scanning a Number"
+- type: challenge
+  id: sscanf-whitespace
+  name: "Skipping Whitespace"
+- type: challenge
+  id: sscanf-values
+  name: "Scanning Multiple Values"
+- type: challenge
+  id: sscanf-string
+  name: "Scanning Words"
+- type: challenge
+  id: scanf
+  name: "Scanning Standard Input"
+- type: challenge
+  id: scanf-calculator
+  name: "An Interactive Calculator"
