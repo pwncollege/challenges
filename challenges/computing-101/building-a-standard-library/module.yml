@@ -79,12 +79,12 @@ resources:
     A **scanner** follows that description, converts each value, and stores it for the caller.
 
     We'll first build `sscanf`, which scans a string already in memory.
-    Your `atoi` supplies the number conversion, and your `itoa` already showed you how a function can write its output through a pointer while returning a count.
+    Your `atoi` supplies the number conversion, and your `itoa` already showed you how a function can write its output through a pointer.
     Once the string scanner works, you'll combine it with `read` to build `scanf` and use it in your calculator.
     These functions have small interfaces of our own; each level describes the arguments and results it needs.
 - type: challenge
   id: parse-integer
-  name: "A Value and a Length"
+  name: "A Value and a Position"
 - type: challenge
   id: sscanf-number
   name: "Scanning a Number"

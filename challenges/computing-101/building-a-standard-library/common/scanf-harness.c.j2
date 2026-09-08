@@ -79,6 +79,26 @@ int main(int argc, char **argv) {
     check_call();
     if (strcmp(original_input, argv[2]) || strcmp(original_format, argv[3]))
         errx(1, "your function changed the input or format; write results only in the destinations");
+{% if symbol == "parse_integer" or symbol == "sscanf" %}
+    uintptr_t input_address = (uintptr_t)argv[2];
+    uintptr_t returned_address = (uintptr_t)result;
+    size_t input_length = strlen(original_input);
+    int points_into_input = returned_address >= input_address &&
+                            returned_address - input_address <= input_length;
+{% if symbol == "parse_integer" %}
+    if (!points_into_input)
+        errx(1, "parse_integer returned a value outside the input string. "
+             "Return a pointer to the first unconsumed character, which may be the terminating NUL byte.");
+    /* Bounds-check addresses as integers: the learner's return value need not be
+       a valid C pointer. Report its position without dereferencing it or changing
+       the checker protocol, and include the input's terminating NUL in the bounds. */
+    result = (long)(returned_address - input_address);
+{% else %}
+    if (points_into_input)
+        errx(1, "sscanf returned an input pointer. "
+             "Return the number of conversions, not the pointer returned by parse_integer.");
+{% endif %}
+{% endif %}
     free(original_input);
     free(original_format);
     for (int i = 0; i < MAX_OUTPUTS; ++i)

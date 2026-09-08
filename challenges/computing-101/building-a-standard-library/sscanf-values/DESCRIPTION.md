@@ -2,7 +2,7 @@ Now let the format contain several `%d` conversions.
 Each conversion uses the next pointer in the destination array, just as each marker in your formatter used the next argument.
 
 Keep separate positions in the input string, the format string, and the destination array.
-Your integer parser's returned byte count tells you where to resume scanning the input.
+Resume scanning the input at the pointer returned by your integer parser.
 
 ```text
 input:         "12 -34"

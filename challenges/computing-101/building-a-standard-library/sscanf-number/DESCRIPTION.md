@@ -4,7 +4,7 @@ The `s` at the beginning of `sscanf` means its input comes from a string already
 
 Start with the format `"%d"`.
 Write `sscanf(input, format, destinations)`, calling your `parse_integer` to put the converted number in its destination.
-Keep the parser's consumed-byte count available to advance the input position; `sscanf` itself returns the number of values assigned, which is `1` here.
+The parser returns an input pointer; `sscanf` itself returns the number of values assigned, which is `1` here.
 
 You've used arrays of pointers in `argv`.
 Here, `destinations` points to an array whose entries point to writable output storage:

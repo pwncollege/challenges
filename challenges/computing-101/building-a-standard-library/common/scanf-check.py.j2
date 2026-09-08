@@ -33,8 +33,8 @@ def input_context(text, fmt):
 def integer_mismatch(output, value):
     if output[:8] == SENTINEL * 8:
         return (
-            "but its eight bytes still contain the checker's initial 0xa5 fill. "
-            "Store the parsed integer through the destination pointer."
+            "but its eight bytes are unchanged. "
+            "Store the parsed number through the destination pointer."
         )
     packed = struct.pack("<q", value)
     for width in (1, 2, 4):
@@ -42,30 +42,43 @@ def integer_mismatch(output, value):
             unit = "byte" if width == 1 else "bytes"
             return (
                 f"but only the first {width} {unit} {'matches' if width == 1 else 'match'} the result; "
-                f"the remaining {8 - width} bytes still contain the checker's initial 0xa5 fill. "
+                f"the remaining {8 - width} bytes are unchanged. "
                 "Store the full eight-byte integer."
             )
     return f"but contains {struct.unpack_from('<q', output)[0]}."
 
 
+def endpoint(text, offset):
+    if offset == len(text):
+        character = "the terminating NUL byte"
+    elif text[offset] == " ":
+        character = "a space"
+    else:
+        character = repr(text[offset])
+    unit = "byte" if offset == 1 else "bytes"
+    return f"{character} after {offset} input {unit}"
+
+
 def cases():
     if MODE == "parse-integer":
-        for text, value, count in [
-            ("42 rest", 42, 2),
-            ("-42 rest", -42, 3),
+        for text, value, offset in [
+            ("42asdf", 42, 2),
+            ("-42asdf", -42, 3),
+            ("-42 17", -42, 3),
+            ("-42", -42, 3),
             ("0", 0, 1),
             ("0007!", 7, 4),
-            ("-0 more", 0, 2),
+            ("-0xyz", 0, 2),
             ("-2147483648;", -2147483648, 11),
             ("2147483647abc", 2147483647, 10),
         ]:
-            yield text, "", [value], count
+            yield text, "", [value], offset
         for _ in range(6):
             value = random.randint(-(2**31), 2**31 - 1)
             text = str(value)
-            yield text + random.choice(["", " end", ",73", "xyz"]), "", [value], len(text)
+            yield text + random.choice(["", " 17", ",73", "xyz"]), "", [value], len(text)
         return
-    for text, value in [("42", 42), ("-42!", -42), ("0", 0), ("0007 rest", 7),
+    for text, value in [("42", 42), ("-42!", -42), ("0", 0), ("0007asdf", 7),
                         ("-2147483648", -(2**31)), ("2147483647", 2**31 - 1)]:
         yield text, "%d", [value], 1
     if MODE == "sscanf-number":
@@ -136,7 +149,7 @@ def run_one(filename, text, fmt):
 
 
 def check_runtime(filename):
-    for text, fmt, expected, count in cases():
+    for text, fmt, expected, expected_return in cases():
         returned, outputs = run_one(filename, text, fmt)
         context = input_context(text, fmt)
         for i, output in enumerate(outputs):
@@ -168,11 +181,18 @@ def check_runtime(filename):
                 f"For {context}, destination {i + 1} changed bytes beyond its result. "
                 "Store eight bytes for an integer, or the word and its one NUL byte for a string."
             )
-        assert returned == count, (
-            f"For {context}, {solve_symbol} returned {returned}; expected {count}. "
-            + ("Return bytes consumed, including the minus sign and leading zeroes, but excluding the delimiter."
-               if MODE == "parse-integer" else
-               "Return the number of conversions; the helper's consumed-byte count advances the input internally.")
-        )
-        print(f"  ok: {context} -> {display(expected)}; returned {returned}")
+        if MODE == "parse-integer":
+            assert returned == expected_return, (
+                f"For {context}, parse_integer returned a pointer to {endpoint(text, returned)}; "
+                f"expected a pointer to {endpoint(text, expected_return)}. "
+                "Return a pointer to the first unconsumed character, without skipping it."
+            )
+            result = f"returned a pointer to {endpoint(text, returned)}"
+        else:
+            assert returned == expected_return, (
+                f"For {context}, {solve_symbol} returned {returned}; expected {expected_return}. "
+                "Return the number of conversions, not the pointer returned by parse_integer."
+            )
+            result = f"returned {returned}"
+        print(f"  ok: {context} -> {display(expected)}; {result}")
     return True
