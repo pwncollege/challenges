@@ -15,6 +15,6 @@ format:  " %d "
 result:  42
 ```
 
-Formats still contain exactly one `%d`, with optional whitespace around it.
+Formats in this level contain exactly one `%d`, with optional whitespace around it.
 The number and return-value contracts stay the same.
 Export `.global sscanf` and `.global parse_integer`, build your shared library, and submit it to `/challenge/check`.

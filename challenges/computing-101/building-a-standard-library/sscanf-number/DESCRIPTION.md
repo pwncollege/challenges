@@ -2,9 +2,13 @@ Your formatter uses a format string to turn values into text.
 A scanner uses a format string to turn text back into values.
 The `s` at the beginning of `sscanf` means its input comes from a string already in memory.
 
-Start with the format `"%d"`.
-Write `sscanf(input, format, destinations)`, calling your `parse_integer` to put the converted number in its destination.
-The parser returns an input pointer; `sscanf` itself returns the number of values assigned, which is `1` here.
+Write `sscanf(input, format, destinations)` with support for `"%d"`.
+For that format, call your `parse_integer` to put the converted number in its destination.
+The parser returns an input pointer; `sscanf` itself returns the number of values assigned.
+
+The format will be exactly `"%d"`, `"%s"`, or `"%x"`.
+Only `"%d"` assigns a value in this level, so it returns `1`.
+For `"%s"` or `"%x"`, return `0` and leave every destination unchanged.
 
 You've used arrays of pointers in `argv`.
 Here, `destinations` points to an array whose entries point to writable output storage:

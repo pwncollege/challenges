@@ -82,6 +82,9 @@ def cases():
                         ("-2147483648", -(2**31)), ("2147483647", 2**31 - 1)]:
         yield text, "%d", [value], 1
     if MODE == "sscanf-number":
+        for fmt in ["%s", "%x"]:
+            for text in ["42", "-17", "0"]:
+                yield text, fmt, [], 0
         for _ in range(6):
             value = random.randint(-1000000, 1000000)
             yield str(value), "%d", [value], 1
@@ -156,6 +159,8 @@ def check_runtime(filename):
             if i >= len(expected):
                 assert output == SENTINEL * CAPACITY, (
                     f"For {context}, you changed destination {i + 1}, which this call does not use."
+                    + (" Only %d assigns a value in this level; for this format, return 0 and leave every destination unchanged."
+                       if not expected else "")
                 )
                 continue
             value = expected[i]
@@ -191,7 +196,9 @@ def check_runtime(filename):
         else:
             assert returned == expected_return, (
                 f"For {context}, {solve_symbol} returned {returned}; expected {expected_return}. "
-                "Return the number of conversions, not the pointer returned by parse_integer."
+                + ("This format assigns no values in this level, so return 0."
+                   if not expected else
+                   "Return the number of conversions, not the pointer returned by parse_integer.")
             )
             result = f"returned {returned}"
         print(f"  ok: {context} -> {display(expected)}; {result}")
