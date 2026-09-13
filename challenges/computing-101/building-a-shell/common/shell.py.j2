@@ -1,0 +1,390 @@
+import ast
+import contextlib
+import os
+from pathlib import Path
+import pwd
+import random
+import re
+import selectors
+import signal
+import subprocess
+import tempfile
+import time
+
+executable = True
+give_flag = True
+LEVEL = {{ level }}
+PROMPT = b"$ "
+check_runtime_prologue = "Let's try your shell..."
+check_runtime_success = "Your shell ran the commands with the right process behavior!"
+check_runtime_failure = "Your shell needs an adjustment:\n"
+
+
+@contextlib.contextmanager
+def as_root():
+    previous = os.geteuid()
+    try:
+        os.seteuid(0)
+        yield
+    finally:
+        os.seteuid(previous)
+
+
+def tracer_identity():
+    os.setresuid(0, 0, 0)
+
+
+def interleaved(output, first, second):
+    # Each process preserves its own byte order, even when printf writes one
+    # character per syscall and the scheduler switches between those writes.
+    if len(output) != len(first) + len(second):
+        return False
+    positions = {0}
+    for offset, byte in enumerate(output):
+        following = set()
+        for used in positions:
+            other = offset - used
+            if used < len(first) and first[used] == byte:
+                following.add(used + 1)
+            if other < len(second) and second[other] == byte:
+                following.add(used)
+        positions = following
+    return len(first) in positions
+
+
+def read_traces(directory):
+    traces = {}
+    with as_root():
+        for path in Path(directory).glob("trace.*"):
+            events = []
+            pending = ""
+            pending_stamp = 0
+            for line in path.read_text().splitlines():
+                stamp, _, body = line.partition(" ")
+                if not stamp.replace(".", "", 1).isdigit():
+                    continue
+                if body.endswith("<unfinished ...>"):
+                    pending = body.removesuffix("<unfinished ...>")
+                    pending_stamp = float(stamp)
+                    continue
+                started = float(stamp)
+                if body.startswith("<... "):
+                    body = pending + body.partition("resumed>")[2]
+                    started = pending_stamp
+                    pending = ""
+                duration = re.search(r" <([0-9.]+)>$", body)
+                if duration:
+                    body = body[:duration.start()]
+                events.append((started + (float(duration[1]) if duration else 0), body))
+            traces[int(path.suffix[1:])] = events
+    return traces
+
+
+def check_trace(traces, commands, binary_path, finished):
+    roots = [pid for pid, events in traces.items()
+             if any(body.startswith(f'execve("{binary_path}",') for _, body in events)]
+    assert len(roots) == 1, "Could not follow your program's execution. Run the checker again."
+    parent = roots[0]
+    parent_events = traces[parent]
+    forks = [(stamp, int(match[1])) for stamp, body in parent_events
+             if (match := re.fullmatch(r"fork\(\)\s+= (\d+)", body))]
+    executed = []
+    for pid, events in traces.items():
+        for stamp, body in events:
+            if not body.startswith("execve(") or body.startswith(f'execve("{binary_path}",'):
+                continue
+            match = re.match(r'execve\(("(?:[^"\\]|\\.)*"), (.*), (?:NULL|0x[0-9a-f]+|\[).*\)\s+= (.*)', body)
+            assert match, f"Couldn't read this execve call:\n  {body}\nCheck the pathname and argument-vector pointers."
+            path = ast.literal_eval(match[1])
+            try:
+                argv = ast.literal_eval(match[2])
+                if not isinstance(argv, list) or not all(isinstance(word, str) for word in argv):
+                    raise ValueError("invalid argv entry")
+            except (ValueError, SyntaxError):
+                raise AssertionError(
+                    f"execve received an invalid argument vector for {path!r}: {match[2]}.\n"
+                    "Each entry must point to a NUL-terminated string; end the pointer array with a NULL pointer."
+                )
+            executed.append((stamp, pid, path, argv, match[3]))
+    executed.sort()
+    if LEVEL >= 4:
+        eof_reads = [when for when, body in parent_events
+                     if body.startswith("read(0,") and re.search(r"\)\s+= 0$", body)]
+        assert not any(when > eof and body.startswith(("fork()", "execve("))
+                       for eof in eof_reads for when, body in parent_events), (
+            "read returned 0, but the parent tried to run another command. "
+            "End the parent with status 0 instead of reusing the input buffer."
+        )
+    if LEVEL >= 6:
+        assert not any(path == "exit" for _, _, path, _, _ in executed), (
+            "Your shell tried to execute 'exit' as an external command. "
+            "The exit builtin must end the original parent without fork or execve."
+        )
+    if LEVEL >= 2:
+        assert not any(pid == parent for _, pid, _, _, _ in executed), (
+            "The parent executed the command and replaced itself. "
+            "After fork, the child should execute while the parent keeps running."
+        )
+    for stamp, pid, _, _, result in executed:
+        if result.startswith("-1"):
+            assert not any(body.startswith(("read(0,", "fork()")) for when, body in traces[pid] if when > stamp), (
+                "After execve failed, the child returned to the shell loop. "
+                "Report the failure and end that child; the waiting parent continues the session."
+            )
+    if LEVEL >= 3:
+        for fork_time, child in forks:
+            waited = [when for when, body in parent_events
+                      if body.startswith("wait4(") and re.search(rf"\)\s+= {child}$", body)]
+            next_actions = [when for when, body in parent_events
+                            if when > fork_time and body.startswith(("write(1,", "read(0,", "exit("))]
+            # An output mismatch can stop evaluation before a correct parent
+            # has finished waiting. Only diagnose a missing wait once the
+            # parent actually continued, or the complete session ended.
+            if not waited and not finished and not next_actions:
+                continue
+            wait_errors = [body for _, body in parent_events
+                           if body.startswith("wait4(") and "= -1" in body]
+            assert waited, (
+                f"The parent never collected child {child} with wait4. "
+                "Wait for the child before finishing or accepting another command."
+                + (f"\nThe kernel reported: {wait_errors[0]}\nCheck the PID and optional output pointers."
+                   if wait_errors else "")
+            )
+            assert not next_actions or waited[0] <= min(next_actions), (
+                "The parent continued before wait4 returned the child's PID. "
+                "A nonblocking wait or a fixed delay does not establish that the child finished."
+            )
+    crashes = [body for events in traces.values() for _, body in events
+               if body.startswith("+++ killed by ") and "SIGKILL" not in body]
+    for index, (line, argv, _, missing) in enumerate(commands):
+        assert index < len(executed), (
+            f"No execve call ran command {line.strip()!r}. "
+            + (f"Your program crashed: {crashes[0]}. Check the buffer and pointer-array addresses. " if crashes else "")
+            + "Keep the input pathname available until execution, and make sure the execution branch runs."
+        )
+        stamp, pid, path, actual_argv, result = executed[index]
+        assert path == argv[0], (
+            f"You tried to execute {path!r}; the input requested {argv[0]!r}. "
+            "The newline ends the input, but a NUL byte must end the pathname passed to execve."
+        )
+        assert actual_argv == argv, (
+            f"For {line.strip()!r}, execve received argv={actual_argv!r}; expected {argv!r}.\n"
+            "Keep the pathname in argv[0], keep each word separate, and put a NULL pointer after the last entry."
+        )
+        assert (result.startswith("-1 ENOENT") if missing else result == "0"), (
+            f"execve({path!r}, ...) returned {result}. "
+            "Check that the strings and both pointer arrays are valid and terminated."
+        )
+        if LEVEL == 1:
+            assert pid == parent, "This level replaces the original process: execute the command without forking."
+            assert not forks, "This level uses execve in the original process; creating a child comes next."
+            continue
+        assert pid != parent, (
+            "The parent executed the command and replaced itself. "
+            "After fork, the child should execute while the parent keeps running."
+        )
+        assert index < len(forks) and forks[index][1] == pid, (
+            "Each command must run in a child created by the original shell's fork syscall. "
+            "Make sure a child never returns to the shell's command loop."
+        )
+        child_events = traces[pid]
+        assert not any(body.startswith(("read(0,", "fork()")) for when, body in child_events if when < stamp), (
+            "A child tried to read another command or create another shell. "
+            "The parent owns the prompt and input loop."
+        )
+        if missing:
+            assert any(re.fullmatch(r"\+\+\+ exited with [1-9]\d* \+\+\+", body)
+                       for _, body in child_events), (
+                "After a failed execve, the child must exit with a nonzero status. "
+                "It should not crash or report success."
+            )
+    assert len(executed) == len(commands), (
+        "Your shell executed more commands than were entered. "
+        "Check the child branch and the input buffer before reusing it."
+    )
+    if finished and LEVEL >= 2:
+        assert any(body == "+++ exited with 0 +++" for _, body in parent_events), (
+            "The parent should finish with exit status 0. "
+            "It does not need to use the command's exit status in this module."
+        )
+        parent_output = bytearray()
+        for _, body in parent_events:
+            match = re.fullmatch(r'write\(1, ("(?:[^"\\]|\\.)*"), \d+\)\s+= (\d+)', body)
+            if match:
+                parent_output.extend(ast.literal_eval(match[1]).encode("latin-1")[:int(match[2])])
+        wanted = (PROMPT + b"parent alive\n" if LEVEL == 2 else
+                  PROMPT + b"child finished\n" if LEVEL == 3 else
+                  PROMPT * (len(commands) + 1))
+        assert parent_output == wanted, (
+            f"The original parent wrote {bytes(parent_output)!r}; it should write {wanted!r}. "
+            "Keep the shell's prompts and parent messages in the parent process."
+        )
+    if LEVEL >= 2:
+        assert len(forks) == len(commands), (
+            "Fork once per external command. The exit builtin and end of input belong to the parent."
+        )
+
+
+def session(binary_path, cases, *, builtin=False):
+    print("Starting a fresh shell for this session:", flush=True)
+    # The trace is root-owned, while strace -u runs the submitted program as the
+    # learner. A submitted program cannot turn fabricated output into a solve.
+    user = pwd.getpwuid(os.geteuid()).pw_name
+    with as_root():
+        directory = tempfile.TemporaryDirectory(prefix="shell-check-")
+    process = None
+    selector = selectors.DefaultSelector()
+    output = {"stdout": bytearray(), "stderr": bytearray()}
+    sent = []
+    failure = None
+    finished = False
+    try:
+        process = subprocess.Popen(
+            ["/usr/bin/strace", "-q", "-ff", "-ttt", "-T", "-s", "4096",
+             "-e", "trace=%process,read,write", "-o", directory.name + "/trace",
+             "-u", user, "--", binary_path],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True, preexec_fn=tracer_identity,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C"},
+        )
+        for name in output:
+            stream = getattr(process, name)
+            os.set_blocking(stream.fileno(), False)
+            selector.register(stream, selectors.EVENT_READ, name)
+
+        def pump(deadline):
+            remaining = deadline - time.monotonic()
+            assert remaining > 0, "Your shell stopped making progress."
+            ready = selector.select(min(remaining, 0.1))
+            for key, _ in ready:
+                data = os.read(key.fd, 4096)
+                if data:
+                    output[key.data].extend(data)
+                    assert sum(map(len, output.values())) <= 32768, (
+                        "Your shell keeps printing. Check that only the parent repeats the command loop."
+                    )
+                else:
+                    selector.unregister(key.fileobj)
+
+        def expect(want, message):
+            deadline = time.monotonic() + 3
+            while len(output["stdout"]) < len(want):
+                if process.poll() is not None and not selector.get_map():
+                    break
+                try:
+                    pump(deadline)
+                except AssertionError as error:
+                    raise AssertionError(message + f" Received {bytes(output['stdout'])!r}.\n" + str(error))
+            got = bytes(output["stdout"][:len(want)])
+            assert got == want, message + f" Expected {want!r}, received {bytes(output['stdout'])!r}."
+            del output["stdout"][:len(want)]
+
+        expect(PROMPT, "Print '$ ' to stdout before reading a command.")
+        for line, argv, stdout, missing in cases:
+            print(f"  $ {line.rstrip()}", flush=True)
+            sent.append((line, argv, stdout, missing))
+            try:
+                process.stdin.write(line.encode())
+                process.stdin.flush()
+            except BrokenPipeError:
+                raise AssertionError("The shell exited before it could read the next command.")
+            if LEVEL >= 4:
+                expect(stdout + PROMPT, "Finish the command, then print the next prompt.")
+        if builtin:
+            print("  $ exit", flush=True)
+            try:
+                process.stdin.write(b"exit\n")
+                process.stdin.flush()
+            except BrokenPipeError:
+                raise AssertionError("The parent exited before it could read the exit builtin.")
+        with contextlib.suppress(BrokenPipeError):
+            process.stdin.close()
+        deadline = time.monotonic() + 3
+        while process.poll() is None or selector.get_map():
+            pump(deadline)
+        finished = True
+        stdout = bytes(output["stdout"])
+        stderr = bytes(output["stderr"])
+        if LEVEL <= 3:
+            expected = cases[0][2]
+            suffix = {1: b"", 2: b"parent alive\n", 3: b"child finished\n"}[LEVEL]
+            valid = interleaved(stdout, expected, suffix) if LEVEL == 2 else stdout == expected + suffix
+            assert valid, (
+                f"After the prompt, expected command output {expected!r} and parent output {suffix!r}, "
+                f"received {stdout!r}. "
+                "Keep the parent message in the parent branch."
+            )
+        else:
+            assert stdout == b"", f"The shell printed extra output while exiting: {stdout!r}."
+        expected_errors = b"exec failed\n" * sum(case[3] for case in cases)
+        assert stderr == expected_errors, (
+            f"Expected stderr {expected_errors!r}, received {stderr!r}. "
+            "Report each failed execve once, then end that child."
+        )
+    except AssertionError as error:
+        failure = error
+    finally:
+        if process is not None:
+            with as_root():
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            process.wait(timeout=3)
+            with contextlib.suppress(BrokenPipeError):
+                process.stdin.close()
+            for stream in (process.stdout, process.stderr):
+                stream.close()
+        selector.close()
+        traces = read_traces(directory.name)
+        with as_root():
+            directory.cleanup()
+    # Prefer process-specific feedback when output failed because a process took
+    # the wrong branch. A missing first prompt has no command to diagnose yet.
+    if bytes(output["stderr"]).startswith(b"/usr/bin/strace:") or bytes(output["stderr"]).startswith(b"strace:"):
+        raise AssertionError("The checker could not trace this run:\n" + bytes(output["stderr"]).decode(errors="replace"))
+    if sent or finished:
+        check_trace(traces, sent, binary_path, finished)
+    if failure:
+        raise failure
+
+
+def check_runtime(binary_path):
+    print("Commands arrive one read at a time, followed by a newline (at most 255 bytes).")
+    print("Use '$ ' on stdout as the prompt. Each word fits in a 256-byte buffer.")
+    if LEVEL == 2:
+        print("The parent prints 'parent alive' and exits 0; either process may print first.")
+    elif LEVEL == 3:
+        print("After wait4 collects the child, the parent prints 'child finished' and exits 0.")
+    elif LEVEL >= 4:
+        print("The parent waits before prompting again. A read returning 0 ends the shell with status 0.")
+    if LEVEL >= 5:
+        print("A failed execve prints 'exec failed' and a newline on stderr, then the child exits.")
+    print("")
+    if LEVEL <= 3:
+        for command in ["/usr/bin/pwd", "/bin/true", "/usr/bin/false"]:
+            stdout = subprocess.check_output([command]) if command.endswith("pwd") else b""
+            session(binary_path, [(command + "\n", [command], stdout, False)])
+        return True
+    if LEVEL <= 6:
+        cases = [(path + "\n", [path], b"", False)
+                 for path in ["/usr/bin/true", "/usr/bin/false", "/bin/true"]]
+    else:
+        counts = [1, 1, 1] if LEVEL == 7 else [3, 3, 3] if LEVEL == 8 else [0, 1, 8, 2, 0, 5]
+        cases = []
+        for index, count in enumerate(counts):
+            words = [random.choice(["word", "-17", "0", "a_b", "+9"]) + str(random.randrange(1000))
+                     for _ in range(count)]
+            path = "/usr/bin/echo" if index % 2 else "/bin/echo"
+            argv = [path, *words]
+            line = ("\t" if index % 2 else " ").join(argv) + "\n"
+            cases.append((line, argv, (" ".join(words) + "\n").encode(), False))
+    if LEVEL >= 5:
+        count = 1 if LEVEL == 7 else 3 if LEVEL == 8 else 0
+        missing = "/no/such/command-" + str(random.randrange(1 << 30))
+        argv = [missing, *(["argument"] * count)]
+        cases.insert(1, (" ".join(argv) + "\n", argv, b"", True))
+    session(binary_path, cases, builtin=LEVEL >= 6)
+    if LEVEL >= 6:
+        session(binary_path, [], builtin=True)
+    return True
