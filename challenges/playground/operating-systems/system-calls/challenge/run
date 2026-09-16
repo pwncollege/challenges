@@ -4,12 +4,16 @@ set -euo pipefail
 export PATH=/usr/bin:/bin
 
 names=("$RANDOM" "$RANDOM" "$RANDOM")
+group_args=(--clear-groups)
+if [[ -c /dev/kvm ]]; then
+    group_args=(--groups="$(stat -c %g /dev/kvm)")
+fi
 
 if ! output=$(
     ulimit -c 0
     ulimit -t 20
 
-    timeout -k 1 10 setpriv --reuid=65534 --regid=65534 --clear-groups \
+    timeout -k 1 10 setpriv --reuid=65534 --regid=65534 "${group_args[@]}" \
         qemu-system-x86_64 -no-user-config -nodefaults \
         -accel kvm -accel tcg,thread=single -m 256M -smp 1 \
         -display none -monitor none -serial stdio -nic none -no-reboot \

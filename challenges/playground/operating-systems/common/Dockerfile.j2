@@ -40,6 +40,8 @@ CONFIG_MODULE_UNLOAD=y
 EOF
 RUN <<'EOF'
 git init -q
+git config core.checkStat minimal
+git config core.trustctime false
 git add .
 git -c user.name=Kernel -c user.email=kernel@localhost -c gc.auto=0 commit -qm "Linux ${LINUX_VERSION}"
 git gc
