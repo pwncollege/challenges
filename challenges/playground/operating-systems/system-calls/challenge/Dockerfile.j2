@@ -18,22 +18,14 @@ FROM tools AS guest
 COPY hello.c /tmp/hello.c
 RUN gcc -static -Os -Wall -Wextra -Werror /tmp/hello.c -o /tmp/hello
 
-FROM tools
+FROM initramfs
 COPY --from=syscall --chown=1000:1000 /usr/src/linux /usr/src/linux
 COPY --from=syscall --chown=1000:1000 /var/cache/ccache /var/cache/ccache
 RUN <<'EOF'
-mkdir -p /usr/src/initramfs/{bin,dev,proc,sys} /boot /challenge
 ln -s /usr/src/linux/arch/x86/boot/bzImage /boot/vmlinuz
-cp /bin/busybox /usr/src/initramfs/bin/busybox
 EOF
 COPY --from=guest --chmod=755 /tmp/hello /usr/src/initramfs/usr/bin/hello
 COPY --chmod=755 init /usr/src/initramfs/init
-
-RUN <<'EOF'
-cd /usr/src/initramfs
-chroot . /bin/busybox --install -s /bin
-find . | cpio -o -H newc | gzip > /boot/initramfs.cpio.gz
-EOF
 
 ADD --chmod=6755 https://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
 COPY --chmod=4755 run /challenge/run

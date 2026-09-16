@@ -6,7 +6,7 @@ RUN <<'EOF'
 apt-get update
 apt-get install -y --no-install-recommends \
     build-essential bc bison flex libssl-dev libelf-dev ccache git \
-    xz-utils cpio busybox-static qemu-system-x86 kmod
+    xz-utils libarchive-tools busybox-static qemu-system-x86 kmod
 rm -rf /var/lib/apt/lists/*
 EOF
 
@@ -14,6 +14,19 @@ ENV PATH="/usr/lib/ccache:${PATH}"
 ENV CCACHE_DIR=/var/cache/ccache
 ENV LOCALVERSION=""
 ENV LANG=C.UTF-8
+
+COPY --chmod=755 <<'EOF' /run/challenge/bin/make
+#!/bin/sh
+export PATH=/usr/lib/ccache:/usr/bin:/bin
+exec /usr/bin/make "$@"
+EOF
+
+FROM tools AS initramfs
+RUN <<'EOF'
+mkdir -p /usr/src/initramfs/{bin,dev,proc,sys,tmp} /boot
+cp /bin/busybox /usr/src/initramfs/bin/busybox
+chroot /usr/src/initramfs /bin/busybox --install -s /bin
+EOF
 
 FROM tools AS kernel
 ARG LINUX_VERSION=6.18.52

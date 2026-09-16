@@ -1,0 +1,25 @@
+{% extends "../../common/Dockerfile.j2" %}
+
+{% block challenge %}
+FROM kernel AS module
+COPY flag.c Makefile /usr/src/flag/
+RUN <<'EOF'
+cd /usr/src/flag
+make
+EOF
+
+FROM initramfs
+
+COPY --from=kernel /usr/src/linux/arch/x86/boot/bzImage /boot/vmlinuz
+COPY --from=module /usr/src/initramfs/lib/modules /usr/src/initramfs/lib/modules
+COPY --from=module /usr/src/flag /usr/src/flag
+COPY --chmod=755 init /usr/src/initramfs/init
+
+RUN <<'EOF'
+mkdir -p /challenge
+ln -s /usr/src/flag/flag.c /challenge/flag.c
+EOF
+
+ADD --chmod=6755 https://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
+COPY --chmod=4755 run /challenge/run
+{% endblock %}

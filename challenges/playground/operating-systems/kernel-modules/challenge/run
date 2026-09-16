@@ -1,0 +1,19 @@
+#!/usr/bin/exec-suid --environ=none -- /bin/bash -p
+
+set -euo pipefail
+export PATH=/usr/bin:/bin
+
+[[ -s /flag && $(stat -c%s /flag) -lt 4096 ]] ||
+    { echo 'The flag must fit in the reserved memory page.'; exit 1; }
+
+bsdtar --format=newc --options gzip:compression-level=1 \
+    -czf /boot/initramfs.cpio.gz -C /usr/src/initramfs .
+
+exec qemu-system-x86_64 -no-user-config -nodefaults \
+    -run-with user=65534:65534 \
+    -accel kvm -accel tcg,thread=single -m 256M -smp 1 \
+    -display none -monitor none -serial stdio -nic none -no-reboot \
+    -sandbox on,obsolete=deny,spawn=deny,resourcecontrol=deny \
+    -kernel /boot/vmlinuz -initrd /boot/initramfs.cpio.gz \
+    -device loader,file=/flag,addr=0x08000000,force-raw=on \
+    -append 'console=ttyS0 panic=-1 memmap=4K$0x08000000'

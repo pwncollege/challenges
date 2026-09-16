@@ -3,3 +3,6 @@ resources:
   - type: challenge
     id: system-calls
     name: System Calls
+  - type: challenge
+    id: kernel-modules
+    name: Kernel Modules
