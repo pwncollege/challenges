@@ -1,0 +1,5 @@
+id: playground
+name: Playground
+type: hidden
+modules:
+  - id: operating-systems
