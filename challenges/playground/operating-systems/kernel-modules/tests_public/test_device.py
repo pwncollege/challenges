@@ -7,6 +7,16 @@ import time
 from pathlib import Path
 
 assert Path("/challenge/flag.c").is_file()
+kernel = Path("/usr/src/linux")
+assert os.getuid() == 1000
+assert (kernel.stat().st_uid, kernel.stat().st_gid) == (0, 0)
+assert os.access(kernel / "kernel/sys.c", os.R_OK)
+assert not os.access(kernel / "kernel/sys.c", os.W_OK)
+assert not os.access(kernel, os.W_OK)
+assert not os.access("/var/cache/ccache", os.W_OK)
+assert Path("/boot/vmlinuz").is_symlink()
+assert Path("/boot/vmlinuz").resolve() == kernel / "arch/x86/boot/bzImage"
+assert not os.access("/boot/vmlinuz", os.W_OK)
 master, slave = pty.openpty()
 vm = subprocess.Popen(["/challenge/run"], stdin=slave, stdout=slave, stderr=slave)
 os.close(slave)

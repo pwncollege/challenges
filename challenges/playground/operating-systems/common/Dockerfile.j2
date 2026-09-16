@@ -23,7 +23,8 @@ EOF
 
 FROM tools AS initramfs
 RUN <<'EOF'
-mkdir -p /usr/src/initramfs/{bin,dev,proc,sys,tmp} /boot
+mkdir -p /boot /usr/src/initramfs/{bin,dev,proc,sys,tmp}
+ln -s /usr/src/linux/arch/x86/boot/bzImage /boot/vmlinuz
 cp /bin/busybox /usr/src/initramfs/bin/busybox
 chroot /usr/src/initramfs /bin/busybox --install -s /bin
 EOF
