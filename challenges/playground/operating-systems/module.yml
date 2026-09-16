@@ -1,0 +1,5 @@
+name: Operating Systems
+resources:
+  - type: challenge
+    id: system-calls
+    name: System Calls

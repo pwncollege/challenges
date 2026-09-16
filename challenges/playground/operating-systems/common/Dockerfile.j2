@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1
+FROM ubuntu:26.04 AS tools
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+RUN <<'EOF'
+apt-get update
+apt-get install -y --no-install-recommends \
+    build-essential bc bison flex libssl-dev libelf-dev ccache git \
+    xz-utils cpio busybox-static qemu-system-x86 kmod
+rm -rf /var/lib/apt/lists/*
+EOF
+
+ENV PATH="/usr/lib/ccache:${PATH}"
+ENV CCACHE_DIR=/var/cache/ccache
+ENV LOCALVERSION=""
+ENV LANG=C.UTF-8
+
+FROM tools AS kernel
+ARG LINUX_VERSION=6.18.52
+
+ADD https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${LINUX_VERSION}.tar.xz /tmp/linux.tar.xz
+RUN <<'EOF'
+mkdir -p /usr/src/linux
+tar -xJf /tmp/linux.tar.xz --strip-components=1 -C /usr/src/linux
+rm /tmp/linux.tar.xz
+EOF
+
+WORKDIR /usr/src/linux
+COPY <<'EOF' allconfig
+CONFIG_64BIT=y
+CONFIG_BINFMT_ELF=y
+CONFIG_BINFMT_SCRIPT=y
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_DEVTMPFS=y
+CONFIG_MODULES=y
+CONFIG_MODULE_UNLOAD=y
+EOF
+RUN <<'EOF'
+git init -q
+git add .
+git -c user.name=Kernel -c user.email=kernel@localhost -c gc.auto=0 commit -qm "Linux ${LINUX_VERSION}"
+git gc
+
+make KCONFIG_ALLCONFIG=allconfig allnoconfig
+make -j"$(nproc)"
+EOF
+
+{% block challenge %}{% endblock %}
