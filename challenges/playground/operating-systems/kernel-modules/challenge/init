@@ -4,6 +4,8 @@ mount -t devtmpfs devtmpfs /dev
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 
+dmesg -n 5
+
 cd /
 export PS1='vm:\w# '
 setsid cttyhack /bin/sh

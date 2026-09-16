@@ -60,6 +60,8 @@ git -c user.name=Kernel -c user.email=kernel@localhost -c gc.auto=0 commit -qm "
 git gc
 
 make KCONFIG_ALLCONFIG=allconfig allnoconfig
+scripts/config --enable EXPERT --disable VT
+make olddefconfig
 make -j"$(nproc)"
 EOF
 
