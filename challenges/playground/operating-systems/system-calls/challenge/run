@@ -3,21 +3,19 @@
 set -euo pipefail
 export PATH=/usr/bin:/bin
 
+bsdtar --format=newc --options gzip:compression-level=1 \
+    -czf /boot/initramfs.cpio.gz -C /usr/src/initramfs .
+
 names=("$RANDOM" "$RANDOM" "$RANDOM")
-group_args=(--clear-groups)
-if [[ -c /dev/kvm ]]; then
-    group_args=(--groups="$(stat -c %g /dev/kvm)")
-fi
 
 if ! output=$(
     ulimit -c 0
-    ulimit -t 20
 
-    timeout -k 1 10 setpriv --reuid=65534 --regid=65534 "${group_args[@]}" \
-        qemu-system-x86_64 -no-user-config -nodefaults \
+    timeout -k 1 10 qemu-system-x86_64 -no-user-config -nodefaults \
+        -run-with user=65534:65534 \
         -accel kvm -accel tcg,thread=single -m 256M -smp 1 \
         -display none -monitor none -serial stdio -nic none -no-reboot \
-        -sandbox on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny \
+        -sandbox on,obsolete=deny,spawn=deny,resourcecontrol=deny \
         -kernel /boot/vmlinuz -initrd /boot/initramfs.cpio.gz \
         -append "console=ttyS0 panic=-1 -- ${names[*]}" \
         </dev/null 2>&1 | tee /dev/stderr
