@@ -9,11 +9,12 @@ test "$(readlink /boot/vmlinuz)" = /usr/src/linux/arch/x86/boot/bzImage
 test ! -w /boot/initramfs.cpio.gz
 test ! -r /flag
 
-git -C /usr/src/linux diff --exit-code
+test "$(git -C /usr/src/linux diff --name-only)" = \
+    $'arch/x86/entry/syscalls/syscall_64.tbl\ninclude/linux/syscalls.h\nkernel/sys.c'
 if output=$(/challenge/run 2>&1); then
     printf '%s\n' "$output"
-    echo 'The original kernel should not pass.' >&2
+    echo 'The syscall stub should not pass.' >&2
     exit 1
 fi
 printf '%s\n' "$output"
-grep -Fq 'Expected Hello,' <<< "$output"
+grep -Fq 'The hello syscall is not implemented.' <<< "$output"

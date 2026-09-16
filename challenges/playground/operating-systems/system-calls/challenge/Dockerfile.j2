@@ -1,37 +1,40 @@
 {% extends "../../common/Dockerfile.j2" %}
 
 {% block challenge %}
-FROM kernel AS cache
+FROM kernel AS syscall
 RUN <<'EOF'
 echo 'asmlinkage long sys_hello(const char __user *name);' >> include/linux/syscalls.h
 echo '470 common hello sys_hello' >> arch/x86/entry/syscalls/syscall_64.tbl
-echo 'SYSCALL_DEFINE1(hello, const char __user *, name) { return 0; }' >> kernel/sys.c
+echo '
+SYSCALL_DEFINE1(hello, const char __user *, name)
+{
+    return -ENOSYS;
+}' >> kernel/sys.c
 
 make -j"$(nproc)"
 EOF
 
-FROM tools AS grader
+FROM tools AS guest
 COPY hello.c /tmp/hello.c
 RUN gcc -static -Os -Wall -Wextra -Werror /tmp/hello.c -o /tmp/hello
 
 FROM tools
-COPY --from=kernel --chown=1000:1000 /usr/src/linux /usr/src/linux
-COPY --from=cache --chown=1000:1000 /var/cache/ccache /var/cache/ccache
+COPY --from=syscall --chown=1000:1000 /usr/src/linux /usr/src/linux
+COPY --from=syscall --chown=1000:1000 /var/cache/ccache /var/cache/ccache
 RUN <<'EOF'
 mkdir -p /usr/src/initramfs/{bin,dev,proc,sys} /boot /challenge
 ln -s /usr/src/linux/arch/x86/boot/bzImage /boot/vmlinuz
-ln -s /usr/local/bin/grade /challenge/run
 cp /bin/busybox /usr/src/initramfs/bin/busybox
 EOF
-COPY --from=grader --chmod=755 /tmp/hello /usr/src/initramfs/usr/bin/hello
+COPY --from=guest --chmod=755 /tmp/hello /usr/src/initramfs/usr/bin/hello
 COPY --chmod=755 init /usr/src/initramfs/init
-
-ADD --chmod=6755 https://github.com/pwncollege/exec-suid/releases/download/v0.4.0/exec-suid /usr/bin/exec-suid
-COPY --chmod=4755 run /usr/local/bin/grade
 
 RUN <<'EOF'
 cd /usr/src/initramfs
 chroot . /bin/busybox --install -s /bin
 find . | cpio -o -H newc | gzip > /boot/initramfs.cpio.gz
 EOF
+
+ADD --chmod=6755 https://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
+COPY --chmod=4755 run /challenge/run
 {% endblock %}

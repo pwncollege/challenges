@@ -2,17 +2,12 @@
 
 set -euo pipefail
 export PATH=/usr/bin:/bin
-umask 077
-
-work=$(mktemp -d /run/kernel-grader.XXXXXX)
-trap 'rm -rf "$work"' EXIT
 
 names=("$RANDOM" "$RANDOM" "$RANDOM")
-echo 'Booting your kernel and testing hello...'
-if ! (
+
+if ! output=$(
     ulimit -c 0
     ulimit -t 20
-    ulimit -f 1024
 
     timeout -k 1 10 setpriv --reuid=65534 --regid=65534 --clear-groups \
         qemu-system-x86_64 -no-user-config -nodefaults \
@@ -20,17 +15,22 @@ if ! (
         -display none -monitor none -serial stdio -nic none -no-reboot \
         -sandbox on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny \
         -kernel /boot/vmlinuz -initrd /boot/initramfs.cpio.gz \
-        -append "console=ttyS0 panic=-1 -- ${names[*]}"
-) > "$work/log" 2>&1; then
+        -append "console=ttyS0 panic=-1 -- ${names[*]}" \
+        </dev/null 2>&1 | tee /dev/stderr
+); then
     echo 'The kernel failed to boot or the test timed out.'
-    tail -n 10 "$work/log"
+    exit 1
+fi
+
+if grep -Fq 'hello: Function not implemented' <<< "$output"; then
+    echo 'The hello syscall is not implemented.'
     exit 1
 fi
 
 for name in "${names[@]}"; do
-    grep -Fq "Hello, $name!" "$work/log" ||
-        { echo "Expected Hello, $name! in the VM output."; exit 1; }
+    grep -Fq "Hello, $name!" <<< "$output" ||
+        { echo 'Expected greeting not found.'; exit 1; }
 done
 
-echo 'Syscall test passed!'
+echo 'Correct!'
 cat /flag

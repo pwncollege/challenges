@@ -13,6 +13,7 @@ EOF
 ENV PATH="/usr/lib/ccache:${PATH}"
 ENV CCACHE_DIR=/var/cache/ccache
 ENV LOCALVERSION=""
+ENV LANG=C.UTF-8
 
 FROM tools AS kernel
 ARG LINUX_VERSION=6.18.52
