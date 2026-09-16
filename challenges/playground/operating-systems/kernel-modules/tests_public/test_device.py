@@ -36,6 +36,8 @@ try:
         assert int(status["CapEff"], 16) == 0
     command = (
         "test $(id -u) = 0 && test ! -e /dev/flag && "
+        "test ! -e /dev/tty0 && test ! -e /dev/tty63 && test -c /dev/ttyS0 && "
+        'test "$(cut -f1 /proc/sys/kernel/printk)" = 5 && '
         "test ! -e /flag && test ! -e /challenge/flag.c && "
         "test -r /lib/modules/$(uname -r)/updates/flag.ko && "
         "modprobe flag && test -c /dev/flag && "
