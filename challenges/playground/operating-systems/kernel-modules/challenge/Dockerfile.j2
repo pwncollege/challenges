@@ -9,8 +9,8 @@ make
 EOF
 
 FROM initramfs
-
-COPY --from=kernel /usr/src/linux/arch/x86/boot/bzImage /boot/vmlinuz
+COPY --from=kernel --chown=1000:1000 /usr/src/linux /usr/src/linux
+COPY --from=kernel --chown=1000:1000 /var/cache/ccache /var/cache/ccache
 COPY --from=module /usr/src/initramfs/lib/modules /usr/src/initramfs/lib/modules
 COPY --from=module /usr/src/flag /usr/src/flag
 COPY --chmod=755 init /usr/src/initramfs/init

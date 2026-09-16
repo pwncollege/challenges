@@ -21,9 +21,6 @@ RUN gcc -static -Os -Wall -Wextra -Werror /tmp/hello.c -o /tmp/hello
 FROM initramfs
 COPY --from=syscall --chown=1000:1000 /usr/src/linux /usr/src/linux
 COPY --from=syscall --chown=1000:1000 /var/cache/ccache /var/cache/ccache
-RUN <<'EOF'
-ln -s /usr/src/linux/arch/x86/boot/bzImage /boot/vmlinuz
-EOF
 COPY --from=guest --chmod=755 /tmp/hello /usr/src/initramfs/usr/bin/hello
 COPY --chmod=755 init /usr/src/initramfs/init
 
