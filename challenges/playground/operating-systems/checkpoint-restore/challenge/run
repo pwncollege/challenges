@@ -1,0 +1,29 @@
+#!/usr/bin/exec-suid -- /bin/bash -p
+
+set -euo pipefail
+export PATH=/usr/bin:/bin
+
+bsdtar --format=newc --options gzip:compression-level=1 \
+    -czf /boot/initramfs.cpio.gz -C /usr/src/initramfs .
+
+if ! output=$(
+    ulimit -c 0
+
+    timeout -k 1 10 qemu-system-x86_64 -no-user-config -nodefaults \
+        -run-with user=65534:65534 \
+        -accel kvm -accel tcg,thread=single -m 256M -smp 1 \
+        -display none -monitor none -serial stdio -nic none -no-reboot \
+        -sandbox on,obsolete=deny,spawn=deny,resourcecontrol=deny \
+        -kernel /boot/vmlinuz -initrd /boot/initramfs.cpio.gz \
+        -append 'console=ttyS0 panic=-1' \
+        </dev/null 2>&1 | tee /dev/stderr
+); then
+    echo 'The kernel failed to boot or the test timed out.'
+    exit 1
+fi
+
+grep -Fxq 'Checkpoint tests passed.' <<< "${output//$'\r'/}" ||
+    { echo 'The checkpoint tests did not pass.'; exit 1; }
+
+echo 'Correct!'
+cat /flag

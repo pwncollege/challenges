@@ -1,0 +1,22 @@
+#!/bin/sh
+
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+
+failed=0
+for test in variables memory files descriptors duplicates process signals credentials lifecycle game; do
+    echo "Testing $test..."
+    if /usr/bin/test-"$test"; then
+        echo "Passed: $test"
+    else
+        echo "Failed: $test"
+        failed=1
+    fi
+done
+
+if [ "$failed" -eq 0 ]; then
+    echo 'Checkpoint tests passed.'
+fi
+
+reboot -f

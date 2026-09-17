@@ -6,3 +6,6 @@ resources:
   - type: challenge
     id: kernel-modules
     name: Kernel Modules
+  - type: challenge
+    id: checkpoint-restore
+    name: Checkpoint and Restore

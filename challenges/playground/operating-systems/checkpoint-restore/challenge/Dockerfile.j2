@@ -1,0 +1,29 @@
+{% extends "../../common/Dockerfile.j2" %}
+
+{% block challenge %}
+FROM tools AS guest
+COPY checkpoint.h /usr/local/include/checkpoint.h
+COPY tests/ /usr/src/checkpoint/tests/
+RUN <<'EOF'
+mkdir -p /tests
+for source in /usr/src/checkpoint/tests/*.c; do
+    gcc -static -O2 -Wall -Wextra -Werror "$source" -o "/tests/test-$(basename "$source" .c)"
+done
+EOF
+
+FROM initramfs
+COPY --from=kernel --chown=1000:1000 /usr/src/linux /usr/src/linux
+COPY --from=kernel --chown=1000:1000 /var/cache/ccache /var/cache/ccache
+COPY --from=guest /usr/local/include/checkpoint.h /usr/local/include/checkpoint.h
+COPY --from=guest /usr/src/checkpoint /usr/src/checkpoint
+COPY --from=guest /tests/ /usr/src/initramfs/usr/bin/
+COPY --chmod=755 init /usr/src/initramfs/init
+
+RUN <<'EOF'
+mkdir -p /challenge
+ln -s /usr/local/include/checkpoint.h /usr/src/checkpoint/tests /challenge/
+EOF
+
+ADD --chmod=6755 https://github.com/pwncollege/exec-suid/releases/latest/download/exec-suid /usr/bin/exec-suid
+COPY --chmod=4755 run /challenge/run
+{% endblock %}
