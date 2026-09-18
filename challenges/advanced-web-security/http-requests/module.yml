@@ -1,0 +1,32 @@
+name: HTTP Requests
+resources:
+- type: header
+  content: Crafting Requests
+- type: challenge
+  id: custom-host
+  name: Custom Authority
+- type: challenge
+  id: custom-header
+  name: Custom Header
+- type: challenge
+  id: custom-method
+  name: Custom Method
+- type: challenge
+  id: custom-version
+  name: Custom Version
+- type: challenge
+  id: custom-body
+  name: Custom Body
+- type: header
+  content: Forwarded Client Trust
+- type: challenge
+  id: forwarded-for
+  name: Forwarded For
+- type: header
+  content: Request Smuggling
+- type: challenge
+  id: smuggling-cl-te
+  name: CL.TE Desync
+- type: challenge
+  id: smuggling-te-cl
+  name: TE.CL Desync

@@ -8,3 +8,4 @@ award:
 modules:
 - id: hosts-and-proxies
 - id: request-paths
+- id: http-requests
