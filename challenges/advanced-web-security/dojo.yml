@@ -1,6 +1,7 @@
 name: Advanced Web Security
 type: hidden
 id: advanced-web-security
+privileged: false
 visibility:
   start: "2099-01-01T00:00:00+00:00"
 award:
@@ -8,3 +9,4 @@ award:
 modules:
 - id: hosts-and-proxies
 - id: request-paths
+- id: http-requests

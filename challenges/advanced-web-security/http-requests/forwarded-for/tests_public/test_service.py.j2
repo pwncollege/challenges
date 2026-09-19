@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+
+import subprocess
+import time
+
+import requests
+
+server = subprocess.Popen(["/challenge/server"])
+
+session = requests.Session()
+session.trust_env = False
+base_url = "http://127.0.0.1"
+
+for _ in range(200):
+    try:
+        response = session.get(base_url, timeout=0.25)
+        if response.status_code == 200:
+            break
+    except requests.RequestException:
+        if server.poll() is not None:
+            raise AssertionError("server exited before becoming ready")
+        time.sleep(0.1)
+else:
+    raise AssertionError("server did not become ready in time")
+
+response = session.get(base_url + "/admin")
+assert response.status_code == 403, response.text
+assert "pwn.college{" not in response.text
