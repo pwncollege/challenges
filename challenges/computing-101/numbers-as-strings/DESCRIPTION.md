@@ -1,7 +1,7 @@
 You've learned to read and write registers, walk through memory, and package your code as a function inside a shared library.
-Now let's put those skills together and build some real algorithms.
+Now let's put those skills together and build a calculator.
 When you need to debug one of these `.so` submissions, refer back to [Writing from a Shared Library](/computing-101/control-flow/callee-write) for the shared-library debugging pattern.
 
-Through this module, we'll gradually build on our solutions until we create code that addresses a very common program need: turning text into numbers.
-Along the way, we'll learn how to write reusable assembly code, how text and numbers relate to each other, and how to reason about algorithms (and their failings!).
-You'll grow in knowledge, and in flags!
+The calculator's operands arrive as text, but arithmetic instructions work on numbers.
+We'll build functions to convert in both directions, then use them to read an expression, compute its result, and print the answer.
+Keep your solutions as you go: the calculator will use the functions you write along the way.
