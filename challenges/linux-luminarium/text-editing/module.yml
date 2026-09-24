@@ -1,0 +1,5 @@
+name: Terminal Text Editing
+resources:
+- type: challenge
+  id: nano-basics
+  name: Editing with Nano

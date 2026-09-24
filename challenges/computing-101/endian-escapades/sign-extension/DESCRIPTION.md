@@ -1,12 +1,9 @@
-You have seen that `byte`, `word`, `dword`, and `qword` describe how many bytes an instruction reads or writes.
-Now add one more wrinkle: a smaller value can be copied into a larger register as either unsigned or signed.
-
-If the byte is unsigned, filling the high bytes with zero is fine: `0x7f` becomes `0x000000000000007f`.
-But a signed byte uses two's complement.
+In the previous level, you zero-extended an unsigned byte into a 64-bit register.
+A signed byte needs a different extension because its top bit carries the sign.
 The byte `0xff` is `-1`, so extending it to 64 bits must fill the new high bits with `1`s: `0xffffffffffffffff`.
 
 That is **sign extension**.
-It copies the sign bit, not zeroes, into the new high bits.
+It copies the sign bit into every new high bit instead of filling them with zeroes.
 On x86-64, the form you need here is:
 
 ```asm

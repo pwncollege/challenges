@@ -24,6 +24,8 @@ su: Authentication failure
 hacker@dojo:~$
 ```
 
+While you type a password, the terminal deliberately displays neither characters nor asterisks; type the password and press Enter normally.
+
 This check against the `root` password is what obsoletes `su`.
 Modern systems very rarely have `root` passwords, and different mechanisms (that we will learn later) are used to grant administrative access.
 

@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+
+printf '%s\n' 'Add a second line below this one.' > /home/hacker/README.txt
+chown hacker:hacker /home/hacker/README.txt
+chmod 0644 /home/hacker/README.txt
