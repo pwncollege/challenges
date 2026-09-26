@@ -230,6 +230,13 @@ test("start, proxy, replace, stop, and restart preserve the home volume", async 
     stderr: "",
   });
 
+  const filesystem = await execWorkspace(first.complete.url, ["/bin/sh", "-c",
+    "awk '$2 == \"/home/hacker\" { print $1, $3, $4 }' /proc/mounts; stat -c '%u:%g' /home/hacker"]);
+  assert.equal(filesystem.exit_code, 0);
+  assert.match(filesystem.stdout, /\/dev\/\S+ ext4 /);
+  assert.match(filesystem.stdout, /nosuid/);
+  assert.match(filesystem.stdout, /nodev/);
+  assert.match(filesystem.stdout, /1000:1000/);
   const home = await homeVolume();
   const runtimeConfig = JSON.parse(await db.prepare("SELECT runtime_config_json FROM workspaces WHERE workspace_uuid = ?")
     .bind(first.complete.workspace_uuid).first("runtime_config_json"));

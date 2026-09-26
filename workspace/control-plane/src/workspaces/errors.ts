@@ -39,6 +39,7 @@ export function contentfulStatus(status: number, fallback = 500): number {
     case 403:
     case 404:
     case 409:
+    case 411:
     case 423:
     case 500:
     case 502:

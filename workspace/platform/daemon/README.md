@@ -1,7 +1,7 @@
 # Workspace daemon
 
 The workspace daemon is the node-local owner of Kata workspaces, workspace
-request proxying, and optional Btrfs home volumes. It controls containerd through
+request proxying, and optional ext4 home images. It controls containerd through
 CRI; containerd invokes the configured CNI chain for workspace networking.
 
 It always starts workspace containers with the `kata` runtime. It mounts `/nix`
@@ -32,9 +32,21 @@ Optional environment variables:
 - `PWN_WORKSPACE_VOLUME_BASE_PATH`
 - `PWN_WORKSPACE_PUBLIC_KEY` (hex-encoded raw Ed25519 public key)
 
-If volume storage is configured, the path must be on a Btrfs filesystem mounted
-`nosuid`. The local development host leaves it disabled because `pwnshop`
-does not yet use persistent homes.
+When volume storage is configured, the daemon creates sparse `home.ext4` files
+under that directory. It registers them with `kata-runtime direct-volume`; QEMU
+opens each file as a raw disk and the Kata agent mounts ext4 inside the guest with
+`nosuid,nodev`. No host filesystem mount or loop device is used. The directory can
+live on any host filesystem supporting ordinary sparse files. The platform puts
+`mkfs.ext4` and `kata-runtime` on the daemon's PATH and enables Kata block devices.
+
+`max_size_bytes` sets the image size, including filesystem metadata. New homes are
+owned by UID/GID 1000. Snapshots contain complete zstd-compressed ext4 images. A
+move stops the VM and releases its disk before capture; live backups would need
+an explicit guest freeze or a storage snapshot mechanism. They are not implemented.
+Compression finishes into a local immutable file before upload, giving HTTP a
+known Content-Length. Restore checks the decompressed size and preserves holes
+for zero-filled chunks. Retired images and cached snapshots remain until volume
+deletion; automatic cache eviction is not implemented.
 
 The platform generates a CNI bridge configuration. CNI `host-local` IPAM assigns
 addresses from the platform's configured workspace subnet; the daemon reads the
@@ -99,8 +111,8 @@ this node in the same command, after validating the request and image.
 
 `stop_workspace_uuid` is optional when the home is already stopped. Export stops
 the workspace, captures the snapshot, retires the writable home, and uploads the
-snapshot. Any failure blocks movement. The coordinator commits the upload before
-starting the destination. Retired copies are never reused as active homes.
+snapshot. Any failure blocks movement. The node waits for the upload to complete before acknowledging export; the
+coordinator then starts the destination. Retired copies are never reused as active homes.
 Ordinary workspace stop retains the active home for the next local start.
 `POST /api/volumes/<volume-uuid>/delete` removes an unattached volume and its caches.
 

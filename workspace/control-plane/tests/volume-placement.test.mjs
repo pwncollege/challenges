@@ -19,7 +19,6 @@ for (const outcome of ["success", "http-error", "network-error", "missing-upload
   test(`moving a home through the Worker: ${outcome}`, async (t) => {
     const calls = [];
     let snapshotUUID;
-    let stagingKey;
     const { mf, DB, VOLUMES } = await createBindings(t, {
       script: bundle.outputFiles[0].text,
       bindings: {
@@ -38,10 +37,8 @@ for (const outcome of ["success", "http-error", "network-error", "missing-upload
           assert.equal(action, "export");
           snapshotUUID = url.pathname.split("/").at(-2);
           assert.ok(body.stop_workspace_uuid);
-          const transfer = new URL(body.upload_url);
-          stagingKey = `staging/${volumeUUID}/${snapshotUUID}/${transfer.searchParams.get("upload_uuid")}`;
           if (outcome !== "missing-upload") {
-            const uploaded = await mf.dispatchFetch(body.upload_url, { method: "PUT", body: "home contents" });
+            const uploaded = await mf.dispatchFetch(body.upload_url, { method: "PUT", body: "home contents", headers: { "content-length": String(Buffer.byteLength("home contents")) } });
             assert.equal(uploaded.status, 200, await uploaded.text());
           }
           if (outcome === "network-error") throw new Error("node unavailable");
@@ -52,6 +49,10 @@ for (const outcome of ["success", "http-error", "network-error", "missing-upload
           assert.equal(body.volume.snapshot.snapshot_uuid, snapshotUUID);
           assert.equal(body.replace_workspace_uuid, undefined);
           const snapshot = await mf.dispatchFetch(body.volume.snapshot.download_url);
+          if (outcome === "missing-upload") {
+            assert.equal(snapshot.status, 404);
+            return Response.json({ error: { code: "volume_prepare_failed", message: "Snapshot not found" } }, { status: 500 });
+          }
           assert.equal(snapshot.status, 200);
           assert.equal(await snapshot.text(), "home contents");
           if (outcome === "start-error") return Response.json({ operation_started: false, error: { code: "image_not_available", message: "missing" } }, { status: 409 });
@@ -89,18 +90,18 @@ for (const outcome of ["success", "http-error", "network-error", "missing-upload
       assert.equal(operation, null);
       assert.deepEqual(volume, { node_id: 2, snapshot_uuid: snapshotUUID });
       assert.deepEqual(calls, ["old.test/export", "new.test/start"]);
-      assert.equal(await VOLUMES.head(stagingKey), null);
+      assert.equal(await (await VOLUMES.get(`snapshots/${volumeUUID}/${snapshotUUID}`)).text(), "home contents");
     } else {
       assert.ok(error, JSON.stringify(events));
       assert.equal(JSON.parse(operation.plan_json).snapshot_uuid, snapshotUUID);
       assert.deepEqual(volume, { node_id: 1, snapshot_uuid: null });
-      assert.deepEqual(calls, outcome === "start-error" ? ["old.test/export", "new.test/start"] : ["old.test/export"]);
+      assert.deepEqual(calls, ["start-error", "missing-upload"].includes(outcome) ? ["old.test/export", "new.test/start"] : ["old.test/export"]);
       const retry = await mf.dispatchFetch("https://control.test/api/workspaces/start", {
         method: "POST", headers: { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0] },
         body: JSON.stringify({ node_uuid: targetNodeUUID, runtime_config: { container_image_ref: "test" } }),
       });
       assert.match(await retry.text(), /workspace_operation_in_progress/);
-      assert.equal(calls.length, outcome === "start-error" ? 2 : 1, "blocked retry must not contact either node");
+      assert.equal(calls.length, ["start-error", "missing-upload"].includes(outcome) ? 2 : 1, "blocked retry must not contact either node");
     }
   });
 }

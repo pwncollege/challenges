@@ -38,7 +38,7 @@ in
       Type = "simple";
       ExecStart = "${package}/bin/workspace-daemon";
       Environment = [
-        "PATH=${lib.makeBinPath [ pkgs.btrfs-progs ]}"
+        "PATH=${lib.makeBinPath [ pkgs.e2fsprogs pkgs.kata-runtime ]}"
         "PWN_WORKSPACE_AGENT_PORT=8000"
         "PWN_WORKSPACE_CONTAINERD_ADDRESS=unix://${containerdSockPath}"
         "PWN_WORKSPACE_DAEMON_LISTEN_ADDRESS=${daemonListenAddress}"

@@ -3,7 +3,6 @@ module pwn.college/workspace/platform/daemon
 go 1.26.0
 
 require (
-	github.com/containerd/btrfs v1.0.1
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.18.6
 	google.golang.org/grpc v1.81.1

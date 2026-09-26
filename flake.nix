@@ -97,22 +97,11 @@
             pwn-workspace-runtime = runtime.runtime;
           };
           discord-feedback = import ./tools/feedback { inherit pkgs; };
-          controlPlaneStorage = pkgs.writeShellApplication {
-            name = "pwn-workspace-storage";
-            runtimeInputs = with pkgs; [
-              btrfs-progs
-              coreutils
-              findutils
-              util-linux
-            ];
-            text = builtins.readFile ./workspace/control-plane/scripts/storage;
-          };
           mkDevShell =
             {
               selectedRuntime,
               activatorOptions ? { },
               extraPackages ? [ ],
-              beforeActivate ? "",
             }:
             let
               pwn-workspace = workspaceSystem.mkActivator selectedRuntime activatorOptions;
@@ -166,8 +155,6 @@
                   fi
                 fi
 
-                ${beforeActivate}
-
                 if ! runtime_environment="$($sudo ${lib.getExe pwn-workspace})"; then
                   echo "error: failed to start the challenge runtime" >&2
                   return 1
@@ -181,17 +168,10 @@
           full = mkDevShell { selectedRuntime = fullRuntime; };
           control-plane = mkDevShell {
             selectedRuntime = runtime;
-            activatorOptions.volumeBasePath = "/var/lib/pwn.college/volumes";
+            activatorOptions.volumeBasePath = "/var/lib/pwn.college/homes";
             extraPackages = [
-              controlPlaneStorage
               pkgs.nodejs_24
             ];
-            beforeActivate = ''
-              if ! $sudo ${lib.getExe controlPlaneStorage} setup; then
-                echo "error: failed to prepare control-plane volume storage" >&2
-                return 1
-              fi
-            '';
           };
         }
       );

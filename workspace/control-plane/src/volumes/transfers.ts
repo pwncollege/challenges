@@ -26,14 +26,10 @@ export async function transferUrl(
   method: "GET" | "PUT",
   volumeUUID: string,
   snapshotUUID: string,
-  uploadUUID?: string,
 ) {
   const url = new URL(`/api/volumes/${volumeUUID}/snapshots/${snapshotUUID}`, env.PWN_WORKSPACE_ORIGIN);
   const expires = String(Math.floor(Date.now() / 1000) + 15 * 60);
   url.searchParams.set("expires", expires);
-  if (uploadUUID !== undefined) {
-    url.searchParams.set("upload_uuid", uploadUUID);
-  }
   url.searchParams.set("signature", await signTransferURL(env, method, `${url.pathname}${url.search}`, expires));
   return url.toString();
 }

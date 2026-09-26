@@ -18,11 +18,13 @@ export const VolumeRoutes = Layer.mergeAll(
   })),
   HttpRouter.add("PUT", "/api/volumes/:volumeUUID/snapshots/:snapshotUUID", Effect.gen(function*() {
     const { snapshots, request, volumeUUID, snapshotUUID } = yield* transferRequest("PUT");
-    const uploadUUID = new URL(request.url).searchParams.get("upload_uuid");
-    if (!uploadUUID) return yield* workspaceError("invalid_request", "Missing upload UUID", 400);
+    const length = request.headers.get("content-length");
+    if (!length || !/^\d+$/.test(length) || !Number.isSafeInteger(Number(length))) {
+      return yield* workspaceError("length_required", "Snapshot uploads require Content-Length", 411);
+    }
     const body = request.body;
     if (!body) return yield* workspaceError("invalid_request", "Missing snapshot body", 400);
-    const key = yield* snapshots.upload(volumeUUID, snapshotUUID, uploadUUID, body);
+    const key = yield* snapshots.upload(volumeUUID, snapshotUUID, body);
     return HttpServerResponse.jsonUnsafe({ key, uploaded: true });
   }), { uninterruptible: true }),
 );

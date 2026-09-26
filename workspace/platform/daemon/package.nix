@@ -5,9 +5,9 @@ pkgs.buildGoModule {
   version = "0.1.0";
 
   src = ./.;
-  vendorHash = "sha256-gseQY5ihAwjIa5WDtcNJHSqen+IqmkzaDHo7uPdcIy8=";
+  vendorHash = "sha256-+WUINRXAKVIQ3uSrRQvVduH9dlbt+79DQpRSE5bNUB0=";
 
-  buildInputs = [ pkgs.btrfs-progs.dev ];
+  nativeCheckInputs = [ pkgs.e2fsprogs ];
 
   ldflags = [
     "-s"

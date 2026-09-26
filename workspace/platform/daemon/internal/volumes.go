@@ -1,42 +1,17 @@
 package daemon
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
-	"unsafe"
 
-	btrfs "github.com/containerd/btrfs"
 	"github.com/google/uuid"
-	"github.com/klauspost/compress/zstd"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
-
-const (
-	btrfsSuperMagic        = 0x9123683e
-	btrfsSubvolReadonly    = 1 << 1
-	btrfsIOCSubvolGetflags = 0x80089419
-	btrfsIOCSubvolSetflags = 0x4008941a
-	btrfsIOCSend           = 0x40489426
-	statfsNosuid           = 0x2
-)
-
-type btrfsSendArgs struct {
-	SendFd            int64
-	CloneSourcesCount uint64
-	CloneSources      uint64
-	ParentRoot        uint64
-	Flags             uint64
-	Version           uint32
-	Reserved          [28]byte
-}
 
 type volumeSnapshot struct {
 	SnapshotUUID string `json:"snapshot_uuid"`
@@ -102,10 +77,13 @@ func (s *Server) exportVolume(ctx context.Context, volumeUUID, snapshotUUID stri
 		}
 		snapshot := s.snapshotPath(volumeUUID, snapshotUUID)
 		if _, err := os.Stat(snapshot); os.IsNotExist(err) {
-			if err := btrfs.SubvolSnapshot(snapshot, s.activePath(volumeUUID), true); err != nil {
+			if err := captureImage(ctx, filepath.Join(s.activePath(volumeUUID), "home.ext4"), snapshot); err != nil {
 				return err
 			}
 		} else if err != nil {
+			return err
+		}
+		if err := unregisterVolume(ctx, s.activePath(volumeUUID)); err != nil {
 			return err
 		}
 		if err := os.Rename(s.activePath(volumeUUID), retired); err != nil {
@@ -148,58 +126,36 @@ func (s *Server) prepareVolume(ctx context.Context, volume workspaceVolume) (str
 		return "", err
 	}
 	preparing := filepath.Join(root, ".preparing")
-	if _, err := os.Stat(preparing); err == nil {
-		if err := btrfs.SubvolDelete(preparing); err != nil {
-			return "", err
-		}
+	if err := os.RemoveAll(preparing); err != nil {
+		return "", err
 	}
+	if err := os.Mkdir(preparing, 0700); err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(preparing)
+	image := filepath.Join(preparing, "home.ext4")
 	if volume.Snapshot != nil {
-		if err := s.fetchSnapshot(ctx, volume.VolumeUUID, *volume.Snapshot); err != nil {
+		snapshot := s.snapshotPath(volume.VolumeUUID, volume.Snapshot.SnapshotUUID)
+		if _, err := os.Stat(snapshot); os.IsNotExist(err) {
+			if err := downloadSnapshot(ctx, volume.Snapshot.DownloadURL, snapshot, volume.MaxSizeBytes); err != nil {
+				return "", err
+			}
+		} else if err != nil {
 			return "", err
 		}
-		if err := btrfs.SubvolSnapshot(preparing, s.snapshotPath(volume.VolumeUUID, volume.Snapshot.SnapshotUUID), false); err != nil {
+		if err := restoreImage(ctx, snapshot, image, volume.MaxSizeBytes); err != nil {
 			return "", err
 		}
-	} else {
-		if err := btrfs.SubvolCreate(preparing); err != nil {
-			return "", err
-		}
-		if err := os.Chown(preparing, 1000, 1000); err != nil {
-			return "", err
-		}
+	} else if err := createImage(ctx, image, volume.MaxSizeBytes); err != nil {
+		return "", err
+	}
+	if err := syncDirectory(preparing); err != nil {
+		return "", err
 	}
 	if err := os.Rename(preparing, active); err != nil {
 		return "", err
 	}
 	return active, syncDirectory(root)
-}
-
-func (s *Server) fetchSnapshot(ctx context.Context, volumeUUID string, source volumeSnapshot) error {
-	snapshot := s.snapshotPath(volumeUUID, source.SnapshotUUID)
-	if _, err := os.Stat(snapshot); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	receiving := filepath.Join(s.volumeRoot(volumeUUID), "receiving", uuid.NewString())
-	if err := os.MkdirAll(receiving, 0755); err != nil {
-		return err
-	}
-	defer btrfsRemoveAll(receiving)
-	if err := downloadSnapshot(ctx, source.DownloadURL, receiving); err != nil {
-		return err
-	}
-	received := filepath.Join(receiving, source.SnapshotUUID)
-	if err := btrfsSetSubvolumeReadonly(received, false); err != nil {
-		return err
-	}
-	if err := os.Rename(received, snapshot); err != nil {
-		return err
-	}
-	if err := btrfsSetSubvolumeReadonly(snapshot, true); err != nil {
-		return err
-	}
-	return syncDirectory(filepath.Dir(snapshot))
 }
 
 func (s *Server) requireVolumeDetached(ctx context.Context, volumeUUID string) error {
@@ -219,21 +175,17 @@ func (s *Server) handleVolumeDelete(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, 409, "volume_busy", err.Error())
 		return
 	}
-	root := s.volumeRoot(volumeUUID)
-	// Remove nested received subvolumes before their parent directories.
-	if entries, err := os.ReadDir(filepath.Join(root, "receiving")); err == nil {
-		for _, entry := range entries {
-			if err := btrfsRemoveAll(filepath.Join(root, "receiving", entry.Name())); err != nil {
-				jsonError(w, 500, "internal_error", err.Error())
-				return
-			}
-		}
+	if err := unregisterVolume(r.Context(), s.activePath(volumeUUID)); err != nil {
+		jsonError(w, 500, "internal_error", err.Error())
+		return
 	}
-	for _, path := range []string{filepath.Join(root, "snapshots"), filepath.Join(root, "retired"), root} {
-		if err := btrfsRemoveAll(path); err != nil {
-			jsonError(w, 500, "internal_error", err.Error())
-			return
-		}
+	if err := os.RemoveAll(s.volumeRoot(volumeUUID)); err != nil {
+		jsonError(w, 500, "internal_error", err.Error())
+		return
+	}
+	if err := syncDirectory(s.config.volumeBasePath); err != nil {
+		jsonError(w, 500, "internal_error", err.Error())
+		return
 	}
 	writeJSON(w, 200, map[string]any{"volume_uuid": volumeUUID, "status": "deleted"})
 }
@@ -247,7 +199,7 @@ func (s *Server) activePath(volumeUUID string) string {
 }
 
 func (s *Server) snapshotPath(volumeUUID, snapshotUUID string) string {
-	return filepath.Join(s.volumeRoot(volumeUUID), "snapshots", snapshotUUID)
+	return filepath.Join(s.volumeRoot(volumeUUID), "snapshots", snapshotUUID+".ext4.zst")
 }
 
 func (s *Server) ensureVolumeDirs(volumeUUID string) error {
@@ -255,7 +207,10 @@ func (s *Server) ensureVolumeDirs(volumeUUID string) error {
 	if err := os.MkdirAll(filepath.Join(root, "snapshots"), 0o755); err != nil {
 		return err
 	}
-	return os.MkdirAll(filepath.Join(root, "receiving"), 0o755)
+	if err := syncDirectory(root); err != nil {
+		return err
+	}
+	return syncDirectory(s.config.volumeBasePath)
 }
 
 func validUUID(value string) bool {
@@ -263,161 +218,35 @@ func validUUID(value string) bool {
 	return err == nil
 }
 
-func btrfsRemoveAll(root string) error {
-	entries, err := os.ReadDir(root)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			_ = btrfs.SubvolDelete(filepath.Join(root, entry.Name()))
-		}
-	}
-	return os.RemoveAll(root)
-}
-
-func btrfsSetSubvolumeReadonly(path string, readonly bool) error {
-	file, err := os.Open(path)
+// Capturing first gives every upload a known length and immutable retry data.
+func uploadSnapshot(ctx context.Context, snapshot, url string) error {
+	file, err := os.Open(snapshot)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-
-	var flags uint64
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), btrfsIOCSubvolGetflags, uintptr(unsafe.Pointer(&flags))); errno != 0 {
-		return errno
-	}
-	if readonly {
-		flags |= btrfsSubvolReadonly
-	} else {
-		flags &^= btrfsSubvolReadonly
-	}
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), btrfsIOCSubvolSetflags, uintptr(unsafe.Pointer(&flags))); errno != 0 {
-		return errno
-	}
-	return nil
-}
-
-func btrfsSend(source string, output io.Writer) error {
-	sourceFile, err := os.Open(source)
+	info, err := file.Stat()
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
-
-	reader, writer, err := os.Pipe()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, file)
 	if err != nil {
 		return err
 	}
-	copyDone := make(chan error, 1)
-	go func() {
-		_, copyErr := io.Copy(output, reader)
-		closeErr := reader.Close()
-		if copyErr != nil {
-			copyDone <- copyErr
-		} else {
-			copyDone <- closeErr
-		}
-	}()
-
-	args := btrfsSendArgs{SendFd: int64(writer.Fd())}
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, sourceFile.Fd(), btrfsIOCSend, uintptr(unsafe.Pointer(&args)))
-	closeErr := writer.Close()
-	copyErr := <-copyDone
-	if errno != 0 {
-		return fmt.Errorf("btrfs send failed: %w", errno)
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return copyErr
-}
-
-func btrfsReceive(ctx context.Context, destination string, input io.Reader) error {
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "btrfs", "receive", "--chroot", destination)
-	cmd.Stdin = input
-	cmd.Stdout = io.Discard
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		message := strings.TrimSpace(stderr.String())
-		if message != "" {
-			return fmt.Errorf("btrfs receive failed: %s", message)
-		}
-		return fmt.Errorf("btrfs receive failed: %w", err)
-	}
-	return nil
-}
-
-func assertBtrfsPath(path string) error {
-	var statfs syscall.Statfs_t
-	if err := syscall.Statfs(path, &statfs); err != nil {
-		return err
-	}
-	if statfs.Type != btrfsSuperMagic {
-		return fmt.Errorf("%s is not on btrfs", path)
-	}
-	if uint64(statfs.Flags)&statfsNosuid == 0 {
-		return fmt.Errorf("%s must be mounted nosuid", path)
-	}
-	return nil
-}
-
-func uploadSnapshot(ctx context.Context, snapshot, url string) error {
-	bodyReader, bodyWriter := io.Pipe()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bodyReader)
-	if err != nil {
-		_ = bodyReader.CloseWithError(err)
-		_ = bodyWriter.CloseWithError(err)
-		return err
-	}
-
-	sendDone := make(chan error, 1)
-	go func() {
-		zstdWriter, err := zstd.NewWriter(bodyWriter)
-		if err != nil {
-			_ = bodyWriter.CloseWithError(err)
-			sendDone <- err
-			return
-		}
-		sendErr := btrfsSend(snapshot, zstdWriter)
-		closeErr := zstdWriter.Close()
-		if sendErr == nil {
-			sendErr = closeErr
-		}
-		if sendErr != nil {
-			_ = bodyWriter.CloseWithError(sendErr)
-		} else {
-			_ = bodyWriter.Close()
-		}
-		sendDone <- sendErr
-	}()
-
+	req.ContentLength = info.Size()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		_ = bodyReader.CloseWithError(err)
-		sendErr := <-sendDone
-		if sendErr != nil {
-			return sendErr
-		}
 		return err
 	}
 	defer resp.Body.Close()
-	responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	sendErr := <-sendDone
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return httpTransferStatusError(resp.StatusCode, responseBody)
+		return httpTransferStatusError(resp.StatusCode, body)
 	}
-	if readErr != nil {
-		return readErr
-	}
-	return sendErr
+	return err
 }
 
-func downloadSnapshot(ctx context.Context, url, receiving string) error {
+func downloadSnapshot(ctx context.Context, url, destination string, maxImageSize int64) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -431,12 +260,18 @@ func downloadSnapshot(ctx context.Context, url, receiving string) error {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return httpTransferStatusError(resp.StatusCode, body)
 	}
-	zstdReader, err := zstd.NewReader(resp.Body)
-	if err != nil {
-		return err
-	}
-	defer zstdReader.Close()
-	return btrfsReceive(ctx, receiving, zstdReader)
+	// Allow compression overhead for incompressible images, with a bounded download.
+	limit := maxImageSize + maxImageSize/128 + (1 << 20)
+	return publishFile(destination, func(file *os.File) error {
+		size, err := io.Copy(file, io.LimitReader(resp.Body, limit+1))
+		if err != nil {
+			return err
+		}
+		if size > limit {
+			return fmt.Errorf("snapshot exceeds volume size")
+		}
+		return nil
+	})
 }
 
 func httpTransferStatusError(statusCode int, body []byte) error {

@@ -173,6 +173,13 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if body.Volume != nil {
+		if err := registerVolume(r.Context(), active); err != nil {
+			jsonError(w, 500, "volume_attach_failed", err.Error())
+			return
+		}
+	}
+
 	sandboxConfig, containerConfig := s.workspaceContainerConfig(workspaceUUID, body, active)
 	if err := os.MkdirAll(sandboxConfig.LogDirectory, 0o711); err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())

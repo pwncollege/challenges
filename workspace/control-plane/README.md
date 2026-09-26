@@ -1,7 +1,7 @@
 # Workspace control plane
 
 This Cloudflare Worker coordinates users, workspace nodes, and home volumes. It
-stores authoritative state in D1 and transferred Btrfs snapshots in R2. Workspace
+stores authoritative state in D1 and compressed ext4 home snapshots in R2. Workspace
 containers themselves run on the node-level service in `../platform`.
 
 ## Effect
@@ -16,7 +16,7 @@ per request. Three services separate workflows from external I/O:
   Mutating commands are sent once, with no automatic retries.
 - `WorkspaceStore` owns D1 queries, claims, and state changes. The atomic SQL
   batches remain native D1 operations.
-- `SnapshotStore` owns R2 reads, multipart uploads, commits, and signed transfer URLs.
+- `SnapshotStore` owns R2 reads, streamed uploads, and signed transfer URLs.
 
 Service constructors create lazy adapters without doing I/O, and are bound to each
 request's environment. Tests can substitute services through Layers. Runtime
@@ -67,13 +67,9 @@ $ npm run dev
 ```
 
 The development shell starts the real local workspace platform, including
-containerd, Kata, the workspace daemon, and its network services. It also creates
-a sparse Btrfs filesystem at `/var/lib/pwn.college/control-plane-volumes.img` and
-mounts it with `nosuid` at `/var/lib/pwn.college/volumes`. The normal development
-shell does not enable home volume storage.
-
-Use `pwn-workspace-storage status` to inspect that mount or
-`sudo pwn-workspace-storage teardown` to unmount it after stopping any workspaces.
+containerd, Kata, the workspace daemon, and its network services. The daemon
+creates sparse ext4 home images under `/var/lib/pwn.college/homes` and attaches
+them directly to Kata. The normal development shell leaves home storage disabled.
 
 The containerd CRI plugin uses its conventional internal `k8s.io` namespace. This
 stack does not run Kubernetes or kubelet; the workspace daemon talks directly to
@@ -102,7 +98,7 @@ failed-start cleanup, the workspace proxy, and home persistence across replaceme
 stop, and restart. It also repeats node start commands and checks that
 they preserve home writes and do not rerun initialization. Set `PWN_WORKSPACE_DAEMON_URL` if the daemon uses another address.
 Set `PWN_WORKSPACE_SECONDARY_DAEMON_URL` to also test moving a home to a second daemon
-and back through R2. The second daemon needs its own Btrfs volume directory and the
+and back through R2. The second daemon needs its own home image directory and the
 same signing key configuration; without it, that test is skipped.
 
 Tests use disposable D1/R2 databases and clean up their workspaces and volumes.
@@ -117,5 +113,11 @@ workflows still pending. Worker termination can leave operations claimed; recove
 must reconcile node state before releasing those claims.
 
 Home movement must finish retiring the old writable home before the destination
-starts. Snapshot uploads buffer at most one 5 MiB R2 part at a time, in addition
-to the incoming stream chunk. Periodic backups are not scheduled by this version.
+starts. Nodes compress snapshots before upload, then send Content-Length. The
+Worker streams each upload directly into R2 under its snapshot UUID, without
+buffering multipart chunks or copying a staging object. R2 completes the write
+before the upload response, and the node waits for that response before
+acknowledging export.
+Uploads still pass through the Worker and are subject to the Cloudflare plan’s
+request body limit; large home exports need a direct R2 transfer path before
+production use. Periodic backups are not scheduled by this version.

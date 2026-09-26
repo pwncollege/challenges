@@ -31,9 +31,8 @@ export const startWorkspaceWorkflow = Effect.fn("startWorkspaceWorkflow")(functi
   if (moving) {
     yield* emit({ event: "status", phase: "reclaiming_volume", message: "Moving home from its current node" });
     const snapshotUuid = claim.exportSnapshotUuid;
-    const uploadUrl = yield* snapshots.transferUrl("PUT", home.volumeUuid, snapshotUuid, snapshotUuid);
+    const uploadUrl = yield* snapshots.transferUrl("PUT", home.volumeUuid, snapshotUuid);
     yield* nodes.exportVolume(home.authoritativeNode!, home.volumeUuid, snapshotUuid, uploadUrl, existing?.workspaceUuid);
-    yield* snapshots.commit(home.volumeUuid, snapshotUuid, snapshotUuid);
     home = { ...home, snapshotUuid, authoritativeNode: null };
   }
   const snapshot = home.snapshotUuid ? {

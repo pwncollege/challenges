@@ -66,7 +66,7 @@ in
     volumeBasePath = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Optional Btrfs base path for persistent workspace volumes.";
+      description = "Optional directory for persistent ext4 home images.";
     };
 
   };

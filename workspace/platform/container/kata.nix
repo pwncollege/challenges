@@ -12,6 +12,7 @@ pkgs.runCommand "pwn-workspace-kata-config.toml" { nativeBuildInputs = [ pkgs.ga
 
   annotations_line="$(awk '$1 == "enable_annotations" { print; exit }' "$out")"
   substituteInPlace "$out" \
+    --replace-fail 'disable_block_device_use = true' 'disable_block_device_use = false' \
     --replace-fail \
       "$annotations_line" \
       'enable_annotations = ["enable_iommu", "virtio_fs_extra_args", "kernel_params", "kernel_verity_params", "default_memory"]'

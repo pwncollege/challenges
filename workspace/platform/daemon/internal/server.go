@@ -28,7 +28,7 @@ func New(cfg Config, runtime runtimeapi.RuntimeServiceClient, images runtimeapi.
 
 func (s *Server) Bootstrap(ctx context.Context) error {
 	if s.config.volumeBasePath != "" {
-		if err := assertBtrfsPath(s.config.volumeBasePath); err != nil {
+		if err := os.MkdirAll(s.config.volumeBasePath, 0700); err != nil {
 			return err
 		}
 	}

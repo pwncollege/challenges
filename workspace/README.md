@@ -29,7 +29,7 @@ provide the workspace runtime:
 An optional `publicKey` enables API request signature verification. It is the
 hex encoding of the raw 32-byte Ed25519 public key. The module also supports
 overriding the listen address, state paths, workspace subnet, and
-optional Btrfs volume path.
+optional directory for ext4 home images.
 
 Each workspace runtime generation gets a hardlinked store view below
 `<dataDir>/workspace-closures/`. Setup enters a private mount namespace,
