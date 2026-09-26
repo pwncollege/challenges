@@ -128,3 +128,33 @@ func signedRequest(
 	request.Header.Set("Content-Type", "application/json")
 	return request
 }
+
+func TestResourceCommandsDoNotOverlap(t *testing.T) {
+	s := &Server{}
+	entered, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	handler := s.withResourceLock("workspaceUUID", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(entered)
+		<-release
+		w.WriteHeader(http.StatusOK)
+	}))
+	request := func() *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/", nil)
+		r.SetPathValue("workspaceUUID", "11111111-1111-4111-8111-111111111111")
+		return r
+	}
+	go func() {
+		defer close(finished)
+		handler.ServeHTTP(httptest.NewRecorder(), request())
+	}()
+	<-entered
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request())
+	close(release)
+	<-finished
+	if response.Code != http.StatusLocked {
+		t.Fatalf("overlapping request = %d, want 423", response.Code)
+	}
+	if _, locked := s.resourceLocks.Load("workspaceUUID:11111111-1111-4111-8111-111111111111"); locked {
+		t.Fatal("completed command left its resource locked")
+	}
+}

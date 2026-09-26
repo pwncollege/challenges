@@ -1,33 +1,21 @@
-import type { Hono } from "hono";
-import { z } from "zod";
-import type { App, AppContext } from "../common.ts";
-import { jsonError, one } from "../common.ts";
+import { Effect, Schema } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { Environment } from "../common.ts";
 import { createSessionCookie } from "../session.ts";
-import { UUID_RE } from "../workspaces/schemas.ts";
+import { fromPromise, workspaceError } from "../workspaces/errors.ts";
+import { UUID } from "../workspaces/schemas.ts";
+import { WorkspaceStore } from "../workspaces/store.ts";
 
-const loginSchema = z.object({
-  user_uuid: z.string().regex(UUID_RE),
-});
+const loginSchema = Schema.Struct({ user_uuid: UUID });
 
-export function registerAuthRoutes(app: Hono<App>) {
-  app.post("/api/login", handleLogin);
-}
-
-async function handleLogin(c: AppContext) {
-  const parsed = loginSchema.safeParse(await c.req.json().catch(() => undefined));
-  if (!parsed.success) return jsonError(c, 400, "invalid_request", "Invalid request");
-
-  const user = await one<{ user_uuid: string }>(
-    c.env.DB.prepare("SELECT user_uuid FROM users WHERE user_uuid = ?").bind(parsed.data.user_uuid),
+export const AuthRoutes = HttpRouter.add("POST", "/api/login", Effect.gen(function*() {
+  const env = yield* Environment;
+  const store = yield* WorkspaceStore;
+  const payload = yield* HttpServerRequest.schemaBodyJson(loginSchema).pipe(
+    Effect.mapError(() => workspaceError("invalid_request", "Invalid request", 400)),
   );
-  if (!user) return jsonError(c, 404, "user_not_found", "User not found");
-
-  return c.json(
-    { user_uuid: user.user_uuid },
-    {
-      headers: {
-        "set-cookie": await createSessionCookie(c.env, user.user_uuid),
-      },
-    },
-  );
-}
+  const user = yield* store.findUser(payload.user_uuid);
+  if (!user) return yield* workspaceError("user_not_found", "User not found", 404);
+  const cookie = yield* fromPromise(() => createSessionCookie(env, user.user_uuid));
+  return HttpServerResponse.jsonUnsafe({ user_uuid: user.user_uuid }, { headers: { "set-cookie": cookie } });
+}));

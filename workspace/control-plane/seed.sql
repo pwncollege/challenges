@@ -17,12 +17,6 @@ SET
   status = CASE node_id WHEN 1 THEN 'active' WHEN 2 THEN 'disabled' ELSE status END
 WHERE node_id IN (1, 2);
 
-DELETE FROM user_workspace_locks WHERE user_id = 1;
-DELETE FROM volume_locks
-WHERE volume_id IN (
-  SELECT volume_id
-  FROM user_home_volumes
-  WHERE user_id = 1
-);
+DELETE FROM workspace_operations WHERE user_id = 1;
 DELETE FROM user_workspaces WHERE user_id = 1;
 DELETE FROM workspaces;

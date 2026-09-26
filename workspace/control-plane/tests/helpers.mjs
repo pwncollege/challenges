@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { Cause, Effect, Exit } from "effect";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
@@ -9,6 +10,16 @@ export async function loadModule(entryPoint) {
     format: "esm",
     platform: "node",
     write: false,
+    plugins: [{
+      name: "shared-effect",
+      setup(build) {
+        // Tests and bundled application modules must share Effect's runtime and
+        // schema interpreter. Absolute URLs also work from the data-URL module.
+        build.onResolve({ filter: /^effect(?:\/|$)/ }, ({ path }) => ({
+          path: import.meta.resolve(path), external: true,
+        }));
+      },
+    }],
   });
   const source = `${result.outputFiles[0].text}\n//# sourceURL=${entryPoint}\n`;
   return import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
@@ -38,4 +49,10 @@ export async function createBindings(t, options = {}) {
   await loadSQL(DB, "migrations/0001_schema.sql");
   await loadSQL(DB, "seed.sql");
   return { DB, VOLUMES, mf };
+}
+
+export async function runEffect(effect) {
+  const exit = await Effect.runPromiseExit(effect);
+  if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
+  return exit.value;
 }

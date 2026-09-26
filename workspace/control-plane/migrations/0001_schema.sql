@@ -30,9 +30,11 @@ CREATE TABLE IF NOT EXISTS user_workspaces (
   workspace_id INTEGER REFERENCES workspaces(workspace_id) ON DELETE SET NULL
 );
 
-CREATE TABLE IF NOT EXISTS user_workspace_locks (
+CREATE TABLE IF NOT EXISTS workspace_operations (
   user_id INTEGER PRIMARY KEY REFERENCES users(user_id) ON DELETE RESTRICT,
-  locked_at INTEGER NOT NULL
+  operation_uuid TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL CHECK (kind IN ('start', 'stop')),
+  created_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS volumes (
@@ -50,9 +52,4 @@ CREATE INDEX IF NOT EXISTS idx_volumes_updated_at ON volumes(updated_at);
 CREATE TABLE IF NOT EXISTS user_home_volumes (
   user_id INTEGER PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
   volume_id INTEGER NOT NULL UNIQUE REFERENCES volumes(volume_id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS volume_locks (
-  volume_id INTEGER PRIMARY KEY REFERENCES volumes(volume_id) ON DELETE RESTRICT,
-  locked_at INTEGER NOT NULL
 );

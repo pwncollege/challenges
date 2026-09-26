@@ -207,7 +207,7 @@ test("a failed daemon start releases the control-plane claim", async () => {
     "SELECT COUNT(*) AS count FROM user_workspaces WHERE user_id = 1",
   ).first("count");
   const lockCount = await db.prepare(
-    "SELECT COUNT(*) AS count FROM user_workspace_locks WHERE user_id = 1",
+    "SELECT COUNT(*) AS count FROM workspace_operations WHERE user_id = 1",
   ).first("count");
   assert.equal(workspaceCount, 0);
   assert.equal(lockCount, 0);
@@ -230,6 +230,30 @@ test("start, proxy, replace, stop, and restart preserve the home volume", async 
     stderr: "",
   });
 
+  const home = await homeVolume();
+  const runtimeConfig = JSON.parse(await db.prepare("SELECT runtime_config_json FROM workspaces WHERE workspace_uuid = ?")
+    .bind(first.complete.workspace_uuid).first("runtime_config_json"));
+  const command = (path, body) => daemonFetch(path, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  assert.deepEqual(await execWorkspace(first.complete.url, [
+    "/bin/sh", "-c", "rm /home/hacker/init.txt && printf retry-marker > /home/hacker/init.txt",
+  ]), { exit_code: 0, stdout: "", stderr: "" });
+  const activatePath = `/api/volumes/${home.volume_uuid}/activate`;
+  assert.equal((await command(activatePath, {
+    activation_uuid: first.complete.workspace_uuid, snapshot_uuid: null,
+  })).status, 200);
+  assert.equal((await command(activatePath, {
+    activation_uuid: crypto.randomUUID(), snapshot_uuid: null,
+  })).status, 409);
+  const startPath = `/api/workspaces/${first.complete.workspace_uuid}/start`;
+  const nodeBody = { runtime_config: runtimeConfig, volume: { volume_uuid: home.volume_uuid, dst_path: "/home/hacker" } };
+  assert.equal((await command(startPath, nodeBody)).status, 200);
+  assert.equal((await execWorkspace(first.complete.url, ["cat", "/home/hacker/init.txt"])).stdout, "retry-marker");
+  assert.equal((await command(startPath, { ...nodeBody, runtime_config: { container_image_ref: IMAGE } })).status, 409);
+  assert.deepEqual(await execWorkspace(first.complete.url, ["/bin/sh", "-c", "printf initialized > /home/hacker/init.txt"]),
+    { exit_code: 0, stdout: "", stderr: "" });
+
   const replacement = await startWorkspace({
     runtime_config: {
       container_image_ref: IMAGE,
@@ -243,6 +267,8 @@ test("start, proxy, replace, stop, and restart preserve the home volume", async 
   assert.equal(replacement.response.status, 200);
   assert.ok(replacement.complete?.workspace_uuid, JSON.stringify(replacement.error ?? replacement.events));
   assert.notEqual(replacement.complete.workspace_uuid, first.complete.workspace_uuid);
+
+  assert.equal((await command(startPath, nodeBody)).status, 409, "a delayed start must not resurrect the stopped workspace");
 
   executed = await execWorkspace(replacement.complete.url, ["cat", "/home/hacker/init.txt"]);
   assert.equal(executed.exit_code, 0);

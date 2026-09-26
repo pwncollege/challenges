@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createBindings, loadModule } from "./helpers.mjs";
+import { createBindings, loadModule, runEffect } from "./helpers.mjs";
 
-const { storeSnapshotStream } = await loadModule("src/storage.ts");
+import { Effect } from "effect";
+const { SnapshotStore, Environment } = await loadModule("tests/fixtures/services.ts");
+const storeSnapshotStream = (bucket, body) => runEffect(Effect.gen(function*() {
+  const snapshots = yield* SnapshotStore.make;
+  return yield* snapshots.upload("volume", "snapshot", "upload", body);
+}).pipe(Effect.provideService(Environment, { VOLUMES: bucket })));
 const PART_SIZE = 5 * 1024 * 1024;
 
 for (const size of [0, 13, PART_SIZE, 2 * PART_SIZE + 13]) {
@@ -18,8 +23,8 @@ for (const size of [0, 13, PART_SIZE, 2 * PART_SIZE + 13]) {
         controller.close();
       },
     });
-    await storeSnapshotStream(VOLUMES, "snapshot", body);
-    const object = await VOLUMES.get("snapshot");
+    const key = await storeSnapshotStream(VOLUMES, body);
+    const object = await VOLUMES.get(key);
     assert.equal(object.size, size);
     assert.deepEqual(new Uint8Array(await object.arrayBuffer()), contents);
   });
@@ -39,7 +44,7 @@ test("failed multipart uploads abort and cancel the source stream", async () => 
     pull(controller) { controller.enqueue(new Uint8Array(PART_SIZE)); },
     cancel() { cancelled = true; },
   });
-  await assert.rejects(() => storeSnapshotStream(bucket, "snapshot", body), failure);
+  await assert.rejects(() => storeSnapshotStream(bucket, body), { code: "internal_error", cause: failure });
   assert.equal(aborted, true);
   assert.equal(cancelled, true);
 });

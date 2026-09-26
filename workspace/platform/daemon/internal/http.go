@@ -37,11 +37,11 @@ func (s *Server) Handler() http.Handler {
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("GET /api/health", s.handleHealth)
 
-	apiMux.Handle("POST /api/workspaces/{workspaceUUID}/start", s.withUUID("workspaceUUID", http.HandlerFunc(s.handleWorkspaceStart)))
-	apiMux.Handle("POST /api/workspaces/{workspaceUUID}/stop", s.withUUID("workspaceUUID", http.HandlerFunc(s.handleWorkspaceStop)))
+	apiMux.Handle("POST /api/workspaces/{workspaceUUID}/start", s.withUUID("workspaceUUID", s.withResourceLock("workspaceUUID", http.HandlerFunc(s.handleWorkspaceStart))))
+	apiMux.Handle("POST /api/workspaces/{workspaceUUID}/stop", s.withUUID("workspaceUUID", s.withResourceLock("workspaceUUID", http.HandlerFunc(s.handleWorkspaceStop))))
 
 	handleVolume := func(pattern string, handler http.HandlerFunc) {
-		apiMux.Handle(pattern, s.withUUID("volumeUUID", s.withVolumeStorage(s.withVolumeLock(handler))))
+		apiMux.Handle(pattern, s.withUUID("volumeUUID", s.withVolumeStorage(s.withResourceLock("volumeUUID", handler))))
 	}
 	handleVolume("POST /api/volumes/{volumeUUID}/activate", s.handleVolumeActivate)
 	handleVolume("POST /api/volumes/{volumeUUID}/deactivate", s.handleVolumeDeactivate)
@@ -193,4 +193,17 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func (s *Server) withResourceLock(parameter string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := parameter + ":" + r.PathValue(parameter)
+		if _, locked := s.resourceLocks.LoadOrStore(key, struct{}{}); locked {
+			w.Header().Set("Retry-After", "1")
+			jsonError(w, http.StatusLocked, "resource_locked", "Resource operation in progress")
+			return
+		}
+		defer s.resourceLocks.Delete(key)
+		next.ServeHTTP(w, r)
+	})
 }

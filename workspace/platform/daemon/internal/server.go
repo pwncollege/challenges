@@ -15,16 +15,14 @@ type Server struct {
 	runtime       runtimeapi.RuntimeServiceClient
 	images        runtimeapi.ImageServiceClient
 	proxies       sync.Map
-	volumeLocks   map[string]struct{}
-	volumeLocksMu sync.Mutex
+	resourceLocks sync.Map
 }
 
 func New(cfg Config, runtime runtimeapi.RuntimeServiceClient, images runtimeapi.ImageServiceClient) *Server {
 	return &Server{
-		config:      cfg,
-		runtime:     runtime,
-		images:      images,
-		volumeLocks: map[string]struct{}{},
+		config:  cfg,
+		runtime: runtime,
+		images:  images,
 	}
 }
 

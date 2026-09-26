@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { build } from "esbuild";
-import { createBindings } from "./helpers.mjs";
+import { createBindings, loadModule } from "./helpers.mjs";
+
+import { Schema } from "effect";
+const { WorkspaceEvent } = await loadModule("tests/fixtures/services.ts");
+const decodeEvent = Schema.decodeUnknownSync(WorkspaceEvent);
 
 const bundle = await build({ entryPoints: ["src/index.ts"], bundle: true, format: "esm", write: false });
 const userUUID = "11111111-1111-4111-8111-111111111111";
@@ -81,11 +85,10 @@ for (const outcome of ["success", "http-error", "network-error", "missing-upload
       body: JSON.stringify({ node_uuid: targetNodeUUID, runtime_config: { container_image_ref: "test" } }),
     });
     assert.equal(response.status, 200);
-    const events = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+    const events = (await response.text()).trim().split("\n").map((line) => decodeEvent(JSON.parse(line)));
     const error = events.find((event) => event.event === "error");
     const volume = await DB.prepare("SELECT node_id, snapshot_uuid FROM volumes WHERE volume_id = 1").first();
-    assert.equal(await DB.prepare("SELECT COUNT(*) AS count FROM user_workspace_locks").first("count"), 0);
-    assert.equal(await DB.prepare("SELECT COUNT(*) AS count FROM volume_locks").first("count"), 0);
+    assert.equal(await DB.prepare("SELECT COUNT(*) AS count FROM workspace_operations").first("count"), 0);
 
     if (outcome === "missing-upload") {
       assert.equal(error?.code, "volume_reclaim_failed");

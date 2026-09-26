@@ -1,5 +1,5 @@
-import type { Bindings } from "../common.ts";
 import { rows } from "../common.ts";
+import { expectChanges, owned, ownsOperation, releaseOperation, type OperationClaim } from "./operations.ts";
 import { workspaceError } from "./errors.ts";
 import type { CurrentWorkspace, WorkspaceStatus } from "./types.ts";
 
@@ -17,24 +17,18 @@ type StopClaimRows = {
   }[];
 };
 
-function expectChanges(result: D1Result<unknown>, expected: number, code = "database_conflict") {
-  if (result.meta.changes !== expected) {
-    throw workspaceError(code, code);
-  }
-}
-
-export async function claimWorkspaceStop(env: Bindings, userUUID: string, now: number) {
+export async function claimWorkspaceStop(db: D1Database, userUUID: string, operationUuid: string, now: number) {
   let results: D1Result<unknown>[];
   try {
-    results = await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO user_workspace_locks (user_id, locked_at)
-         SELECT user_id, ?
+    results = await db.batch([
+      db.prepare(
+        `INSERT INTO workspace_operations (user_id, operation_uuid, kind, created_at)
+         SELECT user_id, ?, 'stop', ?
          FROM users
          WHERE user_uuid = ?`,
-      ).bind(now, userUUID),
-      env.DB.prepare("SELECT user_id FROM users WHERE user_uuid = ?").bind(userUUID),
-      env.DB.prepare(
+      ).bind(operationUuid, now, userUUID),
+      db.prepare("SELECT user_id FROM users WHERE user_uuid = ?").bind(userUUID),
+      db.prepare(
         `SELECT
            ws.workspace_id,
            ws.workspace_uuid,
@@ -51,7 +45,7 @@ export async function claimWorkspaceStop(env: Bindings, userUUID: string, now: n
            ON n.node_id = ws.node_id
          WHERE u.user_uuid = ?`,
       ).bind(userUUID),
-      env.DB.prepare(
+      db.prepare(
         `UPDATE workspaces
          SET status = 'destroying', updated_at = ?
          WHERE workspace_id = (
@@ -72,17 +66,18 @@ export async function claimWorkspaceStop(env: Bindings, userUUID: string, now: n
   if (claimRows.userRows.length === 0) throw workspaceError("user_not_found", "User not found", 404);
   if (claimRows.lockChanges !== 1) throw workspaceError("workspace_operation_in_progress", "Workspace operation in progress", 409);
   if (claimRows.workspaceRows.length === 0) {
-    await releaseWorkspaceStopClaim(env, claimRows.userRows[0].user_id);
+    await releaseOperation(db, { userId: claimRows.userRows[0].user_id, operationUuid }).run();
     throw workspaceError("workspace_not_found", "Workspace not found", 404);
   }
   if (claimRows.workspaceRows[0].status !== "running" || claimRows.destroyingChanges !== 1) {
-    await releaseWorkspaceStopClaim(env, claimRows.userRows[0].user_id);
+    await releaseOperation(db, { userId: claimRows.userRows[0].user_id, operationUuid }).run();
     throw workspaceError("workspace_operation_in_progress", "Workspace operation in progress", 409);
   }
 
   const workspace = claimRows.workspaceRows[0];
   return {
     userId: claimRows.userRows[0].user_id,
+    operationUuid,
     workspace: {
       workspaceId: workspace.workspace_id,
       workspaceUuid: workspace.workspace_uuid,
@@ -96,29 +91,20 @@ export async function claimWorkspaceStop(env: Bindings, userUUID: string, now: n
   };
 }
 
-export async function completeWorkspaceStop(env: Bindings, userId: number, workspaceId: number) {
-  const results = await env.DB.batch([
-    env.DB.prepare("DELETE FROM user_workspaces WHERE user_id = ? AND workspace_id = ?").bind(userId, workspaceId),
-    env.DB.prepare("DELETE FROM workspaces WHERE workspace_id = ?").bind(workspaceId),
-    env.DB.prepare("DELETE FROM user_workspace_locks WHERE user_id = ?").bind(userId),
+export async function completeWorkspaceStop(db: D1Database, claim: OperationClaim, workspaceId: number) {
+  const results = await db.batch([
+    owned(db, claim, `DELETE FROM user_workspaces WHERE workspace_id = ? AND ${ownsOperation}`, workspaceId),
+    owned(db, claim, `DELETE FROM workspaces WHERE workspace_id = ? AND ${ownsOperation}`, workspaceId),
+    releaseOperation(db, claim),
   ]);
-  expectChanges(results[0], 1);
-  expectChanges(results[1], 1);
-  expectChanges(results[2], 1);
+  for (const result of results) expectChanges(result);
 }
 
-export async function failWorkspaceStop(env: Bindings, userId: number, workspaceId: number, now: number) {
-  await env.DB.batch([
-    env.DB.prepare("UPDATE workspaces SET status = 'running', updated_at = ? WHERE workspace_id = ?").bind(
-      now,
-      workspaceId,
-    ),
-    env.DB.prepare("DELETE FROM user_workspace_locks WHERE user_id = ?").bind(userId),
-  ]).catch(() => undefined);
-}
-
-async function releaseWorkspaceStopClaim(env: Bindings, userId: number) {
-  await env.DB.prepare("DELETE FROM user_workspace_locks WHERE user_id = ?").bind(userId).run().catch(() => undefined);
+export async function failWorkspaceStop(db: D1Database, claim: OperationClaim, workspaceId: number, now: number) {
+  await db.batch([
+    owned(db, claim, `UPDATE workspaces SET status = 'running', updated_at = ? WHERE workspace_id = ? AND ${ownsOperation}`, now, workspaceId),
+    releaseOperation(db, claim),
+  ]);
 }
 
 function parseStopClaimRows(results: D1Result<unknown>[]): StopClaimRows {

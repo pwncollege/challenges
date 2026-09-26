@@ -266,6 +266,39 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 		t.Fatalf("start status = %d: %s", startResponse.StatusCode, body)
 	}
 
+	replay := func(handler http.Handler, action string, body []byte, want int) {
+		t.Helper()
+		request := signedRequest(t, privateKey, http.MethodPost, "/api/workspaces/"+workspaceUUID+"/"+action, body, time.Now())
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != want {
+			t.Fatalf("replay %s = %d, want %d: %s", action, response.Code, want, response.Body.String())
+		}
+	}
+	state.mu.Lock()
+	originalRequest := state.sandboxRequest
+	state.mu.Unlock()
+	replay(server.Handler(), "start", startBody, http.StatusOK)
+	restarted := daemon.New(cfg, runtimeapi.NewRuntimeServiceClient(containerd), runtimeapi.NewImageServiceClient(containerd))
+	if err := restarted.Bootstrap(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	replay(restarted.Handler(), "start", startBody, http.StatusOK)
+	replay(restarted.Handler(), "start", bytes.ReplaceAll(startBody, []byte("test-workspace:latest"), []byte("other-image:latest")), http.StatusConflict)
+	state.mu.Lock()
+	state.container.State = runtimeapi.ContainerState_CONTAINER_EXITED
+	state.mu.Unlock()
+	replay(restarted.Handler(), "start", startBody, http.StatusConflict)
+	state.mu.Lock()
+	reused := state.sandboxRequest == originalRequest
+	// A crash after RunPodSandbox but before CreateContainer must be recoverable.
+	state.container = nil
+	state.mu.Unlock()
+	if !reused {
+		t.Fatal("matching starts recreated the running workspace")
+	}
+	replay(restarted.Handler(), "start", startBody, http.StatusOK)
+
 	state.mu.Lock()
 	sandboxRequest := state.sandboxRequest
 	createRequest := state.createRequest
@@ -334,6 +367,9 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 		body, _ := io.ReadAll(stopResponse.Body)
 		t.Fatalf("stop status = %d: %s", stopResponse.StatusCode, body)
 	}
+
+	replay(server.Handler(), "stop", nil, http.StatusOK)
+	replay(restarted.Handler(), "start", startBody, http.StatusConflict)
 
 	state.mu.Lock()
 	sandboxRemoved := state.sandbox == nil

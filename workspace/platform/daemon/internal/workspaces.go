@@ -2,6 +2,9 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -42,14 +45,61 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Workspace UUIDs identify one lifetime. A delayed start must not undo a stop.
+	if _, err := os.Stat(s.workspaceStoppedPath(workspaceUUID)); err == nil {
+		jsonError(w, http.StatusConflict, "workspace_stopped", "Workspace has been stopped")
+		return
+	} else if !os.IsNotExist(err) {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
 	existing, err := s.workspaceSandboxes(r.Context(), workspaceUUID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	if len(existing) > 0 {
-		jsonError(w, http.StatusConflict, "workspace_exists", "Workspace already exists")
+	if len(existing) > 1 {
+		jsonError(w, http.StatusConflict, "workspace_request_conflict", "Workspace has multiple sandboxes")
 		return
+	}
+	for _, sandbox := range existing {
+		if sandbox.Labels[startRequestLabel] != startRequestHash(body) {
+			jsonError(w, http.StatusConflict, "workspace_request_conflict", "Workspace UUID has different start parameters")
+			return
+		}
+		containers, err := s.runtime.ListContainers(r.Context(), &runtimeapi.ListContainersRequest{
+			Filter: &runtimeapi.ContainerFilter{PodSandboxId: sandbox.Id},
+		})
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+			return
+		}
+		for _, container := range containers.Containers {
+			if container.State == runtimeapi.ContainerState_CONTAINER_EXITED {
+				jsonError(w, http.StatusConflict, "workspace_exited", "Workspace container has exited")
+				return
+			}
+		}
+		if sandbox.State == runtimeapi.PodSandboxState_SANDBOX_READY &&
+			len(containers.Containers) == 1 && containers.Containers[0].State == runtimeapi.ContainerState_CONTAINER_RUNNING {
+			ip, err := s.sandboxIP(r.Context(), sandbox.Id)
+			if err == nil {
+				err = waitForAgent(r.Context(), ip, s.config.agentPort)
+			}
+			if err != nil {
+				jsonError(w, http.StatusBadGateway, "workspace_agent_unreachable", err.Error())
+				return
+			}
+			s.proxies.Store(workspaceUUID, ip)
+			writeJSON(w, http.StatusOK, map[string]any{"workspace_uuid": workspaceUUID})
+			return
+		}
+		// A daemon restart may leave an incomplete matching sandbox.
+		if err := s.removeSandbox(r.Context(), sandbox.Id); err != nil {
+			jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+			return
+		}
 	}
 
 	active := ""
@@ -125,7 +175,7 @@ func (s *Server) workspaceContainerConfig(
 	body workspaceStartRequest,
 	activeVolumePath string,
 ) (*runtimeapi.PodSandboxConfig, *runtimeapi.ContainerConfig) {
-	labels := map[string]string{workspaceLabel: workspaceUUID}
+	labels := map[string]string{workspaceLabel: workspaceUUID, startRequestLabel: startRequestHash(body)}
 	if body.Volume != nil {
 		labels[volumeLabel] = body.Volume.VolumeUUID
 	}
@@ -195,6 +245,16 @@ func (s *Server) workspaceContainerConfig(
 
 func (s *Server) handleWorkspaceStop(w http.ResponseWriter, r *http.Request) {
 	workspaceUUID := r.PathValue("workspaceUUID")
+	stopped := s.workspaceStoppedPath(workspaceUUID)
+	if err := os.MkdirAll(filepath.Dir(stopped), 0o711); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if err := os.WriteFile(stopped, nil, 0o600); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
 	sandboxes, err := s.workspaceSandboxes(r.Context(), workspaceUUID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
@@ -289,4 +349,16 @@ func environment(values map[string]string) []*runtimeapi.KeyValue {
 		env = append(env, &runtimeapi.KeyValue{Key: name, Value: values[name]})
 	}
 	return env
+}
+
+const startRequestLabel = "pwn.start-request-sha256"
+
+func startRequestHash(body workspaceStartRequest) string {
+	data, _ := json.Marshal(body)
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func (s *Server) workspaceStoppedPath(workspaceUUID string) string {
+	return filepath.Join(s.config.logDirectory, workspaceUUID, ".stopped")
 }

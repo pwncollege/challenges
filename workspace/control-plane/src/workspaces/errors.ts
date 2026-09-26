@@ -1,24 +1,25 @@
-import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { Data, Effect } from "effect";
 
 export type WorkspaceErrorDetails = {
   code: string;
   message: string;
-  status: ContentfulStatusCode;
+  status: number;
 };
 
-export class WorkspaceError extends Error {
-  constructor(
-    public readonly code: string,
-    message = code,
-    public readonly status: ContentfulStatusCode = 500,
-    options?: ErrorOptions,
-  ) {
-    super(message, options);
-  }
+export class WorkspaceError extends Data.TaggedError("WorkspaceError")<WorkspaceErrorDetails & { cause?: unknown }> {}
+
+export function workspaceError(code: string, message = code, status = 500, cause?: unknown) {
+  return new WorkspaceError({ code, message, status, cause });
 }
 
-export function workspaceError(code: string, message = code, status: ContentfulStatusCode = 500, cause?: unknown) {
-  return new WorkspaceError(code, message, status, cause === undefined ? undefined : { cause });
+// Adapt the native D1, R2, and Web Crypto APIs at the edge of the Effect program.
+export function fromPromise<A>(run: () => Promise<A>) {
+  return Effect.tryPromise({
+    try: run,
+    catch: (cause) => cause instanceof WorkspaceError
+      ? cause
+      : workspaceError("internal_error", cause instanceof Error ? cause.message : "Internal error", 500, cause),
+  });
 }
 
 export function workspaceErrorDetails(error: unknown): WorkspaceErrorDetails {
@@ -31,7 +32,7 @@ export function workspaceErrorDetails(error: unknown): WorkspaceErrorDetails {
   return { code: "internal_error", message: "Internal error", status: 500 };
 }
 
-export function contentfulStatus(status: number, fallback: ContentfulStatusCode = 500): ContentfulStatusCode {
+export function contentfulStatus(status: number, fallback = 500): number {
   switch (status) {
     case 400:
     case 401:

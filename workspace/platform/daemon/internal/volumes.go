@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,7 +39,8 @@ type btrfsSendArgs struct {
 }
 
 type volumeActivateRequest struct {
-	SnapshotUUID *string `json:"snapshot_uuid"`
+	ActivationUUID string  `json:"activation_uuid"`
+	SnapshotUUID   *string `json:"snapshot_uuid"`
 }
 
 type volumeSnapshotRequest struct {
@@ -56,8 +58,8 @@ func (s *Server) handleVolumeActivate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if body.SnapshotUUID != nil && !validUUID(*body.SnapshotUUID) {
-		jsonError(w, http.StatusBadRequest, "invalid_request", "Invalid snapshot UUID")
+	if !validUUID(body.ActivationUUID) || (body.SnapshotUUID != nil && !validUUID(*body.SnapshotUUID)) {
+		jsonError(w, http.StatusBadRequest, "invalid_request", "Invalid activation or snapshot UUID")
 		return
 	}
 
@@ -66,22 +68,52 @@ func (s *Server) handleVolumeActivate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	active := s.activePath(volumeUUID)
+	identity, _ := json.Marshal(body)
+	identityPath := filepath.Join(s.volumeRoot(volumeUUID), ".activation.json")
 	if _, err := os.Stat(active); err == nil {
-		jsonError(w, http.StatusConflict, "active_exists", "Active volume exists")
+		previous, err := os.ReadFile(identityPath)
+		if err != nil || !bytes.Equal(previous, identity) {
+			jsonError(w, http.StatusConflict, "activation_conflict", "Volume has a different activation")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "activated"})
+		return
+	} else if !os.IsNotExist(err) {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	if body.SnapshotUUID != nil {
-		if err := btrfs.SubvolSnapshot(active, s.snapshotPath(volumeUUID, *body.SnapshotUUID), false); err != nil {
+	// Publish only a fully initialized volume. Retrying after a daemon restart
+	// removes the unpublished subvolume and recreates it from the same snapshot.
+	preparing := filepath.Join(s.volumeRoot(volumeUUID), ".activating")
+	if _, err := os.Stat(preparing); err == nil {
+		if err := btrfs.SubvolDelete(preparing); err != nil {
 			jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
 		}
-	} else if err := btrfs.SubvolCreate(active); err != nil {
+	}
+	if body.SnapshotUUID != nil {
+		if err := btrfs.SubvolSnapshot(preparing, s.snapshotPath(volumeUUID, *body.SnapshotUUID), false); err != nil {
+			jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+			return
+		}
+	} else if err := btrfs.SubvolCreate(preparing); err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
-	} else if err := os.Chown(active, 1000, 1000); err != nil {
+	} else if err := os.Chown(preparing, 1000, 1000); err != nil {
+		_ = btrfs.SubvolDelete(preparing)
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
+	defer btrfs.SubvolDelete(preparing)
+	if err := os.WriteFile(identityPath, identity, 0o600); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if err := os.Rename(preparing, active); err != nil {
+		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "activated"})
 }
 
@@ -120,12 +152,12 @@ func (s *Server) handleVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	active := s.activePath(volumeUUID)
 	snapshot := s.snapshotPath(volumeUUID, body.SnapshotUUID)
-	if _, err := os.Stat(active); err != nil {
-		jsonError(w, http.StatusNotFound, "active_not_found", "Active volume not found")
-		return
-	}
 	if _, err := os.Stat(snapshot); err == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "exists"})
+		return
+	}
+	if _, err := os.Stat(active); err != nil {
+		jsonError(w, http.StatusNotFound, "active_not_found", "Active volume not found")
 		return
 	}
 	if err := btrfs.SubvolSnapshot(snapshot, active, true); err != nil {
@@ -231,6 +263,7 @@ func (s *Server) handleVolumeDelete(w http.ResponseWriter, r *http.Request) {
 		_ = btrfsRemoveAll(receivingRoot)
 		_ = btrfsRemoveAll(filepath.Join(root, "snapshots"))
 		_ = btrfs.SubvolDelete(s.activePath(volumeUUID))
+		_ = btrfs.SubvolDelete(filepath.Join(root, ".activating"))
 		_ = os.RemoveAll(root)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "status": "deleted"})
@@ -254,29 +287,6 @@ func (s *Server) ensureVolumeDirs(volumeUUID string) error {
 		return err
 	}
 	return os.MkdirAll(filepath.Join(root, "receiving"), 0o755)
-}
-
-func (s *Server) withVolumeLock(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		volumeUUID := r.PathValue("volumeUUID")
-
-		s.volumeLocksMu.Lock()
-		if _, locked := s.volumeLocks[volumeUUID]; locked {
-			s.volumeLocksMu.Unlock()
-			w.Header().Set("Retry-After", "5")
-			jsonError(w, http.StatusLocked, "volume_locked", "Volume is locked")
-			return
-		}
-		s.volumeLocks[volumeUUID] = struct{}{}
-		s.volumeLocksMu.Unlock()
-
-		defer func() {
-			s.volumeLocksMu.Lock()
-			defer s.volumeLocksMu.Unlock()
-			delete(s.volumeLocks, volumeUUID)
-		}()
-		next.ServeHTTP(w, r)
-	})
 }
 
 func validUUID(value string) bool {

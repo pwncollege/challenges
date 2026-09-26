@@ -76,3 +76,36 @@ the workspace runtime runs `/challenge/.init` if present. All workspaces receive
 `CAP_SYS_PTRACE`, `CAP_SYS_ADMIN`, and `CAP_NET_ADMIN` inside their Kata VM.
 Environment variables are opaque runtime configuration. `PWN_FLAG` is optional;
 when present, the workspace runtime writes it to `/flag`.
+
+
+## Retrying commands
+
+Start and stop commands for one workspace are serialized. An overlapping command
+gets `423 resource_locked`. Repeating a successful start with the same parameters
+returns the existing workspace without rerunning initialization. Different
+parameters return `409 workspace_request_conflict`. The request fingerprint lives
+in CRI labels, so it survives daemon restarts. An incomplete matching sandbox is
+removed and recreated on retry.
+
+A workspace UUID identifies one lifetime. Stop records a `.stopped` marker under
+`PWN_WORKSPACE_LOG_DIRECTORY` before removing CRI resources, and repeated stops
+succeed. A subsequent start of that UUID returns `409 workspace_stopped`. Keep the
+log directory to retain those markers; they are not a durable execution log for
+host loss or reboot when that directory is on temporary storage.
+
+`POST /api/volumes/<volume-uuid>/activate` requires:
+
+```json
+{
+  "activation_uuid": "11111111-1111-4111-8111-111111111111",
+  "snapshot_uuid": null
+}
+```
+
+Use a snapshot UUID to restore a downloaded snapshot, or `null` for a fresh home.
+The coordinator supplies the same activation UUID on retries. A matching active
+volume is returned unchanged; another activation returns `409 activation_conflict`.
+The daemon initializes a temporary subvolume before publishing it as `active`,
+with activation metadata outside the guest's mounted home. Volume commands are
+serialized and return `423 resource_locked` when another command is in progress.
+The coordinator must own the user's operation throughout a command and its retries.

@@ -1,3 +1,6 @@
+import type { OperationClaim } from "./operations.ts";
+import type { RuntimeConfig } from "./schemas.ts";
+
 export type User = {
   userId: number;
   userUUID: string;
@@ -20,12 +23,6 @@ export type NodeRef = {
 
 export type WorkspaceStatus = "creating" | "running" | "destroying";
 
-export type RuntimeConfig = {
-  container_image_ref: string;
-  entrypoint?: string[];
-  env?: Record<string, string>;
-};
-
 export type HomeVolume = {
   volumeId: number;
   volumeUuid: string;
@@ -33,8 +30,7 @@ export type HomeVolume = {
   authoritativeNode: null | NodeRef;
 };
 
-export type ClaimedWorkspaceStart = {
-  userId: number;
+export type ClaimedWorkspaceStart = OperationClaim & {
   workspace: {
     workspaceId: number;
     workspaceUuid: string;

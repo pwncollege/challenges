@@ -1,4 +1,4 @@
-import type { AppContext, Bindings } from "../common.ts";
+import type { Bindings } from "../common.ts";
 import { canonicalRequest, importPrivateKey, importPublicKey, signCanonical, verifyCanonical } from "../signing.ts";
 
 async function signTransferURL(env: Bindings, method: "GET" | "PUT", pathAndQuery: string, expires: string) {
@@ -6,18 +6,18 @@ async function signTransferURL(env: Bindings, method: "GET" | "PUT", pathAndQuer
   return signCanonical(privateKey, canonicalRequest(method, pathAndQuery, expires));
 }
 
-export async function verifyTransferURL(c: AppContext, method: "GET" | "PUT") {
-  const expires = c.req.query("expires") ?? "";
-  const signature = c.req.query("signature") ?? "";
+export async function verifyTransferURL(env: Bindings, requestURL: string, method: "GET" | "PUT") {
+  const url = new URL(requestURL);
+  const expires = url.searchParams.get("expires") ?? "";
+  const signature = url.searchParams.get("signature") ?? "";
   const expiresAt = Number(expires);
   if (!Number.isSafeInteger(expiresAt) || expiresAt < Math.floor(Date.now() / 1000)) {
     return false;
   }
 
-  const url = new URL(c.req.url);
   url.searchParams.delete("signature");
   const canonical = canonicalRequest(method, `${url.pathname}${url.search}`, expires);
-  const publicKey = await importPublicKey(c.env.PWN_WORKSPACE_PUBLIC_KEY_B64);
+  const publicKey = await importPublicKey(env.PWN_WORKSPACE_PUBLIC_KEY_B64);
   return verifyCanonical(publicKey, canonical, signature).catch(() => false);
 }
 

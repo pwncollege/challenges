@@ -1,10 +1,13 @@
-import type { Bindings } from "./common.ts";
+import { Context, Effect, Layer } from "effect";
+import { Environment } from "./common.ts";
+import { fromPromise, workspaceError } from "./workspaces/errors.ts";
+import { transferUrl, verifyTransferURL } from "./volumes/transfers.ts";
 
 const SNAPSHOT_PART_SIZE = 5 * 1024 * 1024;
 
 // Btrfs send streams have no Content-Length. R2 requires each uploaded part to
 // have a known length, so buffer one part at a time instead of the whole home.
-export async function storeSnapshotStream(bucket: R2Bucket, key: string, body: ReadableStream<Uint8Array>) {
+async function storeSnapshotStream(bucket: R2Bucket, key: string, body: ReadableStream<Uint8Array>) {
   const reader = body.getReader();
   const buffer = new Uint8Array(SNAPSHOT_PART_SIZE);
   let used = 0;
@@ -42,29 +45,62 @@ export async function storeSnapshotStream(bucket: R2Bucket, key: string, body: R
   }
 }
 
-export function committedSnapshotKey(volumeUUID: string, snapshotUUID: string) {
+function committedSnapshotKey(volumeUUID: string, snapshotUUID: string) {
   return `snapshots/${volumeUUID}/${snapshotUUID}`;
 }
 
-export function stagingSnapshotKey(volumeUUID: string, snapshotUUID: string, uploadUUID: string) {
+function stagingSnapshotKey(volumeUUID: string, snapshotUUID: string, uploadUUID: string) {
   return `staging/${volumeUUID}/${snapshotUUID}/${uploadUUID}`;
 }
 
-export async function commitStagedSnapshot(
-  env: Bindings,
+async function commitStagedSnapshot(
+  bucket: R2Bucket,
   volumeUUID: string,
   snapshotUUID: string,
   uploadUUID: string,
 ) {
   const stagingKey = stagingSnapshotKey(volumeUUID, snapshotUUID, uploadUUID);
   const committedKey = committedSnapshotKey(volumeUUID, snapshotUUID);
-  const stagingObject = await env.VOLUMES.get(stagingKey);
+  const stagingObject = await bucket.get(stagingKey);
   if (!stagingObject) return false;
 
-  await env.VOLUMES.put(committedKey, stagingObject.body);
-  const committed = await env.VOLUMES.head(committedKey);
+  await bucket.put(committedKey, stagingObject.body);
+  const committed = await bucket.head(committedKey);
   if (!committed) return false;
 
-  await env.VOLUMES.delete(stagingKey).catch(() => undefined);
+  await bucket.delete(stagingKey).catch(() => undefined);
   return true;
+}
+
+export class SnapshotStore extends Context.Service<SnapshotStore>()("control-plane/SnapshotStore", {
+  make: Effect.gen(function*() {
+    const env = yield* Environment;
+    const bucket = env.VOLUMES;
+    return {
+      read: (volumeUUID: string, snapshotUUID: string) =>
+        fromPromise(() => bucket.get(committedSnapshotKey(volumeUUID, snapshotUUID))).pipe(
+          Effect.flatMap((object) => object
+            ? Effect.succeed(object.body)
+            : Effect.fail(workspaceError("snapshot_not_found", "Snapshot not found", 404))),
+        ),
+      upload: (volumeUUID: string, snapshotUUID: string, uploadUUID: string, body: ReadableStream<Uint8Array>) => {
+        const key = stagingSnapshotKey(volumeUUID, snapshotUUID, uploadUUID);
+        return fromPromise(() => storeSnapshotStream(bucket, key, body)).pipe(Effect.as(key));
+      },
+      commit: (volumeUUID: string, snapshotUUID: string, uploadUUID: string) =>
+        fromPromise(() => commitStagedSnapshot(bucket, volumeUUID, snapshotUUID, uploadUUID)).pipe(
+          Effect.flatMap((committed) => committed ? Effect.void : Effect.fail(workspaceError("volume_reclaim_failed"))),
+        ),
+      transferUrl: (method: "GET" | "PUT", volumeUUID: string, snapshotUUID: string, uploadUUID?: string) =>
+        fromPromise(() => transferUrl(env, method, volumeUUID, snapshotUUID, uploadUUID)),
+      verifyTransfer: (requestURL: string, method: "GET" | "PUT") =>
+        fromPromise(() => verifyTransferURL(env, requestURL, method)).pipe(
+          Effect.flatMap((valid) => valid
+            ? Effect.void
+            : Effect.fail(workspaceError("invalid_signature", "Invalid transfer signature", 401))),
+        ),
+    };
+  }),
+}) {
+  static readonly layer = Layer.effect(SnapshotStore, SnapshotStore.make);
 }

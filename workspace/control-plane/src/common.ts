@@ -1,5 +1,4 @@
-import type { Context } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { Context } from "effect";
 
 export type Bindings = {
   DB: D1Database;
@@ -10,25 +9,11 @@ export type Bindings = {
   PWN_WORKSPACE_PUBLIC_KEY_B64: string;
 };
 
-export type App = { Bindings: Bindings };
-export type AppContext = Context<App>;
-
-export function jsonError(
-  c: AppContext,
-  status: ContentfulStatusCode,
-  code: string,
-  message: string,
-  extra: Record<string, unknown> = {},
-) {
-  return c.json({ error: { code, message, ...extra } }, status);
-}
+export class Environment extends Context.Service<Environment, Bindings>()("control-plane/Environment") {}
+export class WorkerContext extends Context.Service<WorkerContext, ExecutionContext>()("control-plane/WorkerContext") {}
 
 export function unixSeconds() {
   return Math.floor(Date.now() / 1000);
-}
-
-export async function one<T>(stmt: D1PreparedStatement): Promise<T | null> {
-  return (await stmt.first<T>()) ?? null;
 }
 
 export function rows<T>(result: D1Result<unknown>): T[] {

@@ -1,17 +1,26 @@
-import { Hono } from "hono";
-import type { App } from "./common.ts";
-import { registerAuthRoutes } from "./auth/routes.ts";
-import { registerNodeRoutes } from "./nodes/routes.ts";
-import { registerVolumeRoutes } from "./volumes/routes.ts";
-import { registerWorkspaceRoutes } from "./workspaces/routes.ts";
+import { Context, Effect, Layer } from "effect";
+import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
+import { Environment, WorkerContext, type Bindings } from "./common.ts";
+import { AuthRoutes } from "./auth/routes.ts";
+import { NodeRoutes } from "./nodes/routes.ts";
+import { VolumeRoutes } from "./volumes/routes.ts";
+import { WorkspaceRoutes } from "./workspaces/routes.ts";
+import type { WorkspaceError } from "./workspaces/errors.ts";
+import { makeServices } from "./services.ts";
 
-const app = new Hono<App>();
+const Errors = HttpRouter.middleware<{ handles: WorkspaceError }>()((http) => http.pipe(
+  Effect.catchTag("WorkspaceError", ({ code, message, status }) =>
+    Effect.succeed(HttpServerResponse.jsonUnsafe({ error: { code, message } }, { status }))),
+));
 
-app.get("/", (c) => c.json({ service: "workspace-control-plane" }));
+export const { handler } = HttpRouter.toWebHandler(Layer.mergeAll(
+  HttpRouter.add("GET", "/", HttpServerResponse.jsonUnsafe({ service: "workspace-control-plane" })),
+  AuthRoutes, NodeRoutes, WorkspaceRoutes, VolumeRoutes,
+).pipe(Layer.provide(Errors.layer), Layer.provide(HttpServer.layerServices)), { disableLogger: true });
 
-registerAuthRoutes(app);
-registerNodeRoutes(app);
-registerWorkspaceRoutes(app);
-registerVolumeRoutes(app);
-
-export default app;
+export default {
+  fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
+    const services = Effect.runSync(makeServices.pipe(Effect.provideService(Environment, env)));
+    return handler(request, Context.add(services, WorkerContext, ctx));
+  },
+} satisfies ExportedHandler<Bindings>;
