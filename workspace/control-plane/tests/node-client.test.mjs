@@ -11,7 +11,7 @@ const workspaceUUID = crypto.randomUUID();
 const volumeUUID = crypto.randomUUID();
 const startBody = {
   runtime_config: { container_image_ref: "test", entrypoint: ["/bin/sh"], env: { VALUE: "a\\nb" } },
-  volume: { volume_uuid: volumeUUID, dst_path: "/home/hacker" },
+  volume: { volume_uuid: volumeUUID, dst_path: "/home/hacker", max_size_bytes: 1073741824, snapshot: null },
 };
 
 function clientLayer(fetch) {
@@ -66,8 +66,8 @@ test("missing routes fail; the daemon acknowledges an absent workspace with 200"
     { code: "workspace_stop_failed" });
   await assert.rejects(() => execute(missing, (nodes) => nodes.startWorkspace(node, workspaceUUID, startBody)),
     { code: "workspace_start_failed", status: 404 });
-  await assert.rejects(() => execute(missing, (nodes) => nodes.activateVolume(node, volumeUUID, null, workspaceUUID)),
-    { code: "volume_activation_failed", status: 500 });
+  await assert.rejects(() => execute(missing, (nodes) => nodes.exportVolume(node, volumeUUID, workspaceUUID, "https://control.test/upload")),
+    { code: "volume_export_failed", status: 500 });
   await assert.rejects(() => execute(async () => new Response(null, { status: 503 }),
     (nodes) => nodes.stopWorkspace(node, workspaceUUID)), { code: "workspace_stop_failed", status: 500 });
 });

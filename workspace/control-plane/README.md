@@ -23,38 +23,36 @@ request's environment. Tests can substitute services through Layers. Runtime
 configuration, daemon error responses, and NDJSON progress events have shared
 Effect schemas; their TypeScript types are derived from those definitions.
 
-Workspace workflows use `Effect.fn` and typed errors. Scoped acquisitions register
-rollback only after they succeed, then run cleanup in reverse order on failure.
-The commit boundary masks interruption until D1 commits and the rollback scope
-closes successfully, so a late cancellation cannot undo committed state or clear
-another operation's claim. Cleanup failures are logged without skipping the
-remaining finalizers.
-
-Starts run under `waitUntil` and emit a small, bounded number of NDJSON events.
-Disconnecting a reader does not cancel the start or hold its claim through stream
-backpressure. Stops finish recording the node's response before accepting
-interruption. These scopes handle cooperative cancellation; they do not provide
-durable recovery if Cloudflare terminates the Worker.
-
-The implementation follows the version-matched examples in `effect/ai-docs` and
-the v4 documentation for [services](https://effect.website/docs/v4/requirements-management/services)
-and [scopes](https://effect.website/docs/v4/resource-management/scope).
+Workspace operations use `Effect.fn` and typed errors. Starts run under
+`waitUntil` and emit a small number of NDJSON events. Disconnecting a reader does
+not cancel the start or block it through stream backpressure. Start and stop mask
+cooperative interruption through their final D1 update. Worker termination can
+still interrupt an operation; its D1 claim remains held.
 
 ## Operation ownership
 
-`workspace_operations` has one row per busy user: an operation UUID, kind, and
-creation time. The home belongs to exactly one user, so the same claim covers
-both workspace and home changes. A start uses its new workspace UUID as the
-operation UUID; a stop generates one. Claim acquisition and related state changes
-use an atomic D1 batch. Completion and rollback statements check both the user and
-operation UUID, then release the claim last. Claims do not expire automatically.
+`workspace_operations` has one row per busy user. The user's workspace and home
+share this claim. A start uses its new workspace UUID as the operation UUID. Its
+plan records the chosen export snapshot UUID and home destination path; the
+creating workspace records the target node and runtime configuration. The old
+workspace and volume placement remain recorded until completion.
 
-Node starts with the same UUID and parameters reuse a running workspace. An
-activation carries the operation UUID as `activation_uuid`; repeating it preserves
-the writable home. Different start parameters or activation identities conflict.
-These commands support retries while the coordinator owns the claim. The Worker
-currently sends each command once; autonomous replay and recovery require a
-persisted execution plan and reconciliation of uncertain node outcomes.
+Fresh starts and same-node replacements send one node command. Moves send two:
+source export (stop, capture, retire, upload), then destination start (prepare home,
+start, wait for readiness). R2 transfer requests carry the data separately. The
+successful path makes two D1 calls: an atomic claim batch and an atomic completion
+batch. Every completion mutation checks claim ownership, releasing it last.
+
+A confirmed preflight rejection can release an untouched start claim. Timeouts,
+failed moves, uncertain starts/stops, and failed completion writes keep their
+claims. Claims never expire automatically. Recovery must inspect the recorded
+workspace and snapshot IDs, confirm source retirement, and reconcile the target
+before completing or releasing a claim. This version has no automated reconciler.
+
+Node retries use the same workspace/snapshot UUID and semantic parameters. A
+running workspace is reused without rerunning initialization. Retired homes are
+never reused; delayed exports cannot retire a newer home. Transfer URLs may be
+refreshed. The Worker sends each command once.
 
 ## Local development
 
@@ -94,15 +92,14 @@ the matching raw Ed25519 public key.
 `npm test` runs TypeScript checks, local D1/R2 tests, and the real Kata workspace
 lifecycle test. `npm run test:unit` runs without a workspace daemon: it covers
 claim contention, stale completion/cleanup, rejected starts, streamed snapshot uploads, and home movement
-with simulated node responses, including cleanup and activation failures. It also
-covers request validation, disconnects, rollback ordering, and interruption
-during acquisition and commit. Node-client tests verify signatures, typed errors,
+with simulated node responses, including blocked export and destination failures. It also
+covers request validation and disconnects during start and stop. Node-client tests verify signatures, typed errors,
 malformed response handling, and transport cancellation using an injected fetch
 implementation. Workflow tests can replace node commands with test services.
 
 `npm run test:e2e` requires the development platform. It checks login, validation,
 failed-start cleanup, the workspace proxy, and home persistence across replacement,
-stop, and restart. It also repeats node start/activation commands and checks that
+stop, and restart. It also repeats node start commands and checks that
 they preserve home writes and do not rerun initialization. Set `PWN_WORKSPACE_DAEMON_URL` if the daemon uses another address.
 Set `PWN_WORKSPACE_SECONDARY_DAEMON_URL` to also test moving a home to a second daemon
 and back through R2. The second daemon needs its own Btrfs volume directory and the
@@ -119,8 +116,6 @@ checkpoint, with production authentication and automatic recovery from interrupt
 workflows still pending. Worker termination can leave operations claimed; recovery
 must reconcile node state before releasing those claims.
 
-Home movement stops the old workspace, saves its snapshot to R2, and then activates
-the destination. Failure to remove the old active volume is logged and does not
-block movement; the next activation on that node removes the stale copy first.
-Snapshot uploads buffer at most one 5 MiB R2 part at a time, in addition to the
-incoming stream chunk.
+Home movement must finish retiring the old writable home before the destination
+starts. Snapshot uploads buffer at most one 5 MiB R2 part at a time, in addition
+to the incoming stream chunk. Periodic backups are not scheduled by this version.

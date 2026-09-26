@@ -62,7 +62,7 @@ async function commitStagedSnapshot(
   const stagingKey = stagingSnapshotKey(volumeUUID, snapshotUUID, uploadUUID);
   const committedKey = committedSnapshotKey(volumeUUID, snapshotUUID);
   const stagingObject = await bucket.get(stagingKey);
-  if (!stagingObject) return false;
+  if (!stagingObject) return (await bucket.head(committedKey)) !== null;
 
   await bucket.put(committedKey, stagingObject.body);
   const committed = await bucket.head(committedKey);

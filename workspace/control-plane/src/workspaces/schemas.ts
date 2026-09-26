@@ -22,11 +22,16 @@ export type StartWorkspaceRequest = typeof startSchema.Type;
 
 export const NodeStartRequest = Schema.Struct({
   runtime_config: RuntimeConfig,
-  volume: Schema.Struct({ volume_uuid: UUID, dst_path: Schema.String }),
+  replace_workspace_uuid: Schema.optionalKey(UUID),
+  volume: Schema.Struct({
+    volume_uuid: UUID, dst_path: Schema.String, max_size_bytes: Schema.Number,
+    snapshot: Schema.NullOr(Schema.Struct({ snapshot_uuid: UUID, download_url: Schema.String })),
+  }),
 });
 export type NodeStartRequest = typeof NodeStartRequest.Type;
 
 export const NodeErrorResponse = Schema.Struct({
+  operation_started: Schema.optionalKey(Schema.Boolean),
   error: Schema.Struct({ code: Schema.NonEmptyString, message: Schema.String }),
 });
 

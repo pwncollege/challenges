@@ -66,7 +66,9 @@ generation, and every workspace receives it as one read-only bind at
   },
   "volume": {
     "volume_uuid": "00000000-0000-4000-8000-000000000000",
-    "dst_path": "/home/hacker"
+    "dst_path": "/home/hacker",
+    "max_size_bytes": 1073741824,
+    "snapshot": null
   }
 }
 ```
@@ -78,34 +80,44 @@ Environment variables are opaque runtime configuration. `PWN_FLAG` is optional;
 when present, the workspace runtime writes it to `/flag`.
 
 
-## Retrying commands
+The node reuses an active local home. If none exists, it downloads the supplied
+`snapshot: {"snapshot_uuid": "...", "download_url": "..."}` (or uses that exact
+cached snapshot). `snapshot: null` creates an empty home. A failed download fails
+the start. An optional `replace_workspace_uuid` stops the previous workspace on
+this node in the same command, after validating the request and image.
 
-Start and stop commands for one workspace are serialized. An overlapping command
-gets `423 resource_locked`. Repeating a successful start with the same parameters
-returns the existing workspace without rerunning initialization. Different
-parameters return `409 workspace_request_conflict`. The request fingerprint lives
-in CRI labels, so it survives daemon restarts. An incomplete matching sandbox is
-removed and recreated on retry.
+## Moving a home
 
-A workspace UUID identifies one lifetime. Stop records a `.stopped` marker under
-`PWN_WORKSPACE_LOG_DIRECTORY` before removing CRI resources, and repeated stops
-succeed. A subsequent start of that UUID returns `409 workspace_stopped`. Keep the
-log directory to retain those markers; they are not a durable execution log for
-host loss or reboot when that directory is on temporary storage.
-
-`POST /api/volumes/<volume-uuid>/activate` requires:
+`POST /api/volumes/<volume-uuid>/snapshots/<snapshot-uuid>/export` accepts:
 
 ```json
 {
-  "activation_uuid": "11111111-1111-4111-8111-111111111111",
-  "snapshot_uuid": null
+  "stop_workspace_uuid": "11111111-1111-4111-8111-111111111111",
+  "upload_url": "https://control.example/api/volumes/..."
 }
 ```
 
-Use a snapshot UUID to restore a downloaded snapshot, or `null` for a fresh home.
-The coordinator supplies the same activation UUID on retries. A matching active
-volume is returned unchanged; another activation returns `409 activation_conflict`.
-The daemon initializes a temporary subvolume before publishing it as `active`,
-with activation metadata outside the guest's mounted home. Volume commands are
-serialized and return `423 resource_locked` when another command is in progress.
-The coordinator must own the user's operation throughout a command and its retries.
+`stop_workspace_uuid` is optional when the home is already stopped. Export stops
+the workspace, captures the snapshot, retires the writable home, and uploads the
+snapshot. Any failure blocks movement. The coordinator commits the upload before
+starting the destination. Retired copies are never reused as active homes.
+Ordinary workspace stop retains the active home for the next local start.
+`POST /api/volumes/<volume-uuid>/delete` removes an unattached volume and its caches.
+
+## Retries and interrupted operations
+
+Composite commands lock their workspaces and home; overlapping commands return
+`423 resource_locked`. Workspace UUIDs identify one lifetime. Matching successful
+starts return the running workspace without rerunning initialization. Different
+parameters conflict. A stopped UUID cannot be started again.
+
+Snapshot UUIDs identify one export. Repeating an export reuses its captured data;
+a delayed retry cannot retire a newer home. Signed transfer URLs may be refreshed
+without changing either command's identity.
+
+Request records and stop/launch markers live in `PWN_WORKSPACE_LOG_DIRECTORY`,
+which the platform places on persistent storage. Export records live beside the
+home. Keep these records when restarting the daemon. An uncertain launch is
+blocked for reconciliation if the running container cannot be confirmed; it is
+never automatically rerun. The coordinator must retain its D1 claim until it has
+confirmed the outcome. There is no automatic recovery scheduler.

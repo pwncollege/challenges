@@ -100,13 +100,6 @@ export async function completeWorkspaceStop(db: D1Database, claim: OperationClai
   for (const result of results) expectChanges(result);
 }
 
-export async function failWorkspaceStop(db: D1Database, claim: OperationClaim, workspaceId: number, now: number) {
-  await db.batch([
-    owned(db, claim, `UPDATE workspaces SET status = 'running', updated_at = ? WHERE workspace_id = ? AND ${ownsOperation}`, now, workspaceId),
-    releaseOperation(db, claim),
-  ]);
-}
-
 function parseStopClaimRows(results: D1Result<unknown>[]): StopClaimRows {
   return {
     lockChanges: results[0].meta.changes,

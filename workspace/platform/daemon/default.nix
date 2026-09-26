@@ -7,7 +7,7 @@
   seccompProfile,
   nixStorePath,
   daemonListenAddress,
-  runDir,
+  dataDir,
   egressAddress,
   egressServiceName,
   publicKey ? null,
@@ -43,7 +43,7 @@ in
         "PWN_WORKSPACE_CONTAINERD_ADDRESS=unix://${containerdSockPath}"
         "PWN_WORKSPACE_DAEMON_LISTEN_ADDRESS=${daemonListenAddress}"
         "PWN_WORKSPACE_EGRESS_ADDRESS=${egressAddress}"
-        "PWN_WORKSPACE_LOG_DIRECTORY=${runDir}/logs"
+        "PWN_WORKSPACE_LOG_DIRECTORY=${dataDir}/workspace-records"
         "PWN_WORKSPACE_NIX_STORE_PATH=${nixStorePath}"
         "PWN_WORKSPACE_PATH=${workspaceRuntime}"
         "PWN_WORKSPACE_SECCOMP_PROFILE=${seccompProfile}"

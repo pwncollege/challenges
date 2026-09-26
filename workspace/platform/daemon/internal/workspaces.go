@@ -25,13 +25,16 @@ type runtimeConfig struct {
 }
 
 type workspaceVolume struct {
-	VolumeUUID string `json:"volume_uuid"`
-	DstPath    string `json:"dst_path"`
+	VolumeUUID   string          `json:"volume_uuid"`
+	DstPath      string          `json:"dst_path"`
+	MaxSizeBytes int64           `json:"max_size_bytes"`
+	Snapshot     *volumeSnapshot `json:"snapshot"`
 }
 
 type workspaceStartRequest struct {
-	RuntimeConfig runtimeConfig    `json:"runtime_config"`
-	Volume        *workspaceVolume `json:"volume,omitempty"`
+	ReplaceWorkspaceUUID string           `json:"replace_workspace_uuid,omitempty"`
+	RuntimeConfig        runtimeConfig    `json:"runtime_config"`
+	Volume               *workspaceVolume `json:"volume,omitempty"`
 }
 
 func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +45,28 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateWorkspaceStart(body, s.config.volumeBasePath != ""); err != nil {
 		jsonError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	keys := []string{"workspaceUUID:" + body.ReplaceWorkspaceUUID}
+	if body.ReplaceWorkspaceUUID == workspaceUUID {
+		jsonError(w, 400, "invalid_request", "Cannot replace the workspace being started")
+		return
+	}
+	if body.Volume != nil {
+		keys = append(keys, "volumeUUID:"+body.Volume.VolumeUUID)
+	}
+	release, ok := s.lockResources(w, keys...)
+	if !ok {
+		return
+	}
+	defer release()
+	requestPath := filepath.Join(s.config.logDirectory, workspaceUUID, ".request")
+	if previous, err := os.ReadFile(requestPath); err == nil && string(previous) != startRequestHash(body) {
+		jsonError(w, 409, "workspace_request_conflict", "Workspace UUID has different start parameters")
+		return
+	} else if err != nil && !os.IsNotExist(err) {
+		jsonError(w, 500, "internal_error", err.Error())
 		return
 	}
 
@@ -95,6 +120,10 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"workspace_uuid": workspaceUUID})
 			return
 		}
+		if _, err := os.Stat(filepath.Join(s.config.logDirectory, workspaceUUID, ".launched")); err == nil {
+			jsonError(w, 409, "workspace_start_incomplete", "Workspace launch needs reconciliation")
+			return
+		}
 		// A daemon restart may leave an incomplete matching sandbox.
 		if err := s.removeSandbox(r.Context(), sandbox.Id); err != nil {
 			jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
@@ -102,14 +131,6 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	active := ""
-	if body.Volume != nil {
-		active = s.activePath(body.Volume.VolumeUUID)
-		if _, err := os.Stat(active); err != nil {
-			jsonError(w, http.StatusNotFound, "active_not_found", "Active volume not found")
-			return
-		}
-	}
 	image, err := s.images.ImageStatus(r.Context(), &runtimeapi.ImageStatusRequest{
 		Image: &runtimeapi.ImageSpec{Image: body.RuntimeConfig.ContainerImageRef},
 	})
@@ -118,8 +139,38 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if image.Image == nil {
-		jsonError(w, http.StatusConflict, "image_not_available", "Image is not available locally")
+		writeJSON(w, http.StatusConflict, map[string]any{"operation_started": func() bool { _, err := os.Stat(requestPath); return !os.IsNotExist(err) }(), "error": map[string]any{"code": "image_not_available", "message": "Image is not available locally"}})
 		return
+	}
+
+	if _, err := os.Stat(filepath.Join(s.config.logDirectory, workspaceUUID, ".launched")); err == nil {
+		jsonError(w, 409, "workspace_start_incomplete", "Workspace launch needs reconciliation")
+		return
+	} else if !os.IsNotExist(err) {
+		jsonError(w, 500, "internal_error", err.Error())
+		return
+	}
+	if err := recordRequest(requestPath, startRequestHash(body)); err != nil {
+		jsonError(w, 409, "workspace_request_conflict", err.Error())
+		return
+	}
+	if body.ReplaceWorkspaceUUID != "" {
+		if err := s.stopWorkspace(r.Context(), body.ReplaceWorkspaceUUID); err != nil {
+			jsonError(w, 500, "workspace_stop_failed", err.Error())
+			return
+		}
+	}
+	active := ""
+	if body.Volume != nil {
+		if err := s.requireVolumeDetached(r.Context(), body.Volume.VolumeUUID); err != nil {
+			jsonError(w, 409, "volume_busy", err.Error())
+			return
+		}
+		active, err = s.prepareVolume(r.Context(), *body.Volume)
+		if err != nil {
+			jsonError(w, 500, "volume_prepare_failed", err.Error())
+			return
+		}
 	}
 
 	sandboxConfig, containerConfig := s.workspaceContainerConfig(workspaceUUID, body, active)
@@ -135,13 +186,6 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = s.removeSandbox(context.Background(), sandbox.PodSandboxId)
-		}
-	}()
-
 	created, err := s.runtime.CreateContainer(r.Context(), &runtimeapi.CreateContainerRequest{
 		PodSandboxId:  sandbox.PodSandboxId,
 		Config:        containerConfig,
@@ -149,6 +193,10 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if err := recordRequest(filepath.Join(s.config.logDirectory, workspaceUUID, ".launched"), ""); err != nil {
+		jsonError(w, 500, "internal_error", err.Error())
 		return
 	}
 	if _, err := s.runtime.StartContainer(r.Context(), &runtimeapi.StartContainerRequest{ContainerId: created.ContainerId}); err != nil {
@@ -165,7 +213,6 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cleanup = false
 	s.proxies.Store(workspaceUUID, workspaceIP)
 	writeJSON(w, http.StatusOK, map[string]any{"workspace_uuid": workspaceUUID})
 }
@@ -245,29 +292,28 @@ func (s *Server) workspaceContainerConfig(
 
 func (s *Server) handleWorkspaceStop(w http.ResponseWriter, r *http.Request) {
 	workspaceUUID := r.PathValue("workspaceUUID")
-	stopped := s.workspaceStoppedPath(workspaceUUID)
-	if err := os.MkdirAll(filepath.Dir(stopped), 0o711); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+	if err := s.stopWorkspace(r.Context(), workspaceUUID); err != nil {
+		jsonError(w, 500, "workspace_stop_failed", err.Error())
 		return
 	}
-	if err := os.WriteFile(stopped, nil, 0o600); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
-	}
+	writeJSON(w, 200, map[string]any{"workspace_uuid": workspaceUUID, "stopped": true})
+}
 
-	sandboxes, err := s.workspaceSandboxes(r.Context(), workspaceUUID)
+func (s *Server) stopWorkspace(ctx context.Context, workspaceUUID string) error {
+	if err := recordRequest(s.workspaceStoppedPath(workspaceUUID), ""); err != nil {
+		return err
+	}
+	sandboxes, err := s.workspaceSandboxes(ctx, workspaceUUID)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
+		return err
 	}
 	for _, sandbox := range sandboxes {
-		if err := s.removeSandbox(r.Context(), sandbox.Id); err != nil {
-			jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-			return
+		if err := s.removeSandbox(ctx, sandbox.Id); err != nil {
+			return err
 		}
 	}
 	s.proxies.Delete(workspaceUUID)
-	writeJSON(w, http.StatusOK, map[string]any{"workspace_uuid": workspaceUUID, "stopped": true})
+	return nil
 }
 
 func (s *Server) removeSandbox(ctx context.Context, sandboxID string) error {
@@ -299,6 +345,9 @@ func (s *Server) removeSandbox(ctx context.Context, sandboxID string) error {
 }
 
 func validateWorkspaceStart(body workspaceStartRequest, volumeStorageEnabled bool) error {
+	if body.ReplaceWorkspaceUUID != "" && !validUUID(body.ReplaceWorkspaceUUID) {
+		return errors.New("replace_workspace_uuid must be a UUID")
+	}
 	if body.RuntimeConfig.ContainerImageRef == "" {
 		return errors.New("container_image_ref is required")
 	}
@@ -318,6 +367,12 @@ func validateWorkspaceStart(body workspaceStartRequest, volumeStorageEnabled boo
 	}
 	if _, err := uuid.Parse(body.Volume.VolumeUUID); err != nil {
 		return errors.New("volume.volume_uuid must be a UUID")
+	}
+	if body.Volume.MaxSizeBytes < 64*1024*1024 || body.Volume.MaxSizeBytes%4096 != 0 {
+		return errors.New("volume.max_size_bytes must be a multiple of 4096 and at least 64 MiB")
+	}
+	if source := body.Volume.Snapshot; source != nil && (!validUUID(source.SnapshotUUID) || source.DownloadURL == "") {
+		return errors.New("volume.snapshot requires a UUID and download URL")
 	}
 	if err := validateVolumeDestination(body.Volume.DstPath); err != nil {
 		return err
@@ -354,6 +409,12 @@ func environment(values map[string]string) []*runtimeapi.KeyValue {
 const startRequestLabel = "pwn.start-request-sha256"
 
 func startRequestHash(body workspaceStartRequest) string {
+	if body.Volume != nil && body.Volume.Snapshot != nil {
+		volume, snapshot := *body.Volume, *body.Volume.Snapshot
+		snapshot.DownloadURL = ""
+		volume.Snapshot = &snapshot
+		body.Volume = &volume
+	}
 	data, _ := json.Marshal(body)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])

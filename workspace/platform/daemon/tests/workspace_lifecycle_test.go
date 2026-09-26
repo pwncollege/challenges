@@ -291,13 +291,13 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 	replay(restarted.Handler(), "start", startBody, http.StatusConflict)
 	state.mu.Lock()
 	reused := state.sandboxRequest == originalRequest
-	// A crash after RunPodSandbox but before CreateContainer must be recoverable.
+	// Losing CRI state after a launch must not replay initialization.
 	state.container = nil
 	state.mu.Unlock()
 	if !reused {
 		t.Fatal("matching starts recreated the running workspace")
 	}
-	replay(restarted.Handler(), "start", startBody, http.StatusOK)
+	replay(restarted.Handler(), "start", startBody, http.StatusConflict)
 
 	state.mu.Lock()
 	sandboxRequest := state.sandboxRequest

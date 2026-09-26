@@ -15,7 +15,7 @@ const key = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"])
 const privateKey = Buffer.from(await crypto.subtle.exportKey("pkcs8", key.privateKey)).toString("base64");
 const publicKey = Buffer.from(await crypto.subtle.exportKey("spki", key.publicKey)).toString("base64");
 
-for (const outcome of ["success", "http-error", "network-error", "missing-upload", "activation-error"]) {
+for (const outcome of ["success", "http-error", "network-error", "missing-upload", "start-error"]) {
   test(`moving a home through the Worker: ${outcome}`, async (t) => {
     const calls = [];
     let snapshotUUID;
@@ -35,32 +35,26 @@ for (const outcome of ["success", "http-error", "network-error", "missing-upload
         const body = text ? JSON.parse(text) : {};
         calls.push(`${url.hostname}/${action}`);
         if (url.hostname === "old.test") {
-          if (action === "snapshot") snapshotUUID = body.snapshot_uuid;
-          if (action === "upload") {
-            const transfer = new URL(body.url);
-            stagingKey = `staging/${volumeUUID}/${snapshotUUID}/${transfer.searchParams.get("upload_uuid")}`;
-            if (outcome !== "missing-upload") {
-              const uploaded = await mf.dispatchFetch(body.url, { method: "PUT", body: "home contents" });
-              assert.equal(uploaded.status, 200, await uploaded.text());
-            }
+          assert.equal(action, "export");
+          snapshotUUID = url.pathname.split("/").at(-2);
+          assert.ok(body.stop_workspace_uuid);
+          const transfer = new URL(body.upload_url);
+          stagingKey = `staging/${volumeUUID}/${snapshotUUID}/${transfer.searchParams.get("upload_uuid")}`;
+          if (outcome !== "missing-upload") {
+            const uploaded = await mf.dispatchFetch(body.upload_url, { method: "PUT", body: "home contents" });
+            assert.equal(uploaded.status, 200, await uploaded.text());
           }
-          if (action === "deactivate") {
-            assert.ok(await VOLUMES.head(`snapshots/${volumeUUID}/${snapshotUUID}`));
-            if (outcome === "network-error") throw new Error("node unavailable");
-            if (outcome === "http-error") return new Response(null, { status: 409 });
-          }
+          if (outcome === "network-error") throw new Error("node unavailable");
+          if (outcome === "http-error") return new Response(null, { status: 409 });
         } else {
           assert.equal(url.hostname, "new.test");
-          if (action === "download") {
-            assert.equal(body.snapshot_uuid, snapshotUUID);
-            const snapshot = await mf.dispatchFetch(body.url);
-            assert.equal(snapshot.status, 200);
-            assert.equal(await snapshot.text(), "home contents");
-          }
-          if (action === "activate") {
-            assert.equal(body.snapshot_uuid, snapshotUUID);
-            if (outcome === "activation-error") return new Response(null, { status: 500 });
-          }
+          assert.equal(action, "start");
+          assert.equal(body.volume.snapshot.snapshot_uuid, snapshotUUID);
+          assert.equal(body.replace_workspace_uuid, undefined);
+          const snapshot = await mf.dispatchFetch(body.volume.snapshot.download_url);
+          assert.equal(snapshot.status, 200);
+          assert.equal(await snapshot.text(), "home contents");
+          if (outcome === "start-error") return Response.json({ operation_started: false, error: { code: "image_not_available", message: "missing" } }, { status: 409 });
         }
         return new Response(null, { status: 200 });
       },
@@ -88,30 +82,25 @@ for (const outcome of ["success", "http-error", "network-error", "missing-upload
     const events = (await response.text()).trim().split("\n").map((line) => decodeEvent(JSON.parse(line)));
     const error = events.find((event) => event.event === "error");
     const volume = await DB.prepare("SELECT node_id, snapshot_uuid FROM volumes WHERE volume_id = 1").first();
-    assert.equal(await DB.prepare("SELECT COUNT(*) AS count FROM workspace_operations").first("count"), 0);
-
-    if (outcome === "missing-upload") {
-      assert.equal(error?.code, "volume_reclaim_failed");
-      assert.deepEqual(calls, ["old.test/stop", "old.test/snapshot", "old.test/upload"]);
-      assert.deepEqual(volume, { node_id: 1, snapshot_uuid: null });
-      return;
-    }
-    const expectedCalls = [
-      "old.test/stop", "old.test/snapshot", "old.test/upload", "old.test/deactivate",
-      "new.test/download", "new.test/deactivate", "new.test/activate",
-    ];
-    if (outcome === "activation-error") {
-      assert.equal(error?.code, "volume_activation_failed");
-      assert.deepEqual(volume, { node_id: null, snapshot_uuid: snapshotUUID });
-      assert.equal(await DB.prepare("SELECT COUNT(*) AS count FROM workspaces").first("count"), 0);
-    } else {
+    const operation = await DB.prepare("SELECT operation_uuid, plan_json FROM workspace_operations").first();
+    if (outcome === "success") {
       assert.equal(error, undefined, JSON.stringify(events));
       assert.ok(events.find((event) => event.event === "complete")?.workspace_uuid);
+      assert.equal(operation, null);
       assert.deepEqual(volume, { node_id: 2, snapshot_uuid: snapshotUUID });
-      expectedCalls.push("new.test/start");
+      assert.deepEqual(calls, ["old.test/export", "new.test/start"]);
+      assert.equal(await VOLUMES.head(stagingKey), null);
+    } else {
+      assert.ok(error, JSON.stringify(events));
+      assert.equal(JSON.parse(operation.plan_json).snapshot_uuid, snapshotUUID);
+      assert.deepEqual(volume, { node_id: 1, snapshot_uuid: null });
+      assert.deepEqual(calls, outcome === "start-error" ? ["old.test/export", "new.test/start"] : ["old.test/export"]);
+      const retry = await mf.dispatchFetch("https://control.test/api/workspaces/start", {
+        method: "POST", headers: { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0] },
+        body: JSON.stringify({ node_uuid: targetNodeUUID, runtime_config: { container_image_ref: "test" } }),
+      });
+      assert.match(await retry.text(), /workspace_operation_in_progress/);
+      assert.equal(calls.length, outcome === "start-error" ? 2 : 1, "blocked retry must not contact either node");
     }
-    assert.deepEqual(calls, expectedCalls);
-    assert.equal(await VOLUMES.head(stagingKey), null);
-    assert.equal(await (await VOLUMES.get(`snapshots/${volumeUUID}/${snapshotUUID}`)).text(), "home contents");
   });
 }

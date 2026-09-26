@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS workspace_operations (
   user_id INTEGER PRIMARY KEY REFERENCES users(user_id) ON DELETE RESTRICT,
   operation_uuid TEXT NOT NULL UNIQUE,
   kind TEXT NOT NULL CHECK (kind IN ('start', 'stop')),
+  plan_json TEXT,
   created_at INTEGER NOT NULL
 );
 

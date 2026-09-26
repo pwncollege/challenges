@@ -6,7 +6,7 @@ export type WorkspaceErrorDetails = {
   status: number;
 };
 
-export class WorkspaceError extends Data.TaggedError("WorkspaceError")<WorkspaceErrorDetails & { cause?: unknown }> {}
+export class WorkspaceError extends Data.TaggedError("WorkspaceError")<WorkspaceErrorDetails & { cause?: unknown; operationStarted?: boolean }> {}
 
 export function workspaceError(code: string, message = code, status = 500, cause?: unknown) {
   return new WorkspaceError({ code, message, status, cause });

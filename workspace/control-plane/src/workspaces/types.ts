@@ -27,10 +27,12 @@ export type HomeVolume = {
   volumeId: number;
   volumeUuid: string;
   snapshotUuid: string | null;
+  maxSizeBytes: number;
   authoritativeNode: null | NodeRef;
 };
 
 export type ClaimedWorkspaceStart = OperationClaim & {
+  exportSnapshotUuid: string;
   workspace: {
     workspaceId: number;
     workspaceUuid: string;
@@ -51,6 +53,8 @@ export type ClaimWorkspaceStartInput = {
   newVolumeUUID: string;
   workspaceUuid: string;
   runtimeConfig: RuntimeConfig;
+  volumeDstPath?: string;
+  exportSnapshotUuid?: string;
   now: number;
 };
 

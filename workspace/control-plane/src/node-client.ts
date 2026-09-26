@@ -2,7 +2,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { Environment, unixSeconds } from "./common.ts";
 import { canonicalRequest, importPrivateKey, sha256Hex, signCanonical } from "./signing.ts";
-import { contentfulStatus, fromPromise, workspaceError } from "./workspaces/errors.ts";
+import { contentfulStatus, fromPromise, workspaceError, WorkspaceError } from "./workspaces/errors.ts";
 import { NodeErrorResponse, type NodeStartRequest } from "./workspaces/schemas.ts";
 import type { NodeRef } from "./workspaces/types.ts";
 
@@ -44,10 +44,10 @@ export class NodeClient extends Context.Service<NodeClient>()("control-plane/Nod
       if (options.forwardError) {
         const error = yield* fromPromise(() => response.json()).pipe(
           Effect.flatMap(decodeNodeError),
-          Effect.map((body) => body.error),
-          Effect.catch(() => Effect.succeed({ code, message: code })),
+          Effect.map((body) => ({ ...body.error, operationStarted: body.operation_started })),
+          Effect.catch(() => Effect.succeed({ code, message: code, operationStarted: undefined })),
         );
-        return yield* workspaceError(error.code, error.message, contentfulStatus(response.status));
+        return yield* new WorkspaceError({ ...error, status: contentfulStatus(response.status) });
       }
       return yield* workspaceError(code);
     });
@@ -57,16 +57,10 @@ export class NodeClient extends Context.Service<NodeClient>()("control-plane/Nod
         command(node, `/api/workspaces/${workspaceUuid}/stop`, "workspace_stop_failed"),
       startWorkspace: (node: NodeRef, workspaceUuid: string, body: NodeStartRequest) =>
         command(node, `/api/workspaces/${workspaceUuid}/start`, "workspace_start_failed", body, { forwardError: true }),
-      snapshotVolume: (node: NodeRef, volumeUuid: string, snapshotUuid: string) =>
-        command(node, `/api/volumes/${volumeUuid}/snapshot`, "volume_reclaim_failed", { snapshot_uuid: snapshotUuid }),
-      uploadVolume: (node: NodeRef, volumeUuid: string, snapshotUuid: string, url: string) =>
-        command(node, `/api/volumes/${volumeUuid}/upload`, "volume_reclaim_failed", { snapshot_uuid: snapshotUuid, url }),
-      downloadVolume: (node: NodeRef, volumeUuid: string, snapshotUuid: string, url: string) =>
-        command(node, `/api/volumes/${volumeUuid}/download`, "volume_activation_failed", { snapshot_uuid: snapshotUuid, url }),
-      deactivateVolume: (node: NodeRef, volumeUuid: string) =>
-        command(node, `/api/volumes/${volumeUuid}/deactivate`, "volume_activation_failed"),
-      activateVolume: (node: NodeRef, volumeUuid: string, snapshotUuid: string | null, activationUuid: string) =>
-        command(node, `/api/volumes/${volumeUuid}/activate`, "volume_activation_failed", { snapshot_uuid: snapshotUuid, activation_uuid: activationUuid }),
+      exportVolume: (node: NodeRef, volumeUuid: string, snapshotUuid: string, uploadUrl: string, stopWorkspaceUuid?: string) =>
+        command(node, `/api/volumes/${volumeUuid}/snapshots/${snapshotUuid}/export`, "volume_export_failed", {
+          upload_url: uploadUrl, ...(stopWorkspaceUuid ? { stop_workspace_uuid: stopWorkspaceUuid } : {}),
+        }),
     };
   }),
 }) {

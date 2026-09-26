@@ -1,9 +1,8 @@
 import { Context, Effect, Layer } from "effect";
 import { Environment, rows, unixSeconds } from "../common.ts";
-import { owned, ownsOperation, type OperationClaim } from "./operations.ts";
 import { fromPromise } from "./errors.ts";
 import { claimWorkspaceStart, completeWorkspaceStart, failWorkspaceStart } from "./start-claim.ts";
-import { claimWorkspaceStop, completeWorkspaceStop, failWorkspaceStop } from "./stop-claim.ts";
+import { claimWorkspaceStop, completeWorkspaceStop } from "./stop-claim.ts";
 import type { StartWorkspaceRequest } from "./schemas.ts";
 import type { ClaimedWorkspaceStart, HomeVolume } from "./types.ts";
 
@@ -17,7 +16,7 @@ export class WorkspaceStore extends Context.Service<WorkspaceStore>()("control-p
       claimStart: (userUUID: string, payload: StartWorkspaceRequest, workspaceUuid: string) =>
         fromPromise(() => claimWorkspaceStart(db, {
           userUUID, nodeUUID: payload.node_uuid, workspaceUuid, runtimeConfig: payload.runtime_config,
-          newVolumeUUID: crypto.randomUUID(), now: unixSeconds(),
+          volumeDstPath: payload.volume_dst_path, newVolumeUUID: crypto.randomUUID(), now: unixSeconds(),
         })),
       completeStart: (claim: ClaimedWorkspaceStart, volume: HomeVolume) =>
         fromPromise(() => completeWorkspaceStart(db, {
@@ -30,14 +29,6 @@ export class WorkspaceStore extends Context.Service<WorkspaceStore>()("control-p
         fromPromise(() => failWorkspaceStart(db, claim, claim.workspace.workspaceUuid)),
       claimStop: (userUUID: string) => fromPromise(() => claimWorkspaceStop(db, userUUID, crypto.randomUUID(), unixSeconds())),
       completeStop: (claim: StopClaim) => fromPromise(() => completeWorkspaceStop(db, claim, claim.workspace.workspaceId)),
-      failStop: (claim: StopClaim) => fromPromise(() => failWorkspaceStop(db, claim, claim.workspace.workspaceId, unixSeconds())),
-      clearStoppedWorkspace: (claim: OperationClaim, workspaceId: number) => fromPromise(() => db.batch([
-        owned(db, claim, `DELETE FROM user_workspaces WHERE workspace_id = ? AND ${ownsOperation}`, workspaceId),
-        owned(db, claim, `DELETE FROM workspaces WHERE workspace_id = ? AND ${ownsOperation}`, workspaceId),
-      ])),
-      preserveSnapshot: (claim: OperationClaim, volumeId: number, snapshotUuid: string) => fromPromise(() => owned(db, claim,
-        `UPDATE volumes SET node_id = NULL, snapshot_uuid = ?, updated_at = ? WHERE volume_id = ? AND ${ownsOperation}`,
-        snapshotUuid, unixSeconds(), volumeId).run()),
       findUser: (userUUID: string) => fromPromise(() => db.prepare(
         "SELECT user_uuid FROM users WHERE user_uuid = ?",
       ).bind(userUUID).first<{ user_uuid: string }>()),

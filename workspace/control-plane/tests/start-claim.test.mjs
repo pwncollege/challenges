@@ -71,8 +71,6 @@ test("stale start cleanup and completion cannot modify a newer operation", async
   const current = await claimWorkspaceStart(env, request());
   const before = await locks(env.DB);
   await withStore(env, (store) => store.failStart(old));
-  await withStore(env, (store) => store.preserveSnapshot(old, current.homeVolume.volumeId, crypto.randomUUID()));
-  await withStore(env, (store) => store.clearStoppedWorkspace(old, current.workspace.workspaceId));
   await assert.rejects(() => withStore(env, (store) => store.completeStart(old, old.homeVolume)),
     { code: "workspace_operation_conflict" });
   assert.deepEqual(await locks(env.DB), before);
@@ -91,10 +89,11 @@ test("start and stop share one claim, and stale stop callbacks cannot undo its s
   await withStore(env, (store) => store.completeStart(start, start.homeVolume));
   const old = await withStore(env, (store) => store.claimStop(USER_UUID));
   await assert.rejects(() => claimWorkspaceStart(env, request()), { code: "workspace_operation_in_progress" });
-  await withStore(env, (store) => store.failStop(old));
+  await withStore(env, (store) => store.completeStop(old));
+  const nextStart = await claimWorkspaceStart(env, request());
+  await withStore(env, (store) => store.completeStart(nextStart, nextStart.homeVolume));
   const current = await withStore(env, (store) => store.claimStop(USER_UUID));
   const before = await locks(env.DB);
-  await withStore(env, (store) => store.failStop(old));
   await assert.rejects(() => withStore(env, (store) => store.completeStop(old)),
     { code: "workspace_operation_conflict" });
   assert.deepEqual(await locks(env.DB), before);

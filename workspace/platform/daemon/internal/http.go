@@ -43,11 +43,7 @@ func (s *Server) Handler() http.Handler {
 	handleVolume := func(pattern string, handler http.HandlerFunc) {
 		apiMux.Handle(pattern, s.withUUID("volumeUUID", s.withVolumeStorage(s.withResourceLock("volumeUUID", handler))))
 	}
-	handleVolume("POST /api/volumes/{volumeUUID}/activate", s.handleVolumeActivate)
-	handleVolume("POST /api/volumes/{volumeUUID}/deactivate", s.handleVolumeDeactivate)
-	handleVolume("POST /api/volumes/{volumeUUID}/snapshot", s.handleVolumeSnapshot)
-	handleVolume("POST /api/volumes/{volumeUUID}/upload", s.handleVolumeUpload)
-	handleVolume("POST /api/volumes/{volumeUUID}/download", s.handleVolumeDownload)
+	handleVolume("POST /api/volumes/{volumeUUID}/snapshots/{snapshotUUID}/export", s.handleVolumeExport)
 	handleVolume("POST /api/volumes/{volumeUUID}/delete", s.handleVolumeDelete)
 
 	apiMux.HandleFunc("GET /api/container_images/list", s.handleImageList)
@@ -206,4 +202,26 @@ func (s *Server) withResourceLock(parameter string, next http.Handler) http.Hand
 		defer s.resourceLocks.Delete(key)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// Composite commands acquire all their resources before changing any of them.
+func (s *Server) lockResources(w http.ResponseWriter, keys ...string) (func(), bool) {
+	held := []string{}
+	release := func() {
+		for _, key := range held {
+			s.resourceLocks.Delete(key)
+		}
+	}
+	for _, key := range keys {
+		if strings.HasSuffix(key, ":") {
+			continue
+		}
+		if _, locked := s.resourceLocks.LoadOrStore(key, struct{}{}); locked {
+			release()
+			jsonError(w, 423, "resource_locked", "Resource operation in progress")
+			return nil, false
+		}
+		held = append(held, key)
+	}
+	return release, true
 }

@@ -239,15 +239,8 @@ test("start, proxy, replace, stop, and restart preserve the home volume", async 
   assert.deepEqual(await execWorkspace(first.complete.url, [
     "/bin/sh", "-c", "rm /home/hacker/init.txt && printf retry-marker > /home/hacker/init.txt",
   ]), { exit_code: 0, stdout: "", stderr: "" });
-  const activatePath = `/api/volumes/${home.volume_uuid}/activate`;
-  assert.equal((await command(activatePath, {
-    activation_uuid: first.complete.workspace_uuid, snapshot_uuid: null,
-  })).status, 200);
-  assert.equal((await command(activatePath, {
-    activation_uuid: crypto.randomUUID(), snapshot_uuid: null,
-  })).status, 409);
   const startPath = `/api/workspaces/${first.complete.workspace_uuid}/start`;
-  const nodeBody = { runtime_config: runtimeConfig, volume: { volume_uuid: home.volume_uuid, dst_path: "/home/hacker" } };
+  const nodeBody = { runtime_config: runtimeConfig, volume: { volume_uuid: home.volume_uuid, dst_path: "/home/hacker", max_size_bytes: 1073741824, snapshot: null } };
   assert.equal((await command(startPath, nodeBody)).status, 200);
   assert.equal((await execWorkspace(first.complete.url, ["cat", "/home/hacker/init.txt"])).stdout, "retry-marker");
   assert.equal((await command(startPath, { ...nodeBody, runtime_config: { container_image_ref: IMAGE } })).status, 409);
@@ -317,6 +310,8 @@ test("moving the home between two daemons preserves its contents", { skip: !SECO
 
   const first = await startWorkspace();
   assert.ok(first.complete, JSON.stringify(first.error ?? first.events));
+  let expected = "initialized";
+  let firstSnapshot;
   for (const [nodeUUID, daemon, nodeId] of [
     [DISABLED_NODE_UUID, SECONDARY_DAEMON, 2],
     [NODE_UUID, DAEMON, 1],
@@ -329,10 +324,28 @@ test("moving the home between two daemons preserves its contents", { skip: !SECO
     assert.equal(moved.complete.url, `${daemon}/w/${moved.complete.workspace_uuid}/`);
     const executed = await execWorkspace(moved.complete.url, ["cat", "/home/hacker/init.txt"]);
     assert.equal(executed.exit_code, 0);
-    assert.equal(executed.stdout, "initialized");
+    assert.equal(executed.stdout, expected);
+    expected = `written-on-node-${nodeId}`;
+    assert.equal((await execWorkspace(moved.complete.url, ["/bin/sh", "-c", `printf %s ${expected} > /home/hacker/init.txt`])).exit_code, 0);
     const volume = await homeVolume();
     assert.equal(volume.node_id, nodeId);
     assert.ok(volume.snapshot_uuid);
+    firstSnapshot ??= volume.snapshot_uuid;
+    const replay = await fetch(`${daemon}/api/workspaces/${moved.complete.workspace_uuid}/start`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ runtime_config: { container_image_ref: IMAGE }, volume: {
+        volume_uuid: volume.volume_uuid, dst_path: "/home/hacker", max_size_bytes: 1073741824,
+        snapshot: { snapshot_uuid: volume.snapshot_uuid, download_url: "https://refreshed.example/unused" },
+      } }),
+    });
+    assert.equal(replay.status, 200, await replay.text());
   }
+  const volume = await homeVolume();
+  const delayedExport = await daemonFetch(`/api/volumes/${volume.volume_uuid}/snapshots/${firstSnapshot}/export`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ stop_workspace_uuid: first.complete.workspace_uuid, upload_url: "http://127.0.0.1:1/unavailable" }),
+  });
+  assert.equal(delayedExport.status, 500);
+  assert.equal((await execWorkspace(currentWorkspaceURL, ["cat", "/home/hacker/init.txt"])).stdout, expected);
   assert.equal((await stopWorkspace()).status, 200);
 });

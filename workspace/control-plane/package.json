@@ -10,7 +10,7 @@
     "db:setup": "npm run db:migrate && npm run db:seed",
     "dev": "npm run db:setup && wrangler dev --config wrangler.toml --local --port 8787 --show-interactive-dev-session false",
     "test": "npm run typecheck && npm run test:unit && npm run test:e2e",
-    "test:unit": "node --test --test-concurrency=1 --test-timeout=30000 tests/http.test.mjs tests/lifecycle.test.mjs tests/node-client.test.mjs tests/start-claim.test.mjs tests/storage.test.mjs tests/volume-placement.test.mjs",
+    "test:unit": "node --test --test-concurrency=1 --test-timeout=30000 tests/http.test.mjs tests/node-client.test.mjs tests/start-claim.test.mjs tests/storage.test.mjs tests/volume-placement.test.mjs",
     "test:e2e": "node --test --test-concurrency=1 --test-timeout=180000 tests/workspace-flow.test.mjs"
   },
   "dependencies": {

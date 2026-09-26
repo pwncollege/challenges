@@ -1,6 +1,11 @@
 package daemon
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -45,5 +50,38 @@ func TestWorkspaceStartDoesNotRequireFlag(t *testing.T) {
 	}, false)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPrepareVolumeReusesLocalAndDoesNotReplaceFailedDownloadWithEmptyHome(t *testing.T) {
+	s := &Server{config: Config{volumeBasePath: t.TempDir()}}
+	volume := workspaceVolume{VolumeUUID: "88888888-8888-4888-8888-888888888888", MaxSizeBytes: 64 << 20}
+	source := httptest.NewServer(http.NotFoundHandler())
+	defer source.Close()
+	volume.Snapshot = &volumeSnapshot{SnapshotUUID: "99999999-9999-4999-8999-999999999999", DownloadURL: source.URL}
+	active := s.activePath(volume.VolumeUUID)
+	if err := os.MkdirAll(active, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.prepareVolume(context.Background(), volume); err != nil || got != active {
+		t.Fatalf("reuse = %q, %v", got, err)
+	}
+	if err := os.Remove(active); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.prepareVolume(context.Background(), volume); err == nil {
+		t.Fatal("failed snapshot download succeeded")
+	}
+	if _, err := os.Stat(active); !os.IsNotExist(err) {
+		t.Fatalf("active home published after failed download: %v", err)
+	}
+	if err := recordRequest(filepath.Join(s.volumeRoot(volume.VolumeUUID), ".exporting"), "pending"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(active, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.prepareVolume(context.Background(), volume); err == nil {
+		t.Fatal("reused a home with an incomplete export")
 	}
 }

@@ -65,7 +65,7 @@ let
       name
       workspaceRuntime
       daemonListenAddress
-      runDir
+      dataDir
       publicKey
       volumeBasePath
       ;

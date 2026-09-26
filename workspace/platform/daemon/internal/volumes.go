@@ -3,7 +3,6 @@ package daemon
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	btrfs "github.com/containerd/btrfs"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 const (
@@ -38,235 +38,204 @@ type btrfsSendArgs struct {
 	Reserved          [28]byte
 }
 
-type volumeActivateRequest struct {
-	ActivationUUID string  `json:"activation_uuid"`
-	SnapshotUUID   *string `json:"snapshot_uuid"`
-}
-
-type volumeSnapshotRequest struct {
+type volumeSnapshot struct {
 	SnapshotUUID string `json:"snapshot_uuid"`
+	DownloadURL  string `json:"download_url"`
 }
 
-type volumeTransferRequest struct {
-	SnapshotUUID string `json:"snapshot_uuid"`
-	URL          string `json:"url"`
+type volumeExportRequest struct {
+	StopWorkspaceUUID string `json:"stop_workspace_uuid,omitempty"`
+	UploadURL         string `json:"upload_url"`
 }
 
-func (s *Server) handleVolumeActivate(w http.ResponseWriter, r *http.Request) {
-	volumeUUID := r.PathValue("volumeUUID")
-	body, ok := decodeJSON[volumeActivateRequest](w, r)
+// Export is a handoff: stop, capture, retire the writable home, and upload.
+// Retired homes are never selected by prepareVolume, even after a restart.
+func (s *Server) handleVolumeExport(w http.ResponseWriter, r *http.Request) {
+	volumeUUID, snapshotUUID := r.PathValue("volumeUUID"), r.PathValue("snapshotUUID")
+	body, ok := decodeJSON[volumeExportRequest](w, r)
 	if !ok {
 		return
 	}
-	if !validUUID(body.ActivationUUID) || (body.SnapshotUUID != nil && !validUUID(*body.SnapshotUUID)) {
-		jsonError(w, http.StatusBadRequest, "invalid_request", "Invalid activation or snapshot UUID")
+	if !validUUID(snapshotUUID) || body.UploadURL == "" || (body.StopWorkspaceUUID != "" && !validUUID(body.StopWorkspaceUUID)) {
+		jsonError(w, 400, "invalid_request", "Invalid export parameters")
 		return
 	}
+	release, ok := s.lockResources(w, "workspaceUUID:"+body.StopWorkspaceUUID)
+	if !ok {
+		return
+	}
+	defer release()
+	if err := s.exportVolume(r.Context(), volumeUUID, snapshotUUID, body); err != nil {
+		jsonError(w, 500, "volume_export_failed", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"snapshot_uuid": snapshotUUID})
+}
 
+func (s *Server) exportVolume(ctx context.Context, volumeUUID, snapshotUUID string, body volumeExportRequest) error {
 	if err := s.ensureVolumeDirs(volumeUUID); err != nil {
-		jsonError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
+		return err
 	}
-	active := s.activePath(volumeUUID)
-	identity, _ := json.Marshal(body)
-	identityPath := filepath.Join(s.volumeRoot(volumeUUID), ".activation.json")
-	if _, err := os.Stat(active); err == nil {
-		previous, err := os.ReadFile(identityPath)
-		if err != nil || !bytes.Equal(previous, identity) {
-			jsonError(w, http.StatusConflict, "activation_conflict", "Volume has a different activation")
-			return
+	root := s.volumeRoot(volumeUUID)
+	if err := os.MkdirAll(filepath.Join(root, "exports"), 0700); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Join(root, "retired"), 0700); err != nil {
+		return err
+	}
+	// URLs can be refreshed without changing the identity of an export.
+	if err := recordRequest(filepath.Join(root, "exports", snapshotUUID), body.StopWorkspaceUUID); err != nil {
+		return err
+	}
+	retired := filepath.Join(root, "retired", snapshotUUID)
+	if _, err := os.Stat(retired); os.IsNotExist(err) {
+		if err := recordRequest(filepath.Join(root, ".exporting"), snapshotUUID); err != nil {
+			return err
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "activated"})
-		return
-	} else if !os.IsNotExist(err) {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
+		if body.StopWorkspaceUUID != "" {
+			if err := s.stopWorkspace(ctx, body.StopWorkspaceUUID); err != nil {
+				return err
+			}
+		}
+		if err := s.requireVolumeDetached(ctx, volumeUUID); err != nil {
+			return err
+		}
+		snapshot := s.snapshotPath(volumeUUID, snapshotUUID)
+		if _, err := os.Stat(snapshot); os.IsNotExist(err) {
+			if err := btrfs.SubvolSnapshot(snapshot, s.activePath(volumeUUID), true); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		if err := os.Rename(s.activePath(volumeUUID), retired); err != nil {
+			return err
+		}
+		if err := syncDirectory(root); err != nil {
+			return err
+		}
+		if err := syncDirectory(filepath.Dir(retired)); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
 	}
-	// Publish only a fully initialized volume. Retrying after a daemon restart
-	// removes the unpublished subvolume and recreates it from the same snapshot.
-	preparing := filepath.Join(s.volumeRoot(volumeUUID), ".activating")
+	// A delayed retry must not clear a newer export or retire a newer active home.
+	if pending, err := os.ReadFile(filepath.Join(root, ".exporting")); err == nil && string(pending) == snapshotUUID {
+		if err := os.Remove(filepath.Join(root, ".exporting")); err != nil {
+			return err
+		}
+		if err := syncDirectory(root); err != nil {
+			return err
+		}
+	}
+	return uploadSnapshot(ctx, s.snapshotPath(volumeUUID, snapshotUUID), body.UploadURL)
+}
+
+func (s *Server) prepareVolume(ctx context.Context, volume workspaceVolume) (string, error) {
+	if err := s.ensureVolumeDirs(volume.VolumeUUID); err != nil {
+		return "", err
+	}
+	root, active := s.volumeRoot(volume.VolumeUUID), s.activePath(volume.VolumeUUID)
+	if _, err := os.Stat(filepath.Join(root, ".exporting")); err == nil {
+		return "", fmt.Errorf("volume export is incomplete")
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	if _, err := os.Stat(active); err == nil {
+		return active, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	preparing := filepath.Join(root, ".preparing")
 	if _, err := os.Stat(preparing); err == nil {
 		if err := btrfs.SubvolDelete(preparing); err != nil {
-			jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-			return
+			return "", err
 		}
 	}
-	if body.SnapshotUUID != nil {
-		if err := btrfs.SubvolSnapshot(preparing, s.snapshotPath(volumeUUID, *body.SnapshotUUID), false); err != nil {
-			jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-			return
+	if volume.Snapshot != nil {
+		if err := s.fetchSnapshot(ctx, volume.VolumeUUID, *volume.Snapshot); err != nil {
+			return "", err
 		}
-	} else if err := btrfs.SubvolCreate(preparing); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
-	} else if err := os.Chown(preparing, 1000, 1000); err != nil {
-		_ = btrfs.SubvolDelete(preparing)
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
-	}
-	defer btrfs.SubvolDelete(preparing)
-	if err := os.WriteFile(identityPath, identity, 0o600); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
+		if err := btrfs.SubvolSnapshot(preparing, s.snapshotPath(volume.VolumeUUID, volume.Snapshot.SnapshotUUID), false); err != nil {
+			return "", err
+		}
+	} else {
+		if err := btrfs.SubvolCreate(preparing); err != nil {
+			return "", err
+		}
+		if err := os.Chown(preparing, 1000, 1000); err != nil {
+			return "", err
+		}
 	}
 	if err := os.Rename(preparing, active); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
+		return "", err
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "activated"})
+	return active, syncDirectory(root)
 }
 
-func (s *Server) handleVolumeDeactivate(w http.ResponseWriter, r *http.Request) {
-	volumeUUID := r.PathValue("volumeUUID")
-
-	active := s.activePath(volumeUUID)
-	if _, err := os.Stat(active); os.IsNotExist(err) {
-		writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "status": "deactivated"})
-		return
-	} else if err != nil {
-		jsonError(w, http.StatusConflict, "active_busy", err.Error())
-		return
-	}
-	if err := btrfs.SubvolDelete(active); err != nil {
-		jsonError(w, http.StatusConflict, "active_busy", err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "status": "deactivated"})
-}
-
-func (s *Server) handleVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
-	volumeUUID := r.PathValue("volumeUUID")
-	body, ok := decodeJSON[volumeSnapshotRequest](w, r)
-	if !ok {
-		return
-	}
-	if !validUUID(body.SnapshotUUID) {
-		jsonError(w, http.StatusBadRequest, "invalid_request", "Invalid snapshot UUID")
-		return
-	}
-
-	if err := s.ensureVolumeDirs(volumeUUID); err != nil {
-		jsonError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
-	active := s.activePath(volumeUUID)
-	snapshot := s.snapshotPath(volumeUUID, body.SnapshotUUID)
+func (s *Server) fetchSnapshot(ctx context.Context, volumeUUID string, source volumeSnapshot) error {
+	snapshot := s.snapshotPath(volumeUUID, source.SnapshotUUID)
 	if _, err := os.Stat(snapshot); err == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "exists"})
-		return
-	}
-	if _, err := os.Stat(active); err != nil {
-		jsonError(w, http.StatusNotFound, "active_not_found", "Active volume not found")
-		return
-	}
-	if err := btrfs.SubvolSnapshot(snapshot, active, true); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "created"})
-}
-
-func (s *Server) handleVolumeUpload(w http.ResponseWriter, r *http.Request) {
-	volumeUUID := r.PathValue("volumeUUID")
-	body, ok := decodeJSON[volumeTransferRequest](w, r)
-	if !ok {
-		return
-	}
-	if !validUUID(body.SnapshotUUID) || body.URL == "" {
-		jsonError(w, http.StatusBadRequest, "invalid_request", "Snapshot UUID and URL are required")
-		return
-	}
-
-	snapshot := s.snapshotPath(volumeUUID, body.SnapshotUUID)
-	if _, err := os.Stat(snapshot); err != nil {
-		jsonError(w, http.StatusNotFound, "snapshot_not_found", "Snapshot not found")
-		return
-	}
-	if err := uploadSnapshot(r.Context(), snapshot, body.URL); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "uploaded"})
-}
-
-func (s *Server) handleVolumeDownload(w http.ResponseWriter, r *http.Request) {
-	volumeUUID := r.PathValue("volumeUUID")
-	body, ok := decodeJSON[volumeTransferRequest](w, r)
-	if !ok {
-		return
-	}
-	if !validUUID(body.SnapshotUUID) || body.URL == "" {
-		jsonError(w, http.StatusBadRequest, "invalid_request", "Snapshot UUID and URL are required")
-		return
-	}
-
-	if err := s.ensureVolumeDirs(volumeUUID); err != nil {
-		jsonError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
-	snapshot := s.snapshotPath(volumeUUID, body.SnapshotUUID)
-	if _, err := os.Stat(snapshot); err == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "exists"})
-		return
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
 	}
 	receiving := filepath.Join(s.volumeRoot(volumeUUID), "receiving", uuid.NewString())
-	if err := os.MkdirAll(receiving, 0o755); err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
+	if err := os.MkdirAll(receiving, 0755); err != nil {
+		return err
 	}
-	failReceive := func(subvolume string, err error) {
-		if subvolume != "" {
-			_ = btrfs.SubvolDelete(subvolume)
-		}
-		_ = btrfsRemoveAll(receiving)
-		jsonError(w, http.StatusInternalServerError, "internal_error", err.Error())
+	defer btrfsRemoveAll(receiving)
+	if err := downloadSnapshot(ctx, source.DownloadURL, receiving); err != nil {
+		return err
 	}
-	if err := downloadSnapshot(r.Context(), body.URL, receiving); err != nil {
-		failReceive("", err)
-		return
-	}
-	received := filepath.Join(receiving, body.SnapshotUUID)
-	if _, err := os.Stat(received); err != nil {
-		failReceive("", err)
-		return
-	}
+	received := filepath.Join(receiving, source.SnapshotUUID)
 	if err := btrfsSetSubvolumeReadonly(received, false); err != nil {
-		failReceive(received, err)
-		return
+		return err
 	}
 	if err := os.Rename(received, snapshot); err != nil {
-		failReceive(received, err)
-		return
+		return err
 	}
 	if err := btrfsSetSubvolumeReadonly(snapshot, true); err != nil {
-		failReceive(snapshot, err)
-		return
+		return err
 	}
-	_ = btrfsRemoveAll(receiving)
-	writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "snapshot_uuid": body.SnapshotUUID, "status": "downloaded"})
+	return syncDirectory(filepath.Dir(snapshot))
+}
+
+func (s *Server) requireVolumeDetached(ctx context.Context, volumeUUID string) error {
+	result, err := s.runtime.ListPodSandbox(ctx, &runtimeapi.ListPodSandboxRequest{Filter: &runtimeapi.PodSandboxFilter{LabelSelector: map[string]string{volumeLabel: volumeUUID}}})
+	if err != nil {
+		return err
+	}
+	if len(result.Items) != 0 {
+		return fmt.Errorf("volume is attached to a workspace")
+	}
+	return nil
 }
 
 func (s *Server) handleVolumeDelete(w http.ResponseWriter, r *http.Request) {
 	volumeUUID := r.PathValue("volumeUUID")
-
+	if err := s.requireVolumeDetached(r.Context(), volumeUUID); err != nil {
+		jsonError(w, 409, "volume_busy", err.Error())
+		return
+	}
 	root := s.volumeRoot(volumeUUID)
-	if _, err := os.Stat(root); err == nil {
-		receivingRoot := filepath.Join(root, "receiving")
-		if entries, err := os.ReadDir(receivingRoot); err == nil {
-			for _, entry := range entries {
-				if entry.IsDir() {
-					_ = btrfsRemoveAll(filepath.Join(receivingRoot, entry.Name()))
-				}
+	// Remove nested received subvolumes before their parent directories.
+	if entries, err := os.ReadDir(filepath.Join(root, "receiving")); err == nil {
+		for _, entry := range entries {
+			if err := btrfsRemoveAll(filepath.Join(root, "receiving", entry.Name())); err != nil {
+				jsonError(w, 500, "internal_error", err.Error())
+				return
 			}
 		}
-		_ = btrfsRemoveAll(receivingRoot)
-		_ = btrfsRemoveAll(filepath.Join(root, "snapshots"))
-		_ = btrfs.SubvolDelete(s.activePath(volumeUUID))
-		_ = btrfs.SubvolDelete(filepath.Join(root, ".activating"))
-		_ = os.RemoveAll(root)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"volume_uuid": volumeUUID, "status": "deleted"})
+	for _, path := range []string{filepath.Join(root, "snapshots"), filepath.Join(root, "retired"), root} {
+		if err := btrfsRemoveAll(path); err != nil {
+			jsonError(w, 500, "internal_error", err.Error())
+			return
+		}
+	}
+	writeJSON(w, 200, map[string]any{"volume_uuid": volumeUUID, "status": "deleted"})
 }
 
 func (s *Server) volumeRoot(volumeUUID string) string {

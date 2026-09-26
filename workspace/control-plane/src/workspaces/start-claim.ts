@@ -19,6 +19,7 @@ type HomeVolumeRow = {
   volume_id: number;
   volume_uuid: string;
   snapshot_uuid: string | null;
+  max_size_bytes: number;
   node_id: number | null;
   node_uuid: string | null;
   node_base_url: string | null;
@@ -74,6 +75,7 @@ export async function completeWorkspaceStart(
 }
 
 export async function claimWorkspaceStart(db: D1Database, input: ClaimWorkspaceStartInput): Promise<ClaimedWorkspaceStart> {
+  input = { ...input, exportSnapshotUuid: input.exportSnapshotUuid ?? crypto.randomUUID() };
   const claimRows = parseClaimRows(await runClaimBatch(db, input));
   if (claimRows.userRows.length === 0) {
     throw workspaceError("user_not_found", "User not found", 404);
@@ -93,8 +95,8 @@ async function runClaimBatch(db: D1Database, input: ClaimWorkspaceStartInput) {
   try {
     return await db.batch([
       db.prepare(
-        `INSERT INTO workspace_operations (user_id, operation_uuid, kind, created_at)
-         SELECT u.user_id, ?, 'start', ?
+        `INSERT INTO workspace_operations (user_id, operation_uuid, kind, created_at, plan_json)
+         SELECT u.user_id, ?, 'start', ?, ?
          FROM users u
          WHERE u.user_uuid = ?
            AND EXISTS (
@@ -103,7 +105,7 @@ async function runClaimBatch(db: D1Database, input: ClaimWorkspaceStartInput) {
              WHERE n.node_uuid = ?
                AND n.status = 'active'
            )`,
-      ).bind(input.workspaceUuid, input.now, input.userUUID, input.nodeUUID),
+      ).bind(input.workspaceUuid, input.now, JSON.stringify({ snapshot_uuid: input.exportSnapshotUuid, volume_dst_path: input.volumeDstPath ?? "/home/hacker" }), input.userUUID, input.nodeUUID),
       db.prepare(
         `INSERT INTO volumes (volume_uuid, snapshot_uuid, node_id, max_size_bytes, updated_at)
          SELECT ?, NULL, NULL, ?, ?
@@ -190,6 +192,7 @@ async function runClaimBatch(db: D1Database, input: ClaimWorkspaceStartInput) {
            v.volume_id,
            v.volume_uuid,
            v.snapshot_uuid,
+           v.max_size_bytes,
            v.node_id,
            n.node_uuid,
            n.base_url AS node_base_url
@@ -257,6 +260,7 @@ function mapClaimRows(input: ClaimWorkspaceStartInput, claimRows: ClaimRows): Cl
   return {
     userId: claimRows.userRows[0].user_id,
     operationUuid: input.workspaceUuid,
+    exportSnapshotUuid: input.exportSnapshotUuid!,
     workspace: {
       workspaceId: claimRows.workspaceRows[0].workspace_id,
       workspaceUuid: input.workspaceUuid,
@@ -282,6 +286,7 @@ function mapClaimRows(input: ClaimWorkspaceStartInput, claimRows: ClaimRows): Cl
       volumeId: homeVolume.volume_id,
       volumeUuid: homeVolume.volume_uuid,
       snapshotUuid: homeVolume.snapshot_uuid,
+      maxSizeBytes: homeVolume.max_size_bytes,
       authoritativeNode,
     },
   };
