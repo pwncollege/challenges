@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+data_dir=/var/lib/pwn.college
+image_path="$data_dir/control-plane-volumes.img"
+mount_path="$data_dir/volumes"
+image_size="${PWN_WORKSPACE_VOLUME_IMAGE_SIZE:-8G}"
+
+require_root() {
+  if [[ "$(id -u)" != 0 ]]; then
+    echo "error: volume storage setup must run as root" >&2
+    exit 1
+  fi
+}
+
+mounted() {
+  findmnt --mountpoint "$mount_path" >/dev/null 2>&1
+}
+
+check_mount() {
+  local filesystem options
+  filesystem="$(findmnt --noheadings --output FSTYPE --mountpoint "$mount_path")"
+  options="$(findmnt --noheadings --output OPTIONS --mountpoint "$mount_path")"
+  if [[ "$filesystem" != btrfs ]]; then
+    echo "error: $mount_path is mounted as $filesystem, not btrfs" >&2
+    exit 1
+  fi
+  if [[ ",$options," != *,nosuid,* ]]; then
+    echo "error: $mount_path must be mounted nosuid" >&2
+    exit 1
+  fi
+}
+
+setup() {
+  require_root
+  install -d -m 0711 "$data_dir" "$mount_path"
+  if mounted; then
+    check_mount
+    return
+  fi
+  if [[ -n "$(find "$mount_path" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+    echo "error: refusing to mount over non-empty $mount_path" >&2
+    exit 1
+  fi
+  if [[ ! -e "$image_path" ]]; then
+    truncate --size "$image_size" "$image_path"
+    mkfs.btrfs --quiet --force "$image_path"
+  fi
+  mount --options loop,nosuid "$image_path" "$mount_path"
+  chmod 0711 "$mount_path"
+  check_mount
+}
+
+teardown() {
+  require_root
+  if mounted; then
+    umount "$mount_path"
+  fi
+}
+
+status() {
+  if mounted; then
+    check_mount
+    findmnt --mountpoint "$mount_path"
+  else
+    echo "$mount_path is not mounted"
+    exit 1
+  fi
+}
+
+case "${1:-}" in
+  setup) setup ;;
+  teardown) teardown ;;
+  status) status ;;
+  *)
+    echo "usage: pwn-workspace-storage {setup|teardown|status}" >&2
+    exit 2
+    ;;
+esac

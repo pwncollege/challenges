@@ -61,7 +61,7 @@
           workspaceSystem = import ./workspace { inherit pkgs lib; };
           runtime = workspaceSystem.mkRuntime workspaceConfig;
           workspace-daemon = workspaceSystem.workspaceDaemon;
-          pwn-workspace = workspaceSystem.mkActivator runtime;
+          pwn-workspace = workspaceSystem.mkActivator runtime { };
 
           pwnshop = import ./tools/pwnshop {
             inherit pkgs;
@@ -97,25 +97,42 @@
             pwn-workspace-runtime = runtime.runtime;
           };
           discord-feedback = import ./tools/feedback { inherit pkgs; };
+          controlPlaneStorage = pkgs.writeShellApplication {
+            name = "pwn-workspace-storage";
+            runtimeInputs = with pkgs; [
+              btrfs-progs
+              coreutils
+              findutils
+              util-linux
+            ];
+            text = builtins.readFile ./workspace/control-plane/scripts/storage;
+          };
           mkDevShell =
-            selectedRuntime:
+            {
+              selectedRuntime,
+              activatorOptions ? { },
+              extraPackages ? [ ],
+              beforeActivate ? "",
+            }:
             let
-              pwn-workspace = workspaceSystem.mkActivator selectedRuntime;
+              pwn-workspace = workspaceSystem.mkActivator selectedRuntime activatorOptions;
             in
             pkgs.mkShell {
-              packages = with pkgs; [
-                asciinema
-                discord-feedback
-                docker
-                git
-                git-crypt
-                jq
-                pwn-workspace
-                pwnshop
-                tomlq
-                uv
-                selectedRuntime.runtime
-              ];
+              packages =
+                (with pkgs; [
+                  asciinema
+                  discord-feedback
+                  docker
+                  git
+                  git-crypt
+                  jq
+                  pwn-workspace
+                  pwnshop
+                  tomlq
+                  uv
+                  selectedRuntime.runtime
+                ])
+                ++ extraPackages;
               shellHook = ''
                 export PWN_WORKSPACE="${selectedRuntime.runtime}"
                 echo "workspace: ${selectedRuntime.summary}" >&2
@@ -149,6 +166,8 @@
                   fi
                 fi
 
+                ${beforeActivate}
+
                 if ! runtime_environment="$($sudo ${lib.getExe pwn-workspace})"; then
                   echo "error: failed to start the challenge runtime" >&2
                   return 1
@@ -158,8 +177,22 @@
             };
         in
         {
-          default = mkDevShell runtime;
-          full = mkDevShell fullRuntime;
+          default = mkDevShell { selectedRuntime = runtime; };
+          full = mkDevShell { selectedRuntime = fullRuntime; };
+          control-plane = mkDevShell {
+            selectedRuntime = runtime;
+            activatorOptions.volumeBasePath = "/var/lib/pwn.college/volumes";
+            extraPackages = [
+              controlPlaneStorage
+              pkgs.nodejs_24
+            ];
+            beforeActivate = ''
+              if ! $sudo ${lib.getExe controlPlaneStorage} setup; then
+                echo "error: failed to prepare control-plane volume storage" >&2
+                return 1
+              fi
+            '';
+          };
         }
       );
     };

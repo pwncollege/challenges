@@ -3,6 +3,8 @@
   lib,
   workspaceRuntime,
   egressDomains ? [ "example.com" ],
+  publicKey ? null,
+  volumeBasePath ? null,
 }:
 
 let
@@ -12,6 +14,8 @@ let
       lib
       workspaceRuntime
       egressDomains
+      publicKey
+      volumeBasePath
       ;
   };
 

@@ -1,0 +1,31 @@
+{
+  "name": "pwn-workspace-control-plane",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "wrangler d1 migrations apply workspace_db --local --config wrangler.toml",
+    "db:seed": "wrangler d1 execute workspace_db --local --config wrangler.toml --file seed.sql",
+    "db:setup": "npm run db:migrate && npm run db:seed",
+    "dev": "npm run db:setup && wrangler dev --config wrangler.toml --local --port 8787 --show-interactive-dev-session false",
+    "test": "npm run typecheck && npm run test:unit && npm run test:e2e",
+    "test:unit": "node --test --test-concurrency=1 --test-timeout=30000 tests/start-claim.test.mjs tests/storage.test.mjs tests/volume-placement.test.mjs",
+    "test:e2e": "node --test --test-concurrency=1 --test-timeout=180000 tests/workspace-flow.test.mjs"
+  },
+  "dependencies": {
+    "hono": "^4.12.30",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260715.1",
+    "@types/node": "^24.10.0",
+    "esbuild": "^0.28.1",
+    "miniflare": "5.20260925.0-alpha",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.110.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

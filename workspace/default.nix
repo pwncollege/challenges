@@ -53,8 +53,19 @@ in
 
   mkActivator =
     runtime:
+    {
+      egressDomains ? [ "example.com" ],
+      publicKey ? null,
+      volumeBasePath ? null,
+    }:
     import ./activate.nix {
-      inherit pkgs lib;
+      inherit
+        pkgs
+        lib
+        egressDomains
+        publicKey
+        volumeBasePath
+        ;
       workspaceRuntime = runtime.runtime;
     };
 

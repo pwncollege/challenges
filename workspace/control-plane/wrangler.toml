@@ -1,0 +1,20 @@
+name = "workspace-control-plane"
+main = "src/index.ts"
+compatibility_date = "2026-05-08"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+PWN_WORKSPACE_ENVIRONMENT = "development"
+PWN_WORKSPACE_ORIGIN = "http://127.0.0.1:8787"
+PWN_WORKSPACE_PRIVATE_KEY_B64 = "MC4CAQAwBQYDK2VwBCIEIDOZMs9fCeDKP0D/ITcQ9jVwRaR2SVsE0VKYYX0aTmGv"
+PWN_WORKSPACE_PUBLIC_KEY_B64 = "MCowBQYDK2VwAyEAj0MbhHCS7uippaWcM+7Wg3LkqyUbItpOBE63FVpFTlc="
+
+[[d1_databases]]
+binding = "DB"
+database_name = "workspace_db"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "VOLUMES"
+bucket_name = "volumes"
