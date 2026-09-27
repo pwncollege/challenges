@@ -1,37 +1,21 @@
-import { Context, Effect, Layer } from "effect";
+import { Effect } from "effect";
+import { AwsClient } from "aws4fetch";
 import { Environment } from "./common.ts";
-import { fromPromise, workspaceError } from "./workspaces/errors.ts";
-import { transferUrl, verifyTransferURL } from "./volumes/transfers.ts";
+import { fromPromise } from "./workspaces/errors.ts";
 
-function snapshotKey(volumeUUID: string, snapshotUUID: string) {
-  return `snapshots/${volumeUUID}/${snapshotUUID}`;
-}
-
-export class SnapshotStore extends Context.Service<SnapshotStore>()("control-plane/SnapshotStore", {
-  make: Effect.gen(function*() {
-    const env = yield* Environment;
-    const bucket = env.VOLUMES;
-    return {
-      read: (volumeUUID: string, snapshotUUID: string) =>
-        fromPromise(() => bucket.get(snapshotKey(volumeUUID, snapshotUUID))).pipe(
-          Effect.flatMap((object) => object
-            ? Effect.succeed(object.body)
-            : Effect.fail(workspaceError("snapshot_not_found", "Snapshot not found", 404))),
-        ),
-      upload: (volumeUUID: string, snapshotUUID: string, body: ReadableStream<Uint8Array>) => {
-        const key = snapshotKey(volumeUUID, snapshotUUID);
-        return fromPromise(() => bucket.put(key, body)).pipe(Effect.as(key));
-      },
-      transferUrl: (method: "GET" | "PUT", volumeUUID: string, snapshotUUID: string) =>
-        fromPromise(() => transferUrl(env, method, volumeUUID, snapshotUUID)),
-      verifyTransfer: (requestURL: string, method: "GET" | "PUT") =>
-        fromPromise(() => verifyTransferURL(env, requestURL, method)).pipe(
-          Effect.flatMap((valid) => valid
-            ? Effect.void
-            : Effect.fail(workspaceError("invalid_signature", "Invalid transfer signature", 401))),
-        ),
-    };
-  }),
-}) {
-  static readonly layer = Layer.effect(SnapshotStore, SnapshotStore.make);
-}
+export const snapshotUrl = Effect.fn("snapshotUrl")(function*(
+  method: "GET" | "PUT", volumeUUID: string, snapshotUUID: string,
+) {
+  const env = yield* Environment;
+  return yield* fromPromise(async () => {
+    const client = new AwsClient({
+      service: "s3", region: "auto",
+      accessKeyId: env.PWN_WORKSPACE_R2_ACCESS_KEY_ID,
+      secretAccessKey: env.PWN_WORKSPACE_R2_SECRET_ACCESS_KEY,
+    });
+    const path = ["snapshots", volumeUUID, snapshotUUID].map(encodeURIComponent).join("/");
+    const url = new URL(`${env.PWN_WORKSPACE_R2_BUCKET_URL.replace(/\/$/, "")}/${path}`);
+    url.searchParams.set("X-Amz-Expires", "900");
+    return (await client.sign(url, { method, aws: { signQuery: true } })).url;
+  });
+});

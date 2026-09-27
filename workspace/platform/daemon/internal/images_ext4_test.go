@@ -3,7 +3,9 @@ package daemon
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,12 +16,13 @@ import (
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
+	"golang.org/x/sys/unix"
 )
 
 func TestExt4ImageTransfer(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	source, snapshot, received, restored := filepath.Join(dir, "home.ext4"), filepath.Join(dir, "snapshot.zst"), filepath.Join(dir, "received.zst"), filepath.Join(dir, "restored.ext4")
+	source, restored := filepath.Join(dir, "home.ext4"), filepath.Join(dir, "restored.ext4")
 	const size = 64 << 20
 	if err := createImage(ctx, source, size); err != nil {
 		t.Fatal(err)
@@ -35,8 +38,18 @@ func TestExt4ImageTransfer(t *testing.T) {
 	if err := runVolumeCommand(ctx, "debugfs", "-w", "-R", "write "+marker+" /marker", source); err != nil {
 		t.Fatal(err)
 	}
-	if err := captureImage(ctx, source, snapshot); err != nil {
+	snapshot, err := captureImage(ctx, source)
+	if err != nil {
 		t.Fatal(err)
+	}
+	defer snapshot.Close()
+	link, err := os.Readlink(fmt.Sprintf("/proc/self/fd/%d", snapshot.Fd()))
+	if err != nil || !strings.HasPrefix(link, "/memfd:workspace-snapshot") {
+		t.Fatalf("snapshot is not a memfd: %q, %v", link, err)
+	}
+	seals, err := unix.FcntlInt(snapshot.Fd(), unix.F_GET_SEALS, 0)
+	if err != nil || seals&(unix.F_SEAL_WRITE|unix.F_SEAL_GROW|unix.F_SEAL_SHRINK) != unix.F_SEAL_WRITE|unix.F_SEAL_GROW|unix.F_SEAL_SHRINK {
+		t.Fatalf("snapshot is not sealed: %d, %v", seals, err)
 	}
 	var uploaded []byte
 	transfer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,10 +70,7 @@ func TestExt4ImageTransfer(t *testing.T) {
 	if err := uploadSnapshot(ctx, snapshot, transfer.URL); err != nil {
 		t.Fatal(err)
 	}
-	if err := downloadSnapshot(ctx, transfer.URL, received, size); err != nil {
-		t.Fatal(err)
-	}
-	if err := restoreImage(ctx, received, restored, size); err != nil {
+	if err := downloadSnapshot(ctx, transfer.URL, restored, size); err != nil {
 		t.Fatal(err)
 	}
 	digest := func(path string) [32]byte {
@@ -107,11 +117,8 @@ func TestRestoreRejectsInvalidImagesWithoutPublishing(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			snapshot, image := filepath.Join(dir, "snapshot"), filepath.Join(dir, "image")
-			if err := os.WriteFile(snapshot, tc.data, 0600); err != nil {
-				t.Fatal(err)
-			}
-			if err := restoreImage(context.Background(), snapshot, image, tc.size); err == nil {
+			image := filepath.Join(dir, "image")
+			if err := restoreImage(context.Background(), bytes.NewReader(tc.data), image, tc.size); err == nil {
 				t.Fatal("invalid image accepted")
 			}
 			if _, err := os.Stat(image); !os.IsNotExist(err) {
@@ -126,14 +133,60 @@ func TestRestoreRejectsInvalidImagesWithoutPublishing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	dir := t.TempDir()
-	source, snapshot := filepath.Join(dir, "source"), filepath.Join(dir, "snapshot")
+	source := filepath.Join(dir, "source")
 	if err := os.WriteFile(source, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := captureImage(ctx, source, snapshot); err == nil {
+	if file, err := captureImage(ctx, source); err == nil || file != nil {
 		t.Fatal("cancelled capture succeeded")
 	}
-	if _, err := os.Stat(snapshot); !os.IsNotExist(err) {
-		t.Fatalf("published cancelled capture: %v", err)
+}
+
+func TestIncompressibleSnapshotAndCancelledCaptureCleanup(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "home.ext4")
+	data := make([]byte, 1<<20)
+	if _, err := rand.Read(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := captureImage(context.Background(), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snapshot.Close()
+	info, err := snapshot.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() <= int64(len(data)) || info.Size() > maxSnapshotSize(int64(len(data))) {
+		t.Fatalf("incompressible snapshot size: %d", info.Size())
+	}
+	decoder, err := zstd.NewReader(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer decoder.Close()
+	restored, err := io.ReadAll(decoder)
+	if err != nil || !bytes.Equal(restored, data) {
+		t.Fatalf("incompressible data did not round trip: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	before, _ := os.ReadDir("/proc/self/fd")
+	for range 5 {
+		if file, err := captureImage(ctx, source); err == nil || file != nil {
+			t.Fatal("cancelled capture succeeded")
+		}
+	}
+	after, _ := os.ReadDir("/proc/self/fd")
+	if len(after) != len(before) {
+		t.Fatalf("failed captures leaked descriptors: %d -> %d", len(before), len(after))
+	}
+	files, _ := os.ReadDir(dir)
+	if len(files) != 1 {
+		t.Fatalf("compressed files written to disk: %v", files)
 	}
 }

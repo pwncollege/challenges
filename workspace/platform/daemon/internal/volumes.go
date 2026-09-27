@@ -23,7 +23,7 @@ type volumeExportRequest struct {
 	UploadURL         string `json:"upload_url"`
 }
 
-// Export is a handoff: stop, capture, retire the writable home, and upload.
+// Export is a handoff: stop, retire the writable home, compress, and upload.
 // Retired homes are never selected by prepareVolume, even after a restart.
 func (s *Server) handleVolumeExport(w http.ResponseWriter, r *http.Request) {
 	volumeUUID, snapshotUUID := r.PathValue("volumeUUID"), r.PathValue("snapshotUUID")
@@ -48,6 +48,13 @@ func (s *Server) handleVolumeExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) exportVolume(ctx context.Context, volumeUUID, snapshotUUID string, body volumeExportRequest) error {
+	// Only one compressed payload is resident per node, including while uploading.
+	select {
+	case s.snapshotUploads <- struct{}{}:
+		defer func() { <-s.snapshotUploads }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	if err := s.ensureVolumeDirs(volumeUUID); err != nil {
 		return err
 	}
@@ -75,14 +82,6 @@ func (s *Server) exportVolume(ctx context.Context, volumeUUID, snapshotUUID stri
 		if err := s.requireVolumeDetached(ctx, volumeUUID); err != nil {
 			return err
 		}
-		snapshot := s.snapshotPath(volumeUUID, snapshotUUID)
-		if _, err := os.Stat(snapshot); os.IsNotExist(err) {
-			if err := captureImage(ctx, filepath.Join(s.activePath(volumeUUID), "home.ext4"), snapshot); err != nil {
-				return err
-			}
-		} else if err != nil {
-			return err
-		}
 		if err := unregisterVolume(ctx, s.activePath(volumeUUID)); err != nil {
 			return err
 		}
@@ -107,7 +106,14 @@ func (s *Server) exportVolume(ctx context.Context, volumeUUID, snapshotUUID stri
 			return err
 		}
 	}
-	return uploadSnapshot(ctx, s.snapshotPath(volumeUUID, snapshotUUID), body.UploadURL)
+	// The retired raw image survives failures and restarts. Retrying the same
+	// snapshot recompresses these exact bytes without touching a newer home.
+	snapshot, err := captureImage(ctx, filepath.Join(retired, "home.ext4"))
+	if err != nil {
+		return err
+	}
+	defer snapshot.Close()
+	return uploadSnapshot(ctx, snapshot, body.UploadURL)
 }
 
 func (s *Server) prepareVolume(ctx context.Context, volume workspaceVolume) (string, error) {
@@ -135,15 +141,7 @@ func (s *Server) prepareVolume(ctx context.Context, volume workspaceVolume) (str
 	defer os.RemoveAll(preparing)
 	image := filepath.Join(preparing, "home.ext4")
 	if volume.Snapshot != nil {
-		snapshot := s.snapshotPath(volume.VolumeUUID, volume.Snapshot.SnapshotUUID)
-		if _, err := os.Stat(snapshot); os.IsNotExist(err) {
-			if err := downloadSnapshot(ctx, volume.Snapshot.DownloadURL, snapshot, volume.MaxSizeBytes); err != nil {
-				return "", err
-			}
-		} else if err != nil {
-			return "", err
-		}
-		if err := restoreImage(ctx, snapshot, image, volume.MaxSizeBytes); err != nil {
+		if err := downloadSnapshot(ctx, volume.Snapshot.DownloadURL, image, volume.MaxSizeBytes); err != nil {
 			return "", err
 		}
 	} else if err := createImage(ctx, image, volume.MaxSizeBytes); err != nil {
@@ -198,13 +196,9 @@ func (s *Server) activePath(volumeUUID string) string {
 	return filepath.Join(s.volumeRoot(volumeUUID), "active")
 }
 
-func (s *Server) snapshotPath(volumeUUID, snapshotUUID string) string {
-	return filepath.Join(s.volumeRoot(volumeUUID), "snapshots", snapshotUUID+".ext4.zst")
-}
-
 func (s *Server) ensureVolumeDirs(volumeUUID string) error {
 	root := s.volumeRoot(volumeUUID)
-	if err := os.MkdirAll(filepath.Join(root, "snapshots"), 0o755); err != nil {
+	if err := os.MkdirAll(root, 0700); err != nil {
 		return err
 	}
 	if err := syncDirectory(root); err != nil {
@@ -219,12 +213,7 @@ func validUUID(value string) bool {
 }
 
 // Capturing first gives every upload a known length and immutable retry data.
-func uploadSnapshot(ctx context.Context, snapshot, url string) error {
-	file, err := os.Open(snapshot)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+func uploadSnapshot(ctx context.Context, file *os.File, url string) error {
 	info, err := file.Stat()
 	if err != nil {
 		return err
@@ -260,18 +249,10 @@ func downloadSnapshot(ctx context.Context, url, destination string, maxImageSize
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return httpTransferStatusError(resp.StatusCode, body)
 	}
-	// Allow compression overhead for incompressible images, with a bounded download.
-	limit := maxImageSize + maxImageSize/128 + (1 << 20)
-	return publishFile(destination, func(file *os.File) error {
-		size, err := io.Copy(file, io.LimitReader(resp.Body, limit+1))
-		if err != nil {
-			return err
-		}
-		if size > limit {
-			return fmt.Errorf("snapshot exceeds volume size")
-		}
-		return nil
-	})
+	if resp.ContentLength > maxSnapshotSize(maxImageSize) {
+		return fmt.Errorf("snapshot exceeds volume size")
+	}
+	return restoreImage(ctx, resp.Body, destination, maxImageSize)
 }
 
 func httpTransferStatusError(statusCode int, body []byte) error {

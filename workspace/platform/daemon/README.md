@@ -43,10 +43,18 @@ live on any host filesystem supporting ordinary sparse files. The platform puts
 owned by UID/GID 1000. Snapshots contain complete zstd-compressed ext4 images. A
 move stops the VM and releases its disk before capture; live backups would need
 an explicit guest freeze or a storage snapshot mechanism. They are not implemented.
-Compression finishes into a local immutable file before upload, giving HTTP a
-known Content-Length. Restore checks the decompressed size and preserves holes
-for zero-filled chunks. Retired images and cached snapshots remain until volume
-deletion; automatic cache eviction is not implemented.
+Compression finishes into a sealed memfd before upload, giving HTTP a known
+Content-Length. The kernel bounds the buffer by the raw image size plus a
+compression allowance (image size / 128 + 1 MiB). For a 1 GiB home this is
+1033 MiB; memory is only allocated as data is written. Exports are serialized per
+daemon so only one payload is buffered at a time. Codec and HTTP
+buffers consume additional memory. Closing the memfd frees it on success or
+failure; a retry recompresses the retained raw image. The platform's systemd unit
+sets `MemorySwapMax=0` to keep anonymous buffers out of swap. A daemon launched
+another way needs equivalent swap configuration to avoid swap I/O.
+Downloads stream directly into the decoder. Restore bounds compressed input,
+decoder memory, and decompressed size, and preserves holes for zero-filled chunks.
+Retired images remain until volume deletion; automatic eviction is not implemented.
 
 The platform generates a CNI bridge configuration. CNI `host-local` IPAM assigns
 addresses from the platform's configured workspace subnet; the daemon reads the
@@ -93,8 +101,8 @@ when present, the workspace runtime writes it to `/flag`.
 
 
 The node reuses an active local home. If none exists, it downloads the supplied
-`snapshot: {"snapshot_uuid": "...", "download_url": "..."}` (or uses that exact
-cached snapshot). `snapshot: null` creates an empty home. A failed download fails
+`snapshot: {"snapshot_uuid": "...", "download_url": "..."}`.
+`snapshot: null` creates an empty home. A failed download fails
 the start. An optional `replace_workspace_uuid` stops the previous workspace on
 this node in the same command, after validating the request and image.
 
@@ -105,16 +113,16 @@ this node in the same command, after validating the request and image.
 ```json
 {
   "stop_workspace_uuid": "11111111-1111-4111-8111-111111111111",
-  "upload_url": "https://control.example/api/volumes/..."
+  "upload_url": "https://<account-id>.r2.cloudflarestorage.com/volumes/snapshots/...?X-Amz-..."
 }
 ```
 
 `stop_workspace_uuid` is optional when the home is already stopped. Export stops
-the workspace, captures the snapshot, retires the writable home, and uploads the
+the workspace, retires the writable home, compresses it in memory, and uploads the
 snapshot. Any failure blocks movement. The node waits for the upload to complete before acknowledging export; the
 coordinator then starts the destination. Retired copies are never reused as active homes.
 Ordinary workspace stop retains the active home for the next local start.
-`POST /api/volumes/<volume-uuid>/delete` removes an unattached volume and its caches.
+`POST /api/volumes/<volume-uuid>/delete` removes an unattached volume and its retired images.
 
 ## Retries and interrupted operations
 
@@ -123,7 +131,7 @@ Composite commands lock their workspaces and home; overlapping commands return
 starts return the running workspace without rerunning initialization. Different
 parameters conflict. A stopped UUID cannot be started again.
 
-Snapshot UUIDs identify one export. Repeating an export reuses its captured data;
+Snapshot UUIDs identify one export. Repeating an export recompresses its retired image;
 a delayed retry cannot retire a newer home. Signed transfer URLs may be refreshed
 without changing either command's identity.
 

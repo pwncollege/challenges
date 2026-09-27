@@ -9,14 +9,18 @@ containers themselves run on the node-level service in `../platform`.
 The Worker uses Effect **4.0.0-rc.117**, pinned to this release candidate. Effect's
 `HttpRouter` handles routing and `Schema` validates request bodies; Hono and Zod
 are no longer dependencies. `Environment` and `WorkerContext` provide bindings
-per request. Three services separate workflows from external I/O:
+per request. Two services separate workflows from external I/O:
 
 - `NodeClient` signs commands, handles HTTP statuses, and validates daemon errors.
   Commands return success or a typed error; stopping an absent workspace succeeds.
   Mutating commands are sent once, with no automatic retries.
 - `WorkspaceStore` owns D1 queries, claims, and state changes. The atomic SQL
   batches remain native D1 operations.
-- `SnapshotStore` owns R2 reads, streamed uploads, and signed transfer URLs.
+
+The `snapshotUrl` function creates presigned R2 S3 URLs using `aws4fetch`.
+Snapshot bytes travel directly between the node and R2. The `VOLUMES: R2Bucket`
+binding remains available for Worker-side bucket operations, but has no presign
+method; S3 signing requires separate credentials.
 
 Service constructors create lazy adapters without doing I/O, and are bound to each
 request's environment. Tests can substitute services through Layers. Runtime
@@ -38,7 +42,7 @@ creating workspace records the target node and runtime configuration. The old
 workspace and volume placement remain recorded until completion.
 
 Fresh starts and same-node replacements send one node command. Moves send two:
-source export (stop, capture, retire, upload), then destination start (prepare home,
+source export (stop, retire, compress, upload), then destination start (prepare home,
 start, wait for readiness). R2 transfer requests carry the data separately. The
 successful path makes two D1 calls: an atomic claim batch and an atomic completion
 batch. Every completion mutation checks claim ownership, releasing it last.
@@ -83,11 +87,23 @@ The signing keys in `wrangler.toml` are local-development credentials. Productio
 deployments should provide their own Worker secrets and configure each node with
 the matching raw Ed25519 public key.
 
+Snapshot transfers use the local R2 S3 endpoint exposed by Wrangler at
+`/cdn-cgi/local/r2/s3`. The local S3 credentials in `wrangler.toml` enable that
+endpoint. Production must set:
+
+- `PWN_WORKSPACE_R2_BUCKET_URL`: `https://<account-id>.r2.cloudflarestorage.com/<bucket>`
+- `PWN_WORKSPACE_R2_ACCESS_KEY_ID` and `PWN_WORKSPACE_R2_SECRET_ACCESS_KEY`: Worker
+  secrets for an R2 token with object read/write access restricted to that bucket
+
+The Worker signs URLs locally, with a 15-minute expiry and no request to R2.
+The R2 binding in the development config supplies local storage; application code
+uses the S3 endpoint for transfers.
+
 ## Tests
 
 `npm test` runs TypeScript checks, local D1/R2 tests, and the real Kata workspace
 lifecycle test. `npm run test:unit` runs without a workspace daemon: it covers
-claim contention, stale completion/cleanup, rejected starts, streamed snapshot uploads, and home movement
+claim contention, stale completion/cleanup, rejected starts, presigned S3 transfers, and home movement
 with simulated node responses, including blocked export and destination failures. It also
 covers request validation and disconnects during start and stop. Node-client tests verify signatures, typed errors,
 malformed response handling, and transport cancellation using an injected fetch
@@ -113,11 +129,11 @@ workflows still pending. Worker termination can leave operations claimed; recove
 must reconcile node state before releasing those claims.
 
 Home movement must finish retiring the old writable home before the destination
-starts. Nodes compress snapshots before upload, then send Content-Length. The
-Worker streams each upload directly into R2 under its snapshot UUID, without
-buffering multipart chunks or copying a staging object. R2 completes the write
-before the upload response, and the node waits for that response before
-acknowledging export.
-Uploads still pass through the Worker and are subject to the Cloudflare plan’s
-request body limit; large home exports need a direct R2 transfer path before
-production use. Periodic backups are not scheduled by this version.
+starts. Nodes compress the retired image into a sealed memfd, then send one PUT
+directly to R2 with Content-Length. Downloads stream through the decoder into a
+sparse ext4 image. Compressed payloads are never staged on disk. The node waits
+for R2's upload response before acknowledging export; retries recompress the
+same retained raw image. Direct transfers bypass Worker request-body limits.
+R2's single PUT limit is 5 GiB minus 5 MiB. The daemon bounds the compressed
+payload by the raw image size plus compression overhead (1033 MiB for today's
+1 GiB homes). Periodic backups are not scheduled by this version.

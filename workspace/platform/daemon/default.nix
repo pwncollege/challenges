@@ -52,6 +52,8 @@ in
       ++ lib.optional (volumeBasePath != null) "PWN_WORKSPACE_VOLUME_BASE_PATH=${volumeBasePath}";
       Restart = "on-failure";
       RestartSec = 1;
+      # Keep anonymous snapshot buffers in RAM instead of swapping them to disk.
+      MemorySwapMax = 0;
     };
   };
 }

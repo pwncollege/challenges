@@ -3,6 +3,12 @@ import { Cause, Effect, Exit } from "effect";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
+export const snapshotBindings = {
+  PWN_WORKSPACE_R2_BUCKET_URL: "https://control.test/cdn-cgi/local/r2/s3/volumes",
+  PWN_WORKSPACE_R2_ACCESS_KEY_ID: "workspace-local",
+  PWN_WORKSPACE_R2_SECRET_ACCESS_KEY: "workspace-local-secret",
+};
+
 export async function loadModule(entryPoint) {
   const result = await build({
     entryPoints: [entryPoint],
@@ -33,22 +39,31 @@ export async function loadSQL(db, file) {
 }
 
 export async function createBindings(t, options = {}) {
-  const mf = new Miniflare(convertV4MiniflareOptions({
+  const configuration = {
     modules: true,
     script: 'export default { fetch() { return new Response("test"); } };',
     compatibilityDate: "2026-05-08",
     d1Databases: ["DB"],
-    r2Buckets: ["VOLUMES"],
+    r2Buckets: { VOLUMES: { id: "volumes", s3Credentials: {
+      accessKeyId: snapshotBindings.PWN_WORKSPACE_R2_ACCESS_KEY_ID,
+      secretAccessKey: snapshotBindings.PWN_WORKSPACE_R2_SECRET_ACCESS_KEY,
+    } } },
     d1Persist: false,
     r2Persist: false,
     ...options,
-  }));
+    bindings: { ...snapshotBindings, ...options.bindings },
+  };
+  const mf = new Miniflare(convertV4MiniflareOptions(configuration));
   t.after(() => mf.dispose());
+  const address = await mf.ready;
+  configuration.port = Number(address.port);
+  configuration.bindings.PWN_WORKSPACE_R2_BUCKET_URL = new URL("/cdn-cgi/local/r2/s3/volumes", address).toString();
+  await mf.setOptions(convertV4MiniflareOptions(configuration));
   const DB = await mf.getD1Database("DB");
   const VOLUMES = await mf.getR2Bucket("VOLUMES");
   await loadSQL(DB, "migrations/0001_schema.sql");
   await loadSQL(DB, "seed.sql");
-  return { DB, VOLUMES, mf };
+  return { DB, VOLUMES, mf, bindings: configuration.bindings };
 }
 
 export async function runEffect(effect) {

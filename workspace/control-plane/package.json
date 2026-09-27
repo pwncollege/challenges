@@ -14,6 +14,7 @@
     "test:e2e": "node --test --test-concurrency=1 --test-timeout=180000 tests/workspace-flow.test.mjs"
   },
   "dependencies": {
+    "aws4fetch": "1.0.20",
     "effect": "4.0.0-rc.117"
   },
   "devDependencies": {

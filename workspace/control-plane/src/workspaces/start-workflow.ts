@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { NodeClient } from "../node-client.ts";
-import { SnapshotStore } from "../storage.ts";
+import { snapshotUrl } from "../storage.ts";
 import type { Emit } from "./events.ts";
 import { workspaceError } from "./errors.ts";
 import { WorkspaceStore } from "./store.ts";
@@ -13,7 +13,6 @@ export const startWorkspaceWorkflow = Effect.fn("startWorkspaceWorkflow")(functi
 ) {
   const store = yield* WorkspaceStore;
   const nodes = yield* NodeClient;
-  const snapshots = yield* SnapshotStore;
   const workspaceUuid = crypto.randomUUID();
   yield* emit({ event: "status", phase: "claiming", message: "Claiming workspace start" });
   const claim = yield* store.claimStart(userUUID, payload, workspaceUuid);
@@ -31,13 +30,13 @@ export const startWorkspaceWorkflow = Effect.fn("startWorkspaceWorkflow")(functi
   if (moving) {
     yield* emit({ event: "status", phase: "reclaiming_volume", message: "Moving home from its current node" });
     const snapshotUuid = claim.exportSnapshotUuid;
-    const uploadUrl = yield* snapshots.transferUrl("PUT", home.volumeUuid, snapshotUuid);
+    const uploadUrl = yield* snapshotUrl("PUT", home.volumeUuid, snapshotUuid);
     yield* nodes.exportVolume(home.authoritativeNode!, home.volumeUuid, snapshotUuid, uploadUrl, existing?.workspaceUuid);
     home = { ...home, snapshotUuid, authoritativeNode: null };
   }
   const snapshot = home.snapshotUuid ? {
     snapshot_uuid: home.snapshotUuid,
-    download_url: yield* snapshots.transferUrl("GET", home.volumeUuid, home.snapshotUuid),
+    download_url: yield* snapshotUrl("GET", home.volumeUuid, home.snapshotUuid),
   } : null;
   yield* emit({ event: "status", phase: "starting", message: "Starting workspace" });
   yield* nodes.startWorkspace(claim.targetNode, workspaceUuid, {

@@ -11,18 +11,20 @@ import (
 )
 
 type Server struct {
-	config        Config
-	runtime       runtimeapi.RuntimeServiceClient
-	images        runtimeapi.ImageServiceClient
-	proxies       sync.Map
-	resourceLocks sync.Map
+	config          Config
+	runtime         runtimeapi.RuntimeServiceClient
+	images          runtimeapi.ImageServiceClient
+	proxies         sync.Map
+	resourceLocks   sync.Map
+	snapshotUploads chan struct{}
 }
 
 func New(cfg Config, runtime runtimeapi.RuntimeServiceClient, images runtimeapi.ImageServiceClient) *Server {
 	return &Server{
-		config:  cfg,
-		runtime: runtime,
-		images:  images,
+		config:          cfg,
+		runtime:         runtime,
+		images:          images,
+		snapshotUploads: make(chan struct{}, 1),
 	}
 }
 

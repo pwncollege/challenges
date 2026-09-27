@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/klauspost/compress/zstd"
+	"golang.org/x/sys/unix"
 )
 
 // Kata passes this regular raw image to QEMU and mounts ext4 inside the guest.
@@ -66,36 +67,72 @@ func createImage(ctx context.Context, path string, size int64) error {
 	return file.Sync()
 }
 
-// Call only after the VM has stopped and released the disk. The resulting file
-// is immutable and is published only after compression and fsync finish.
-func captureImage(ctx context.Context, image, snapshot string) error {
+// Compress a detached image into a bounded, anonymous file. Sealing makes the
+// completed payload immutable; closing it releases its memory.
+func captureImage(ctx context.Context, image string) (_ *os.File, err error) {
 	source, err := os.Open(image)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer source.Close()
-	return publishFile(snapshot, func(file *os.File) error {
-		encoder, err := zstd.NewWriter(file, zstd.WithEncoderConcurrency(1))
+	info, err := source.Stat()
+	if err != nil {
+		return nil, err
+	}
+	limit := maxSnapshotSize(info.Size())
+	fd, err := unix.MemfdCreate("workspace-snapshot", unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), "workspace-snapshot")
+	defer func() {
 		if err != nil {
-			return err
+			file.Close()
 		}
-		_, copyErr := io.Copy(encoder, contextReader{ctx, source})
-		closeErr := encoder.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		return closeErr
-	})
+	}()
+	// Sparse length plus a grow seal bounds RAM by image size and compression
+	// overhead. Setting the length itself does not allocate RAM.
+	if err = file.Truncate(limit); err != nil {
+		return nil, err
+	}
+	if _, err = unix.FcntlInt(file.Fd(), unix.F_ADD_SEALS, unix.F_SEAL_GROW); err != nil {
+		return nil, err
+	}
+	encoder, err := zstd.NewWriter(file, zstd.WithEncoderConcurrency(1))
+	if err != nil {
+		return nil, err
+	}
+	copied, copyErr := io.Copy(encoder, contextReader{ctx, io.LimitReader(source, info.Size()+1)})
+	closeErr := encoder.Close()
+	if copyErr != nil {
+		return nil, fmt.Errorf("compress snapshot (memory limit %d bytes): %w", limit, copyErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("compress snapshot (memory limit %d bytes): %w", limit, closeErr)
+	}
+	if copied != info.Size() {
+		return nil, fmt.Errorf("home image size changed during export")
+	}
+	size, err := file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+	if err = file.Truncate(size); err != nil {
+		return nil, err
+	}
+	if _, err = unix.FcntlInt(file.Fd(), unix.F_ADD_SEALS, unix.F_SEAL_WRITE|unix.F_SEAL_SHRINK|unix.F_SEAL_SEAL); err != nil {
+		return nil, err
+	}
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // Restore a sparse file, retaining holes for zero-filled chunks. Limit both the
 // decompressed size and decoder memory before publishing a home to Kata.
-func restoreImage(ctx context.Context, snapshot, image string, size int64) error {
-	source, err := os.Open(snapshot)
-	if err != nil {
-		return err
-	}
-	defer source.Close()
+func restoreImage(ctx context.Context, snapshot io.Reader, image string, size int64) error {
+	source := &io.LimitedReader{R: contextReader{ctx, snapshot}, N: maxSnapshotSize(size) + 1}
 	decoder, err := zstd.NewReader(source, zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(64<<20))
 	if err != nil {
 		return err
@@ -128,8 +165,15 @@ func restoreImage(ctx context.Context, snapshot, image string, size int64) error
 		if total != size {
 			return fmt.Errorf("snapshot size %d does not match volume size %d", total, size)
 		}
+		if source.N == 0 {
+			return fmt.Errorf("compressed snapshot exceeds volume size")
+		}
 		return file.Truncate(total)
 	})
+}
+
+func maxSnapshotSize(imageSize int64) int64 {
+	return imageSize + imageSize/128 + (1 << 20)
 }
 
 func publishFile(path string, write func(*os.File) error) error {

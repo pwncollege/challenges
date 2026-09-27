@@ -6,6 +6,9 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 PWN_WORKSPACE_ENVIRONMENT = "development"
 PWN_WORKSPACE_ORIGIN = "http://127.0.0.1:8787"
+PWN_WORKSPACE_R2_BUCKET_URL = "http://127.0.0.1:8787/cdn-cgi/local/r2/s3/volumes"
+PWN_WORKSPACE_R2_ACCESS_KEY_ID = "workspace-local"
+PWN_WORKSPACE_R2_SECRET_ACCESS_KEY = "workspace-local-secret"
 PWN_WORKSPACE_PRIVATE_KEY_B64 = "MC4CAQAwBQYDK2VwBCIEIDOZMs9fCeDKP0D/ITcQ9jVwRaR2SVsE0VKYYX0aTmGv"
 PWN_WORKSPACE_PUBLIC_KEY_B64 = "MCowBQYDK2VwAyEAj0MbhHCS7uippaWcM+7Wg3LkqyUbItpOBE63FVpFTlc="
 
@@ -18,3 +21,7 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "VOLUMES"
 bucket_name = "volumes"
+
+[r2_buckets.local_dev.experimental_s3_credentials]
+accessKeyId = "workspace-local"
+secretAccessKey = "workspace-local-secret"

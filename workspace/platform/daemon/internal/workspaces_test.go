@@ -1,13 +1,17 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 func TestWorkspaceVolumeContainerConfig(t *testing.T) {
@@ -41,6 +45,58 @@ func TestWorkspaceVolumeContainerConfig(t *testing.T) {
 	}
 	if len(container.Mounts) != 2 || container.Mounts[1].ContainerPath != "/home/hacker" {
 		t.Fatalf("mounts = %#v", container.Mounts)
+	}
+}
+
+func TestExportRetryRecompressesRetiredImageAfterRestart(t *testing.T) {
+	const volumeUUID = "88888888-8888-4888-8888-888888888888"
+	const snapshotUUID = "99999999-9999-4999-8999-999999999999"
+	cfg := Config{volumeBasePath: t.TempDir()}
+	retired := filepath.Join(cfg.volumeBasePath, volumeUUID, "retired", snapshotUUID)
+	active := filepath.Join(cfg.volumeBasePath, volumeUUID, "active")
+	for path, contents := range map[string]string{retired: "original home", active: "newer home"} {
+		if err := os.MkdirAll(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "home.ext4"), []byte(contents), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var payloads [][]byte
+	transfer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		payloads = append(payloads, body)
+		if len(payloads) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer transfer.Close()
+	for attempt := range 2 {
+		// No in-memory state survives between the failed upload and its retry.
+		s := New(cfg, nil, nil)
+		err := s.exportVolume(context.Background(), volumeUUID, snapshotUUID, volumeExportRequest{UploadURL: transfer.URL})
+		if (err != nil) != (attempt == 0) {
+			t.Fatalf("attempt %d: %v", attempt, err)
+		}
+	}
+	if len(payloads) != 2 || !bytes.Equal(payloads[0], payloads[1]) {
+		t.Fatal("retry changed snapshot contents")
+	}
+	decoder, err := zstd.NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer decoder.Close()
+	contents, err := decoder.DecodeAll(payloads[1], nil)
+	if err != nil || string(contents) != "original home" {
+		t.Fatalf("snapshot = %q, %v", contents, err)
+	}
+	newer, err := os.ReadFile(filepath.Join(active, "home.ext4"))
+	if err != nil || string(newer) != "newer home" {
+		t.Fatalf("active home changed: %q, %v", newer, err)
 	}
 }
 

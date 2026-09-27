@@ -3,7 +3,6 @@ import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http
 import { Environment, WorkerContext, type Bindings } from "./common.ts";
 import { AuthRoutes } from "./auth/routes.ts";
 import { NodeRoutes } from "./nodes/routes.ts";
-import { VolumeRoutes } from "./volumes/routes.ts";
 import { WorkspaceRoutes } from "./workspaces/routes.ts";
 import type { WorkspaceError } from "./workspaces/errors.ts";
 import { makeServices } from "./services.ts";
@@ -15,7 +14,7 @@ const Errors = HttpRouter.middleware<{ handles: WorkspaceError }>()((http) => ht
 
 export const { handler } = HttpRouter.toWebHandler(Layer.mergeAll(
   HttpRouter.add("GET", "/", HttpServerResponse.jsonUnsafe({ service: "workspace-control-plane" })),
-  AuthRoutes, NodeRoutes, WorkspaceRoutes, VolumeRoutes,
+  AuthRoutes, NodeRoutes, WorkspaceRoutes,
 ).pipe(Layer.provide(Errors.layer), Layer.provide(HttpServer.layerServices)), { disableLogger: true });
 
 export default {

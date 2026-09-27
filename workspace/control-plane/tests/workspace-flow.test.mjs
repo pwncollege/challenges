@@ -4,6 +4,8 @@ import test, { after, before } from "node:test";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { unstable_getMiniflareWorkerOptions } from "wrangler";
+import { Effect } from "effect";
+import { loadModule, runEffect } from "./helpers.mjs";
 
 const CONTROL = "http://127.0.0.1:8787";
 const DAEMON = process.env.PWN_WORKSPACE_DAEMON_URL ?? "http://127.0.0.1:8000";
@@ -353,6 +355,20 @@ test("moving the home between two daemons preserves its contents", { skip: !SECO
     body: JSON.stringify({ stop_workspace_uuid: first.complete.workspace_uuid, upload_url: "http://127.0.0.1:1/unavailable" }),
   });
   assert.equal(delayedExport.status, 500);
+  const { snapshotUrl, Environment } = await loadModule("tests/fixtures/services.ts");
+  const bindings = await mf.getBindings();
+  const bucket = await mf.getR2Bucket("VOLUMES");
+  const key = `snapshots/${volume.volume_uuid}/${firstSnapshot}`;
+  const original = await (await bucket.get(key)).arrayBuffer();
+  const retriedExport = await daemonFetch(`/api/volumes/${volume.volume_uuid}/snapshots/${firstSnapshot}/export`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      stop_workspace_uuid: first.complete.workspace_uuid,
+      upload_url: await runEffect(snapshotUrl("PUT", volume.volume_uuid, firstSnapshot).pipe(Effect.provideService(Environment, bindings))),
+    }),
+  });
+  assert.equal(retriedExport.status, 200, await retriedExport.text());
+  assert.deepEqual(await (await bucket.get(key)).arrayBuffer(), original, "retry must recompress the retired image");
   assert.equal((await execWorkspace(currentWorkspaceURL, ["cat", "/home/hacker/init.txt"])).stdout, expected);
   assert.equal((await stopWorkspace()).status, 200);
 });

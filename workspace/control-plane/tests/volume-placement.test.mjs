@@ -16,7 +16,7 @@ const privateKey = Buffer.from(await crypto.subtle.exportKey("pkcs8", key.privat
 const publicKey = Buffer.from(await crypto.subtle.exportKey("spki", key.publicKey)).toString("base64");
 
 for (const outcome of ["success", "http-error", "network-error", "missing-upload", "start-error"]) {
-  test(`moving a home through the Worker: ${outcome}`, async (t) => {
+  test(`moving a home with presigned transfers: ${outcome}`, async (t) => {
     const calls = [];
     let snapshotUUID;
     const { mf, DB, VOLUMES } = await createBindings(t, {

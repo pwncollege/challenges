@@ -3,7 +3,7 @@ import test from "node:test";
 import { Context, Effect, Layer } from "effect";
 import { createBindings, loadModule } from "./helpers.mjs";
 
-const { handler, Environment, WorkerContext, NodeClient, SnapshotStore, WorkspaceStore } =
+const { handler, Environment, WorkerContext, NodeClient, WorkspaceStore } =
   await loadModule("tests/fixtures/services.ts");
 const userUUID = "11111111-1111-4111-8111-111111111111";
 const nodeUUID = "33333333-3333-4333-8333-333333333333";
@@ -28,7 +28,7 @@ async function setup(t, nodes, { failCommit = false } = {}) {
   };
   const env = { DB: database, VOLUMES, ...keys, PWN_WORKSPACE_ENVIRONMENT: "development", PWN_WORKSPACE_ORIGIN: "https://control.test" };
   const services = await Effect.runPromise(Effect.scoped(Layer.build(Layer.mergeAll(
-    WorkspaceStore.layer, SnapshotStore.layer, nodes ? Layer.succeed(NodeClient, nodes) : NodeClient.layer,
+    WorkspaceStore.layer, nodes ? Layer.succeed(NodeClient, nodes) : NodeClient.layer,
   ).pipe(Layer.provideMerge(Layer.succeed(Environment, env))))));
   const context = Context.add(services, WorkerContext, { waitUntil(promise) { background.push(promise); } });
   const fetch = (path, options) => handler(new Request(`https://control.test${path}`, options), context);
@@ -43,7 +43,7 @@ async function setup(t, nodes, { failCommit = false } = {}) {
   return { DB, fetch, post, background, batches: () => batches };
 }
 
-test("Effect HTTP boundary rejects malformed payloads and invalid transfer signatures", async (t) => {
+test("Effect HTTP boundary rejects malformed payloads and unauthenticated commands", async (t) => {
   const { DB, fetch, post } = await setup(t);
   for (const body of ["{", "null", "{}", JSON.stringify({ user_uuid: "invalid" })]) {
     const response = await post("/api/login", undefined, { body });
@@ -65,11 +65,6 @@ test("Effect HTTP boundary rejects malformed payloads and invalid transfer signa
     const response = await fetch(path, { method: "POST" });
     assert.equal(response.status, 401);
     assert.equal((await response.json()).error.code, "unauthorized");
-  }
-  for (const method of ["GET", "PUT"]) {
-    const response = await fetch(`/api/volumes/${crypto.randomUUID()}/snapshots/${crypto.randomUUID()}?expires=9999999999&signature=invalid`, { method });
-    assert.equal(response.status, 401);
-    assert.equal((await response.json()).error.code, "invalid_signature");
   }
   assert.equal(await DB.prepare("SELECT COUNT(*) FROM workspaces").first("COUNT(*)"), 0);
   assert.equal(await DB.prepare("SELECT COUNT(*) FROM workspace_operations").first("COUNT(*)"), 0);

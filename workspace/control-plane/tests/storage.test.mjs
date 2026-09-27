@@ -1,37 +1,64 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { build } from "esbuild";
-import { createBindings, loadModule } from "./helpers.mjs";
+import { Effect } from "effect";
+import { AwsClient } from "aws4fetch";
+import { createBindings, loadModule, runEffect, snapshotBindings } from "./helpers.mjs";
 
-const { transferUrl } = await loadModule("src/volumes/transfers.ts");
-const bundle = await build({ entryPoints: ["src/index.ts"], bundle: true, format: "esm", write: false });
-const key = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
-const bindings = {
-  PWN_WORKSPACE_PRIVATE_KEY_B64: Buffer.from(await crypto.subtle.exportKey("pkcs8", key.privateKey)).toString("base64"),
-  PWN_WORKSPACE_PUBLIC_KEY_B64: Buffer.from(await crypto.subtle.exportKey("spki", key.publicKey)).toString("base64"),
-  PWN_WORKSPACE_ORIGIN: "https://control.test",
-};
+const { snapshotUrl, Environment } = await loadModule("tests/fixtures/services.ts");
+async function setup(t) {
+  const result = await createBindings(t);
+  return { ...result, transferUrl: (method, volume, snapshot) =>
+    runEffect(snapshotUrl(method, volume, snapshot).pipe(Effect.provideService(Environment, result.bindings))) };
+}
 
 for (const size of [13, 5 * 1024 * 1024, 10 * 1024 * 1024 + 13]) {
-  test(`streaming ${size} snapshot bytes directly to R2 preserves contents`, async (t) => {
-    const { mf, VOLUMES } = await createBindings(t, { script: bundle.outputFiles[0].text, bindings });
+  test(`presigned S3 PUT and GET preserve ${size} snapshot bytes`, async (t) => {
+    const { VOLUMES, transferUrl } = await setup(t);
     const volume = crypto.randomUUID(), snapshot = crypto.randomUUID();
     const contents = Uint8Array.from({ length: size }, (_, index) => index % 251);
-    const url = await transferUrl(bindings, "PUT", volume, snapshot);
-    const response = await mf.dispatchFetch(url, { method: "PUT", body: contents, headers: { "content-length": String(size) } });
+    const put = await transferUrl("PUT", volume, snapshot);
+    const url = new URL(put);
+    assert.equal(url.pathname, `/cdn-cgi/local/r2/s3/volumes/snapshots/${volume}/${snapshot}`);
+    assert.equal(url.searchParams.get("X-Amz-Expires"), "900");
+    assert.equal(url.searchParams.get("X-Amz-SignedHeaders"), "host");
+    const response = await fetch(put, { method: "PUT", body: contents });
     assert.equal(response.status, 200, await response.text());
-    const object = await VOLUMES.get(`snapshots/${volume}/${snapshot}`);
-    assert.equal(object.size, size);
-    assert.deepEqual(new Uint8Array(await object.arrayBuffer()), contents);
+    assert.equal((await VOLUMES.head(`snapshots/${volume}/${snapshot}`)).size, size);
+    const downloaded = await fetch(await transferUrl("GET", volume, snapshot));
+    assert.equal(downloaded.status, 200);
+    assert.deepEqual(new Uint8Array(await downloaded.arrayBuffer()), contents);
   });
 }
 
-test("uploads require a known length before writing to R2", async (t) => {
-  const { mf, VOLUMES } = await createBindings(t, { script: bundle.outputFiles[0].text, bindings });
+test("presigned transfers are bound to the method, object, credentials, and expiry", async (t) => {
+  const { VOLUMES, transferUrl } = await setup(t);
   const volume = crypto.randomUUID(), snapshot = crypto.randomUUID();
-  const url = await transferUrl(bindings, "PUT", volume, snapshot);
-  const body = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(13)); controller.close(); } });
-  const response = await mf.dispatchFetch(url, { method: "PUT", body, duplex: "half" });
-  assert.equal(response.status, 411, await response.text());
-  assert.equal(await VOLUMES.head(`snapshots/${volume}/${snapshot}`), null);
+  const put = await transferUrl("PUT", volume, snapshot);
+  const changed = new URL(put);
+  changed.pathname += "-different";
+  const expired = new URL(put);
+  expired.search = "?X-Amz-Expires=1";
+  const client = new AwsClient({
+    service: "s3", region: "auto",
+    accessKeyId: snapshotBindings.PWN_WORKSPACE_R2_ACCESS_KEY_ID,
+    secretAccessKey: snapshotBindings.PWN_WORKSPACE_R2_SECRET_ACCESS_KEY,
+  });
+  const old = await client.sign(expired.toString(), {
+    method: "PUT", aws: { signQuery: true, datetime: "20200101T000000Z" },
+  });
+  const invalid = new URL(put);
+  invalid.searchParams.set("X-Amz-Signature", "0".repeat(64));
+  for (const [url, method] of [[put, "GET"], [changed, "PUT"], [old.url, "PUT"], [invalid, "PUT"]]) {
+    const response = await fetch(url.toString(), { method, ...(method === "PUT" ? { body: "no" } : {}) });
+    assert.equal(response.status, 403, await response.text());
+  }
+  assert.equal((await VOLUMES.list()).objects.length, 0);
+});
+
+test("production transfer URLs address the R2 S3 endpoint", async () => {
+  const url = new URL(await runEffect(snapshotUrl("PUT", "volume", "snapshot").pipe(Effect.provideService(Environment, {
+    ...snapshotBindings, PWN_WORKSPACE_R2_BUCKET_URL: "https://account.r2.cloudflarestorage.com/volumes",
+  }))));
+  assert.equal(url.host, "account.r2.cloudflarestorage.com");
+  assert.equal(url.pathname, "/volumes/snapshots/volume/snapshot");
 });
