@@ -5,7 +5,7 @@
   workspaceRuntime,
   containerdSockPath,
   seccompProfile,
-  nixStorePath,
+  nixStoreImage,
   daemonListenAddress,
   dataDir,
   egressAddress,
@@ -26,25 +26,23 @@ in
     requires = [
       "${unitName "containerd"}.service"
       "${egressServiceName}.service"
-      "${unitName "store"}.service"
     ];
     after = [
       "${unitName "containerd"}.service"
       "${egressServiceName}.service"
-      "${unitName "store"}.service"
     ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "simple";
       ExecStart = "${package}/bin/workspace-daemon";
       Environment = [
-        "PATH=${lib.makeBinPath [ pkgs.e2fsprogs pkgs.kata-runtime ]}"
+        "PATH=${lib.makeBinPath [ pkgs.e2fsprogs ]}"
         "PWN_WORKSPACE_AGENT_PORT=8000"
         "PWN_WORKSPACE_CONTAINERD_ADDRESS=unix://${containerdSockPath}"
         "PWN_WORKSPACE_DAEMON_LISTEN_ADDRESS=${daemonListenAddress}"
         "PWN_WORKSPACE_EGRESS_ADDRESS=${egressAddress}"
         "PWN_WORKSPACE_LOG_DIRECTORY=${dataDir}/workspace-records"
-        "PWN_WORKSPACE_NIX_STORE_PATH=${nixStorePath}"
+        "PWN_WORKSPACE_NIX_STORE_IMAGE=${nixStoreImage}"
         "PWN_WORKSPACE_PATH=${workspaceRuntime}"
         "PWN_WORKSPACE_SECCOMP_PROFILE=${seccompProfile}"
       ]

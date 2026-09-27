@@ -4,7 +4,7 @@ The workspace daemon is the node-local owner of Kata workspaces, workspace
 request proxying, and optional ext4 home images. It controls containerd through
 CRI; containerd invokes the configured CNI chain for workspace networking.
 
-It always starts workspace containers with the `kata` runtime. It mounts `/nix`
+It always starts workspace containers with the `kata` runtime. It mounts `/nix/store`
 read-only and runs the configured workspace runtime's `bin/workspace-entrypoint`.
 The workspace agent listens on port 8000, so its readiness, exec, PTY, file, and
 service APIs are available below `/w/<workspace-uuid>/`.
@@ -18,7 +18,7 @@ access capability.
 
 Required environment variables:
 
-- `PWN_WORKSPACE_NIX_STORE_PATH` (host closure store mounted at `/nix/store` in workspaces)
+- `PWN_WORKSPACE_NIX_STORE_IMAGE` (EROFS image mounted at `/nix/store` in workspaces)
 - `PWN_WORKSPACE_PATH`
 - `PWN_WORKSPACE_CONTAINERD_ADDRESS`
 - `PWN_WORKSPACE_EGRESS_ADDRESS`
@@ -33,11 +33,11 @@ Optional environment variables:
 - `PWN_WORKSPACE_PUBLIC_KEY` (hex-encoded raw Ed25519 public key)
 
 When volume storage is configured, the daemon creates sparse `home.ext4` files
-under that directory. It registers them with `kata-runtime direct-volume`; QEMU
+under that directory. It writes Kata direct-volume metadata so the hypervisor
 opens each file as a raw disk and the Kata agent mounts ext4 inside the guest with
 `nosuid,nodev`. No host filesystem mount or loop device is used. The directory can
 live on any host filesystem supporting ordinary sparse files. The platform puts
-`mkfs.ext4` and `kata-runtime` on the daemon's PATH and enables Kata block devices.
+`mkfs.ext4` on the daemon's PATH and enables Kata block devices.
 
 `max_size_bytes` sets the image size, including filesystem metadata. New homes are
 owned by UID/GID 1000. Snapshots contain complete zstd-compressed ext4 images. A
@@ -65,10 +65,9 @@ Workspace forwarding is denied by default. Sandboxes use the platform egress
 service as their only DNS server; it currently resolves only `example.com` and
 reverse proxies HTTP and HTTPS traffic for that name from the host network.
 
-`PWN_WORKSPACE_NIX_STORE_PATH` contains only the Nix closure of
-`PWN_WORKSPACE_PATH`. The host prepares this shared view once per runtime
-generation, and every workspace receives it as one read-only bind at
-`/nix/store`.
+`PWN_WORKSPACE_NIX_STORE_IMAGE` contains only the Nix closure of
+`PWN_WORKSPACE_PATH`. Nix builds and compresses the EROFS image once per runtime
+generation. Every workspace attaches the same file as a read-only virtual disk.
 
 ## Starting a workspace
 

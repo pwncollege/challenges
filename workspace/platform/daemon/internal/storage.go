@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,33 +15,38 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Kata passes this regular raw image to QEMU and mounts ext4 inside the guest.
-// The host only creates and copies image files; it does not mount their contents.
-func registerVolume(ctx context.Context, path string) error {
-	info, err := os.Stat(filepath.Join(path, "home.ext4"))
+// Kata opens image files as virtual disks and mounts them inside the guest.
+// The host never mounts their contents.
+func registerDisk(image, fstype string, options ...string) error {
+	info, err := os.Stat(image)
 	if err != nil {
 		return err
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("home image is not a regular file")
+		return fmt.Errorf("image %s is not a regular file", image)
 	}
 	mountInfo, err := json.Marshal(map[string]any{
-		"volume-type": "blk", "device": filepath.Join(path, "home.ext4"), "fstype": "ext4",
-		"options": []string{"rw", "nosuid", "nodev"},
+		"volume-type": "directvol", "device": image, "fstype": fstype, "options": options,
 	})
 	if err != nil {
 		return err
 	}
-	// Discard sandbox metadata from the previous attachment. The caller has
-	// confirmed that no CRI sandbox is using this volume.
-	if err := unregisterVolume(ctx, path); err != nil {
+	directory := directVolumePath(image)
+	if err := os.MkdirAll(directory, 0700); err != nil {
 		return err
 	}
-	return runVolumeCommand(ctx, "kata-runtime", "direct-volume", "add", "--volume-path", path, "--mount-info", string(mountInfo))
+	return publishFile(filepath.Join(directory, "mountInfo.json"), func(file *os.File) error {
+		_, err := file.Write(mountInfo)
+		return err
+	})
 }
 
-func unregisterVolume(ctx context.Context, path string) error {
-	return runVolumeCommand(ctx, "kata-runtime", "direct-volume", "remove", "--volume-path", path)
+func unregisterDisk(image string) error {
+	return os.RemoveAll(directVolumePath(image))
+}
+
+func directVolumePath(path string) string {
+	return filepath.Join("/run/kata-containers/shared/direct-volumes", base64.URLEncoding.EncodeToString([]byte(path)))
 }
 
 func runVolumeCommand(ctx context.Context, name string, args ...string) error {

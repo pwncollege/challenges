@@ -174,7 +174,7 @@ func (s *Server) handleWorkspaceStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Volume != nil {
-		if err := registerVolume(r.Context(), active); err != nil {
+		if err := registerDisk(filepath.Join(active, "home.ext4"), "ext4", "rw", "nosuid", "nodev"); err != nil {
 			jsonError(w, 500, "volume_attach_failed", err.Error())
 			return
 		}
@@ -253,14 +253,14 @@ func (s *Server) workspaceContainerConfig(
 	entrypoint := filepath.Join(s.config.workspacePath, "bin", "workspace-entrypoint")
 	mounts := []*runtimeapi.Mount{
 		{
-			HostPath:      s.config.nixStorePath,
+			HostPath:      s.config.nixStoreImage,
 			ContainerPath: "/nix/store",
 			Readonly:      true,
 		},
 	}
 	if body.Volume != nil {
 		mounts = append(mounts, &runtimeapi.Mount{
-			HostPath:      activeVolumePath,
+			HostPath:      filepath.Join(activeVolumePath, "home.ext4"),
 			ContainerPath: body.Volume.DstPath,
 		})
 	}

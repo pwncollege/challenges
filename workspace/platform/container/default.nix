@@ -16,14 +16,37 @@ let
   containerdRunDir = "${runDir}/containerd";
   containerdSockPath = "${containerdRunDir}/containerd.sock";
 
-  kataConfig = import ./container/kata.nix { inherit pkgs; };
-  seccompProfile = import ./container/seccomp.nix { inherit pkgs; };
+  kata = import ./kata.nix { inherit pkgs; };
+  package = pkgs.containerd.overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ./containerd-sparse.patch ];
+    doCheck = true;
+    checkPhase = ''
+      runHook preCheck
+      go test ./plugins/snapshots/blockfile -run TestCopyFileWithSyncPreservesHoles -v
+      runHook postCheck
+    '';
+  });
+  seccompProfile = import ./seccomp.nix { inherit pkgs; };
+
+  scratch = "${containerdDataDir}/empty-8GiB.ext4";
+  prepareScratch = pkgs.writeShellScript "${name}-containerd-scratch" ''
+    set -euo pipefail
+    if [[ ! -e '${scratch}' ]]; then
+      ${pkgs.coreutils}/bin/truncate -s 8G '${scratch}.tmp'
+      ${pkgs.e2fsprogs}/bin/mkfs.ext4 -q -F -m 0 -b 4096 \
+        -E lazy_itable_init=0,lazy_journal_init=0 '${scratch}.tmp'
+      ${pkgs.coreutils}/bin/mv '${scratch}.tmp' '${scratch}'
+    fi
+  '';
 
   containerdConfig = pkgs.writeText "${name}-containerd-config.toml" ''
     version = 4
     root = "${containerdDataDir}"
     state = "${containerdRunDir}"
     disabled_plugins = ["io.containerd.nri.v1.nri"]
+
+    [plugins."io.containerd.cri.v1.images"]
+      snapshotter = "blockfile"
 
     [plugins."io.containerd.cri.v1.images".pinned_images]
       sandbox = "registry.k8s.io/pause:3.10.2"
@@ -35,7 +58,16 @@ let
       runtime_type = "io.containerd.kata.v2"
 
     [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata.options]
-      ConfigPath = "${kataConfig}"
+      ConfigPath = "${kata.config}"
+
+    [plugins."io.containerd.snapshotter.v1.blockfile"]
+      scratch_file = "${scratch}"
+      root_path = "${containerdDataDir}/blockfile"
+      fs_type = "ext4"
+
+    [[plugins."io.containerd.transfer.v1.local".unpack_config]]
+      platform = "linux/amd64"
+      snapshotter = "blockfile"
 
     [plugins."io.containerd.cri.v1.runtime".cni]
       bin_dirs = ["${networkPolicy}/bin", "${pkgs.cni-plugins}/bin"]
@@ -69,10 +101,11 @@ in
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "notify";
-        ExecStart = "${pkgs.containerd}/bin/containerd --config ${containerdConfig}";
+        ExecStartPre = prepareScratch;
+        ExecStart = "${package}/bin/containerd --config ${containerdConfig}";
         Environment = "PATH=${
           lib.makeBinPath [
-            pkgs.kata-runtime
+            kata.package
             pkgs.runc
           ]
         }";

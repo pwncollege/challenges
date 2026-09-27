@@ -16,6 +16,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if err := cfg.PrepareStorage(); err != nil {
+		log.Fatal(err)
+	}
 	containerd, err := grpc.NewClient(
 		cfg.ContainerdAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

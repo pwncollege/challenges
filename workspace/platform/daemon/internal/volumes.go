@@ -82,7 +82,7 @@ func (s *Server) exportVolume(ctx context.Context, volumeUUID, snapshotUUID stri
 		if err := s.requireVolumeDetached(ctx, volumeUUID); err != nil {
 			return err
 		}
-		if err := unregisterVolume(ctx, s.activePath(volumeUUID)); err != nil {
+		if err := unregisterDisk(filepath.Join(s.activePath(volumeUUID), "home.ext4")); err != nil {
 			return err
 		}
 		if err := os.Rename(s.activePath(volumeUUID), retired); err != nil {
@@ -173,7 +173,7 @@ func (s *Server) handleVolumeDelete(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, 409, "volume_busy", err.Error())
 		return
 	}
-	if err := unregisterVolume(r.Context(), s.activePath(volumeUUID)); err != nil {
+	if err := unregisterDisk(filepath.Join(s.activePath(volumeUUID), "home.ext4")); err != nil {
 		jsonError(w, 500, "internal_error", err.Error())
 		return
 	}

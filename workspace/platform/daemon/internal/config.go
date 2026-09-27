@@ -17,7 +17,7 @@ type Config struct {
 	containerdAddress string
 	egressAddress     string
 	logDirectory      string
-	nixStorePath      string
+	nixStoreImage     string
 	publicKey         ed25519.PublicKey
 	seccompProfile    string
 	volumeBasePath    string
@@ -30,7 +30,7 @@ func LoadConfig() (Config, error) {
 	containerdAddress := env.required("PWN_WORKSPACE_CONTAINERD_ADDRESS")
 	egressAddress := env.required("PWN_WORKSPACE_EGRESS_ADDRESS")
 	logDirectory := env.required("PWN_WORKSPACE_LOG_DIRECTORY")
-	nixStorePath := env.required("PWN_WORKSPACE_NIX_STORE_PATH")
+	nixStoreImage := env.required("PWN_WORKSPACE_NIX_STORE_IMAGE")
 	seccompProfile := env.required("PWN_WORKSPACE_SECCOMP_PROFILE")
 	workspacePath := env.required("PWN_WORKSPACE_PATH")
 	if err := env.err(); err != nil {
@@ -51,8 +51,8 @@ func LoadConfig() (Config, error) {
 	if net.ParseIP(egressAddress).To4() == nil {
 		return Config{}, errors.New("PWN_WORKSPACE_EGRESS_ADDRESS must be an IPv4 address")
 	}
-	if !filepath.IsAbs(nixStorePath) {
-		return Config{}, errors.New("PWN_WORKSPACE_NIX_STORE_PATH must be absolute")
+	if !filepath.IsAbs(nixStoreImage) {
+		return Config{}, errors.New("PWN_WORKSPACE_NIX_STORE_IMAGE must be absolute")
 	}
 	if !filepath.IsAbs(logDirectory) {
 		return Config{}, errors.New("PWN_WORKSPACE_LOG_DIRECTORY must be absolute")
@@ -82,7 +82,7 @@ func LoadConfig() (Config, error) {
 		containerdAddress: containerdAddress,
 		egressAddress:     egressAddress,
 		logDirectory:      filepath.Clean(logDirectory),
-		nixStorePath:      filepath.Clean(nixStorePath),
+		nixStoreImage:     filepath.Clean(nixStoreImage),
 		publicKey:         publicKey,
 		seccompProfile:    filepath.Clean(seccompProfile),
 		volumeBasePath:    cleanVolumeBasePath,
@@ -93,11 +93,6 @@ func LoadConfig() (Config, error) {
 
 func (c Config) ContainerdAddress() string {
 	return c.containerdAddress
-}
-
-func (c Config) hostWorkspacePath() string {
-	relative, _ := filepath.Rel("/nix/store", c.workspacePath)
-	return filepath.Join(c.nixStorePath, relative)
 }
 
 func parsePublicKey(value string) (ed25519.PublicKey, error) {

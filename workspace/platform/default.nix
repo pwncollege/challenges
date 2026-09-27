@@ -26,7 +26,7 @@ let
       workspaceSubnet
       ;
   };
-  containerd = import ./containerd.nix {
+  containerd = import ./container {
     inherit
       pkgs
       lib
@@ -50,14 +50,7 @@ let
       ;
     inherit (containerd) containerdSockPath;
   };
-  store = import ./store.nix {
-    inherit
-      pkgs
-      name
-      workspaceRuntime
-      dataDir
-      ;
-  };
+  nixStoreImage = import ./store.nix { inherit pkgs workspaceRuntime; };
   daemon = import ./daemon {
     inherit
       pkgs
@@ -68,11 +61,11 @@ let
       dataDir
       publicKey
       volumeBasePath
+      nixStoreImage
       ;
     egressAddress = network.egressAddress;
     egressServiceName = network.egressServiceName;
     inherit (containerd) containerdSockPath seccompProfile;
-    inherit (store) nixStorePath;
   };
 in
 {
@@ -105,9 +98,8 @@ in
     // containerd.services
     // {
       "${unitName "buildkit"}" = buildkit.service;
-      "${unitName "store"}" = store.service;
       "${unitName "daemon"}" = daemon.service;
     };
 
-  tmpfilesRules = store.tmpfilesRules ++ network.tmpfilesRules;
+  tmpfilesRules = network.tmpfilesRules;
 }

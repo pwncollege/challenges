@@ -13,7 +13,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -213,19 +212,12 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PWN_WORKSPACE_PUBLIC_KEY", hex.EncodeToString(publicKey))
-	nixStorePath := t.TempDir()
+	nixStoreImage := filepath.Join(t.TempDir(), "store.erofs")
 	workspacePath := "/nix/store/test-workspace"
-	hostWorkspacePath := filepath.Join(nixStorePath, "test-workspace")
-	if err := os.MkdirAll(filepath.Join(hostWorkspacePath, "bin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(hostWorkspacePath, "bin", "workspace-entrypoint"), nil, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("PWN_WORKSPACE_CONTAINERD_ADDRESS", "unix:///test/containerd.sock")
 	t.Setenv("PWN_WORKSPACE_EGRESS_ADDRESS", "192.0.2.1")
 	t.Setenv("PWN_WORKSPACE_LOG_DIRECTORY", filepath.Join(t.TempDir(), "logs"))
-	t.Setenv("PWN_WORKSPACE_NIX_STORE_PATH", nixStorePath)
+	t.Setenv("PWN_WORKSPACE_NIX_STORE_IMAGE", nixStoreImage)
 	t.Setenv("PWN_WORKSPACE_PATH", workspacePath)
 	t.Setenv("PWN_WORKSPACE_SECCOMP_PROFILE", filepath.Join(t.TempDir(), "seccomp.json"))
 	t.Setenv("PWN_WORKSPACE_AGENT_PORT", strconv.Itoa(int(agentPort)))
@@ -335,7 +327,7 @@ func TestWorkspaceLifecycleAndProxy(t *testing.T) {
 			t.Errorf("capabilities = %v, want %s", capabilities, capability)
 		}
 	}
-	if len(created.Mounts) != 1 || created.Mounts[0].HostPath != nixStorePath || created.Mounts[0].ContainerPath != "/nix/store" || !created.Mounts[0].Readonly {
+	if len(created.Mounts) != 1 || created.Mounts[0].HostPath != nixStoreImage || created.Mounts[0].ContainerPath != "/nix/store" || !created.Mounts[0].Readonly {
 		t.Errorf("mounts = %#v", created.Mounts)
 	}
 

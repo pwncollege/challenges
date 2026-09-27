@@ -1,0 +1,77 @@
+--- a/src/runtime-rs/crates/hypervisor/src/firecracker/fc_api.rs
++++ b/src/runtime-rs/crates/hypervisor/src/firecracker/fc_api.rs
+@@ -27,7 +27,7 @@
+ const FC_KERNEL: &str = "vmlinux";
+ const FC_ROOT_FS: &str = "rootfs";
+ const DRIVE_PREFIX: &str = "drive";
+-const DISK_POOL_SIZE: u32 = 6;
++pub(super) const DISK_POOL_SIZE: u32 = 6;
+ 
+ impl FcInner {
+     pub(crate) fn get_resource(&self, src: &str, dst: &str) -> Result<String> {
+@@ -147,7 +147,9 @@
+ 
+         // We create some placeholder drives to be used for patching block devices while the vmm is
+         // running, as firecracker does not support device hotplug.
+-        for i in 1..DISK_POOL_SIZE {
++        // Firecracker fixes read-only flags before boot. Reserve a second bank
++        // for read-only attachments, leaving the original bank writable.
++        for i in 1..(2 * DISK_POOL_SIZE - 1) {
+             let full_path_name = format!("{abs_path}/drive{i}");
+ 
+             let _ = File::create(&full_path_name)
+@@ -162,7 +164,7 @@
+                 "drive_id": format!("drive{}",i),
+                 "path_on_host": format!("{}/drive{}", path_on_host, i),
+                 "is_root_device": false,
+-                "is_read_only": false
++                "is_read_only": i >= DISK_POOL_SIZE
+             })
+             .to_string();
+ 
+@@ -314,7 +316,7 @@
+             self.umount_jail_resource(FC_KERNEL).ok();
+             self.umount_jail_resource(FC_ROOT_FS).ok();
+ 
+-            for i in 1..DISK_POOL_SIZE {
++            for i in 1..(2 * DISK_POOL_SIZE - 1) {
+                 self.umount_jail_resource(&[DRIVE_PREFIX, &i.to_string()].concat())
+                     .ok();
+             }
+--- a/src/runtime-rs/crates/hypervisor/src/firecracker/inner_device.rs
++++ b/src/runtime-rs/crates/hypervisor/src/firecracker/inner_device.rs
+@@ -4,7 +4,8 @@
+ //
+ //SPDX-License-Identifier: Apache-2.0
+ 
+-use super::FcInner;
++use super::{fc_api::DISK_POOL_SIZE, FcInner};
++use crate::device::util::get_virt_drive_name;
+ use crate::firecracker::{
+     inner_hypervisor::{FC_AGENT_SOCKET_NAME, ROOT},
+     sl,
+@@ -28,8 +29,22 @@
+ 
+         match device {
+             DeviceType::BlockModern(block_mod) => {
+-                let block = block_mod.lock().await.clone();
+-                self.hotplug_block_device(block.config.path_on_host.as_str(), block.config.index)
++                let mut block = block_mod.lock().await;
++                let index = block.config.index;
++                if index == 0 {
++                    // The VM root disk is already attached read-only at boot.
++                    return Ok(());
++                }
++                if index >= u64::from(DISK_POOL_SIZE) {
++                    return Err(anyhow!("Firecracker block device index {index} exceeds the drive pool"));
++                }
++                let drive_index = if block.config.is_readonly {
++                    index + u64::from(DISK_POOL_SIZE - 1)
++                } else {
++                    index
++                };
++                block.config.virt_path = format!("/dev/{}", get_virt_drive_name(drive_index as i32)?);
++                self.hotplug_block_device(block.config.path_on_host.as_str(), drive_index)
+                     .await
+                     .context("add block device")
+             }

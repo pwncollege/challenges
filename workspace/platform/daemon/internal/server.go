@@ -28,18 +28,22 @@ func New(cfg Config, runtime runtimeapi.RuntimeServiceClient, images runtimeapi.
 	}
 }
 
-func (s *Server) Bootstrap(ctx context.Context) error {
-	if s.config.volumeBasePath != "" {
-		if err := os.MkdirAll(s.config.volumeBasePath, 0700); err != nil {
+func (c Config) PrepareStorage() error {
+	if c.volumeBasePath != "" {
+		if err := os.MkdirAll(c.volumeBasePath, 0700); err != nil {
 			return err
 		}
 	}
-	if err := assertWorkspacePath(s.config.hostWorkspacePath()); err != nil {
+	if err := assertWorkspacePath(c.workspacePath); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.config.logDirectory, 0o711); err != nil {
+	if err := registerDisk(c.nixStoreImage, "erofs", "ro", "nodev"); err != nil {
 		return err
 	}
+	return os.MkdirAll(c.logDirectory, 0o711)
+}
+
+func (s *Server) Bootstrap(ctx context.Context) error {
 	if err := s.checkRuntimeReady(ctx, true); err != nil {
 		return err
 	}

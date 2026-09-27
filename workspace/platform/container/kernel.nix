@@ -1,10 +1,5 @@
-{ pkgs }:
+{ pkgs, kataContainersSrc }:
 let
-  kataContainersSrc = pkgs.fetchzip {
-    url = "https://github.com/kata-containers/kata-containers/archive/refs/tags/${pkgs.kata-runtime.version}.tar.gz";
-    hash = "sha256-+SppAF77NbXlSrBGvIm40AmNC12GrexbX7fAPBoDAcs=";
-  };
-
   kernelVersion = builtins.readFile "${pkgs.runCommand "kata-kernel-version"
     { nativeBuildInputs = [ pkgs.yq ]; }
     ''
@@ -14,8 +9,8 @@ let
   }";
   kernelMajor = builtins.elemAt (pkgs.lib.splitString "." kernelVersion) 0;
   kernelTarball = pkgs.fetchurl {
-    url = "http://cdn.kernel.org/pub/linux/kernel/v${kernelMajor}.x/linux-${kernelVersion}.tar.xz";
-    hash = "sha256-q0iACrSZhaeNIxiuisXyj9PhI+oXNX7yFJgQWlMzczY=";
+    url = "https://cdn.kernel.org/pub/linux/kernel/v${kernelMajor}.x/linux-${kernelVersion}.tar.xz";
+    hash = "sha256-94YCkyIZEl4hHF9b/YTtz9TsXOiPyUT4JIQT9mW+8jY=";
   };
 
   config =

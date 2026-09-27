@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import test, { after, before } from "node:test";
 import { build } from "esbuild";
@@ -301,6 +302,42 @@ test("start, proxy, replace, stop, and restart preserve the home volume", async 
   assert.equal(images.status, 200);
   assert.ok((await images.json()).images.some((image) => image.repo_tags?.includes(IMAGE)));
 
+  assert.equal((await stopWorkspace()).status, 200);
+});
+
+test("read-only EROFS, nested KVM, and CNI egress work inside Kata", async () => {
+  const started = await startWorkspace();
+  assert.ok(started.complete, JSON.stringify(started.error ?? started.events));
+  for (const fixture of ["runtime-storage.py", "nested-kvm.py", "egress.py"]) {
+    const script = await fs.readFile(new URL(`./fixtures/${fixture}`, import.meta.url), "utf8");
+    const executed = await execWorkspace(started.complete.url, ["python3", "-c", script]);
+    assert.equal(executed.exit_code, 0, `${fixture}: ${executed.stderr}`);
+  }
+  assert.equal((await stopWorkspace()).status, 200);
+});
+
+test("workspaces share the runtime disk across overlapping lifetimes", async () => {
+  const first = await startWorkspace();
+  assert.ok(first.complete, JSON.stringify(first.error ?? first.events));
+  const secondUUID = randomUUID();
+  const script = await fs.readFile(new URL("./fixtures/runtime-storage.py", import.meta.url), "utf8");
+  try {
+    const second = await daemonFetch(`/api/workspaces/${secondUUID}/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ runtime_config: { container_image_ref: IMAGE } }),
+    });
+    assert.equal(second.status, 200, await second.text());
+    for (const url of [first.complete.url, `${DAEMON}/w/${secondUUID}/`]) {
+      const result = await execWorkspace(url, ["python3", "-c", script]);
+      assert.equal(result.exit_code, 0, result.stderr);
+    }
+  } finally {
+    const stopped = await daemonFetch(`/api/workspaces/${secondUUID}/stop`, { method: "POST" });
+    assert.equal(stopped.status, 200, await stopped.text());
+  }
+  const remaining = await execWorkspace(first.complete.url, ["python3", "-c", script]);
+  assert.equal(remaining.exit_code, 0, remaining.stderr);
   assert.equal((await stopWorkspace()).status, 200);
 });
 

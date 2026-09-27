@@ -18,7 +18,7 @@ func TestWorkspaceVolumeContainerConfig(t *testing.T) {
 	s := &Server{config: Config{
 		egressAddress:  "192.0.2.1",
 		logDirectory:   "/run/pwn.college/logs",
-		nixStorePath:   "/var/lib/pwn.college/workspace-closures/test/store",
+		nixStoreImage:  "/nix/store/test-store.erofs",
 		seccompProfile: "/nix/store/test-seccomp.json",
 		workspacePath:  "/nix/store/test-workspace",
 	}}
