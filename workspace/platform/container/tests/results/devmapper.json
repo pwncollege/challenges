@@ -1,0 +1,90 @@
+{
+  "backend": "devmapper",
+  "image": "localhost/workspace-storage:2g",
+  "sequential": [
+    {
+      "read_seconds": 3.4723070340000004,
+      "read_bytes": 2147483648,
+      "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+      "copyup_fsync_seconds": 0.0007742520000002528,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.4229293069802225
+    },
+    {
+      "read_seconds": 3.287973102,
+      "read_bytes": 2147483648,
+      "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+      "copyup_fsync_seconds": 0.0008887159999999561,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.3852913149166852
+    },
+    {
+      "read_seconds": 3.4828654450000003,
+      "read_bytes": 2147483648,
+      "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+      "copyup_fsync_seconds": 0.0011073869999997932,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.3860187919344753
+    },
+    {
+      "read_seconds": 3.1501563669999997,
+      "read_bytes": 2147483648,
+      "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+      "copyup_fsync_seconds": 0.0007670279999998364,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.3634602981619537
+    },
+    {
+      "read_seconds": 3.1727836629999997,
+      "read_bytes": 2147483648,
+      "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+      "copyup_fsync_seconds": 0.0007079380000001301,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 4.078787682112306
+    }
+  ],
+  "concurrent": [
+    {
+      "read_seconds": 3.4292567069999995,
+      "read_bytes": 2147483648,
+      "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+      "copyup_fsync_seconds": 0.000702758000000081,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.486555472947657
+    },
+    {
+      "read_seconds": 3.3830391200000003,
+      "read_bytes": 2147483648,
+      "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+      "copyup_fsync_seconds": 0.00085257900000002,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.624110378790647
+    },
+    {
+      "read_seconds": 3.4846718230000002,
+      "read_bytes": 2147483648,
+      "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+      "copyup_fsync_seconds": 0.000863488999999884,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.4172657581511885
+    },
+    {
+      "read_seconds": 3.3081177509999997,
+      "read_bytes": 2147483648,
+      "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+      "copyup_fsync_seconds": 0.0008337739999997318,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.5632393239066005
+    }
+  ],
+  "concurrent_wall_seconds": 6.6897308668121696
+}

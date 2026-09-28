@@ -1,0 +1,27 @@
+{
+  "backend": "erofs-capacity",
+  "image": "localhost/workspace-storage:20g",
+  "sequential": [
+    {
+      "read_seconds": 37.334164767,
+      "read_bytes": 21474836480,
+      "sha256": "798906558e0ec6ea34b368c76456f5b57e348f1a6059ffcd1c49451144e9e77c",
+      "copyup_fsync_seconds": 0.008491455000000148,
+      "root_mount": "overlay / overlay rw,relatime,lowerdir=/run/kata-containers/erofs-multi-layer/537f6421d40e423ec7c702dc9990bd6a8b9321713bbdbe97587486ad69006d2d/lower-0:/run/kata-containers/erofs-multi-layer/537f6421d40e423ec7c702dc9990bd6a8b9321713bbdbe97587486ad69006d2d/lower-1:/run/kata-containers/erofs-multi-layer/537f6421d40e423ec7c702dc9990bd6a8b9321713bbdbe97587486ad69006d2d/lower-2:/run/kata-containers/erofs-multi-layer/537f6421d40e423ec7c702dc9990bd6a8b9321713bbdbe97587486ad69006d2d/lower-3:/run/kata-containers/erofs-multi-layer/537f6421d40e423ec7c702dc9990bd6a8b9321713bbdbe97587486ad69006d2d/lower-4,upperdir=/run/kata-containers/erofs-multi-layer/537f6421d40e423ec7c702dc9990bd6a8b9321713bbdbe97587486ad69006d2d/upper/upper,workdir=/run/kata-containers/erofs-multi-layer/537f6421d40e423ec7c702dc9990bd6a8b9321713bbdbe97587486ad69006d2d/upper/work,uuid=on 0 0",
+      "root_capacity": 8350298112,
+      "start_seconds": 2.3650518460199237
+    }
+  ],
+  "concurrent": [
+    {
+      "read_seconds": 51.032607765,
+      "read_bytes": 21474836480,
+      "sha256": "798906558e0ec6ea34b368c76456f5b57e348f1a6059ffcd1c49451144e9e77c",
+      "copyup_fsync_seconds": 0.011062647000000148,
+      "root_mount": "overlay / overlay rw,relatime,lowerdir=/run/kata-containers/erofs-multi-layer/c2b7b6be8237bdbb94e43488b3094e3063ec3edf476a3a1867d4234f3f3d3ef4/lower-0:/run/kata-containers/erofs-multi-layer/c2b7b6be8237bdbb94e43488b3094e3063ec3edf476a3a1867d4234f3f3d3ef4/lower-1:/run/kata-containers/erofs-multi-layer/c2b7b6be8237bdbb94e43488b3094e3063ec3edf476a3a1867d4234f3f3d3ef4/lower-2:/run/kata-containers/erofs-multi-layer/c2b7b6be8237bdbb94e43488b3094e3063ec3edf476a3a1867d4234f3f3d3ef4/lower-3:/run/kata-containers/erofs-multi-layer/c2b7b6be8237bdbb94e43488b3094e3063ec3edf476a3a1867d4234f3f3d3ef4/lower-4,upperdir=/run/kata-containers/erofs-multi-layer/c2b7b6be8237bdbb94e43488b3094e3063ec3edf476a3a1867d4234f3f3d3ef4/upper/upper,workdir=/run/kata-containers/erofs-multi-layer/c2b7b6be8237bdbb94e43488b3094e3063ec3edf476a3a1867d4234f3f3d3ef4/upper/work,uuid=on 0 0",
+      "root_capacity": 8350298112,
+      "start_seconds": 2.290082909865305
+    }
+  ],
+  "concurrent_wall_seconds": 54.072539885062724
+}

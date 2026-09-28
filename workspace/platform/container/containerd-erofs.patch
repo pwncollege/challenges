@@ -1,0 +1,57 @@
+containerd: translate go-erofs unsupported features to the mount-fallback sentinel.
+
+--- a/plugins/mount/fsview/erofs/erofs.go
++++ b/plugins/mount/fsview/erofs/erofs.go
+@@ -79,6 +79,10 @@
+ 		for _, c := range closers {
+ 			c.Close()
+ 		}
++		// Let callers fall back to a kernel mount for unsupported EROFS features.
++		if errors.Is(err, erofs.ErrNotImplemented) {
++			return nil, fmt.Errorf("%v: %w", err, errdefs.ErrNotImplemented)
++		}
+ 		return nil, err
+ 	}
+ 
+--- /dev/null
++++ b/plugins/mount/fsview/erofs/erofs_test.go
+@@ -0,0 +1,39 @@
++package erofs
++
++import (
++	"os"
++	"os/exec"
++	"path/filepath"
++	"testing"
++
++	"github.com/containerd/containerd/v2/core/mount"
++	"github.com/containerd/containerd/v2/internal/fsview"
++	"github.com/containerd/errdefs"
++	"github.com/stretchr/testify/require"
++)
++
++func TestCompressedEROFSRequestsMountFallback(t *testing.T) {
++	directory := t.TempDir()
++	root := filepath.Join(directory, "root")
++	require.NoError(t, os.Mkdir(root, 0755))
++	require.NoError(t, os.WriteFile(filepath.Join(root, "file"), make([]byte, 65536), 0644))
++	image := filepath.Join(directory, "layer.erofs")
++	output, err := exec.Command("mkfs.erofs", "-zlz4hc", image, root).CombinedOutput()
++	require.NoError(t, err, string(output))
++	// Use the actual formatted overlay path consumed by OCI user/group lookup.
++	view, err := fsview.FSMounts([]mount.Mount{
++		{Type: "erofs", Source: image},
++		{Type: "format/mkdir/overlay", Options: []string{"lowerdir={{ mount 0 }}"}},
++	})
++	require.Nil(t, view)
++	require.ErrorIs(t, err, errdefs.ErrNotImplemented)
++}
++
++func TestInvalidEROFSDoesNotRequestMountFallback(t *testing.T) {
++	image := filepath.Join(t.TempDir(), "invalid.erofs")
++	require.NoError(t, os.WriteFile(image, []byte("invalid"), 0644))
++	view, err := handleMount(mount.Mount{Type: "erofs", Source: image})
++	require.Nil(t, view)
++	require.Error(t, err)
++	require.NotErrorIs(t, err, errdefs.ErrNotImplemented)
++}

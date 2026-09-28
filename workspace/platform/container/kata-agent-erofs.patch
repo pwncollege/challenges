@@ -1,0 +1,123 @@
+Kata agent: resolve Firecracker MMIO disks, scan replacement GPT layouts,
+and give each memory-backed EROFS upper its own 1 GiB tmpfs and cleanup.
+
+--- a/src/agent/src/storage/multi_layer_erofs.rs
++++ b/src/agent/src/storage/multi_layer_erofs.rs
+@@ -15,21 +15,23 @@
+ 
+ use std::collections::HashMap;
+ use std::fs;
++use std::os::fd::AsRawFd;
+ use std::path::{Path, PathBuf};
+ use std::sync::Arc;
+ use std::time::Duration;
+ use tokio::time::sleep;
+ 
+-use crate::device::block_device_handler::get_virtio_blk_pci_device_name;
++use crate::device::block_device_handler::{
++    get_virtio_blk_mmio_device_name, get_virtio_blk_pci_device_name,
++};
+ use crate::device::scsi_device_handler::get_scsi_device_name;
+ use crate::linux_abi::pcipath_from_dev_tree_path;
+ use crate::mount::baremount;
+-use crate::rpc::CONTAINER_BASE;
+ use crate::sandbox::Sandbox;
+ use crate::storage::{StorageContext, StorageHandler};
+ use anyhow::{anyhow, Context, Result};
+ use kata_sys_util::mount::{create_mount_destination, Mounter};
+-use kata_types::device::{DRIVER_BLK_PCI_TYPE, DRIVER_SCSI_TYPE};
++use kata_types::device::{DRIVER_BLK_MMIO_TYPE, DRIVER_BLK_PCI_TYPE, DRIVER_SCSI_TYPE};
+ #[cfg(feature = "devicemapper")]
+ use kata_types::dmverity::{cleanup_dmverity_devices, create_dmverity_device, DmVerityInfo};
+ use kata_types::mount::StorageDevice;
+@@ -37,6 +39,9 @@
+ use safe_path::scoped_join;
+ use slog::Logger;
+ use tokio::sync::Mutex;
++
++// BLKRRPART from linux/fs.h.
++nix::ioctl_none!(reread_partition_table, 0x12, 95);
+ 
+ /// EROFS Type
+ const EROFS_TYPE: &str = "erofs";
+@@ -249,27 +254,23 @@
+         scoped_join(MULTI_LAYER_EROFS_BASE, cid_str).context("failed to build multi-layer path")?;
+     fs::create_dir_all(&temp_base).context("failed to create temp mount base")?;
+ 
+-    let upper_mount = if upper_storage.is_some() {
+-        temp_base.join("upper")
+-    } else {
+-        // The implicit upper has no backing mount. Keep its disposable data in
+-        // the bundle so container destroy still removes it.
+-        let container_base = scoped_join(CONTAINER_BASE, cid_str)
+-            .context("failed to build container temporary path")?;
+-        fs::create_dir_all(&container_base).context("failed to create container temporary path")?;
+-        scoped_join(&container_base, "multi-layer/upper")
+-            .context("failed to build implicit upper path")?
+-    };
++    let upper_mount = temp_base.join("upper");
+     fs::create_dir_all(&upper_mount).context("failed to create upper mount dir")?;
+ 
+     if let Some(upper) = upper_storage {
+         wait_and_mount_layer(upper, &upper_mount, sandbox, &logger, None).await?;
+     } else {
+-        info!(
+-            logger,
+-            "Using /run-backed upper directory";
+-            "mount-point" => upper_mount.display(),
+-        );
++        // Keep disposable root writes in a separately bounded guest tmpfs.
++        baremount(
++            Path::new("tmpfs"),
++            &upper_mount,
++            "tmpfs",
++            nix::mount::MsFlags::empty(),
++            "size=1g,mode=0755",
++            &logger,
++        )
++        .context("failed to mount rootfs tmpfs")?;
++        track_temporary_mount_for_cleanup(sandbox, &upper_mount, &logger).await?;
+     }
+ 
+     for mkdir_dir in &mkdir_dirs {
+@@ -501,13 +502,9 @@
+         acc
+     });
+ 
+-    // Collect temporary backing mounts. The implicit /run-backed upper is just
+-    // a directory under the container bundle and is removed with that bundle.
+-    let mut temp_mount_points =
+-        Vec::with_capacity(usize::from(upper_storage.is_some()) + lower_mounts.len() + 1);
+-    if upper_storage.is_some() {
+-        temp_mount_points.push(upper_mount.display().to_string());
+-    }
++    // Both disk and tmpfs uppers need unmounting during storage cleanup.
++    let mut temp_mount_points = Vec::with_capacity(lower_mounts.len() + 2);
++    temp_mount_points.push(upper_mount.display().to_string());
+     for lm in &lower_mounts {
+         temp_mount_points.push(lm.display().to_string());
+     }
+@@ -939,6 +936,23 @@
+     sandbox: &Arc<Mutex<Sandbox>>,
+ ) -> Result<String> {
+     let base_dev_path = match layer.driver.as_str() {
++        DRIVER_BLK_MMIO_TYPE => {
++            // Firecracker's placeholder disk may already exist before the agent starts.
++            if !Path::new(&layer.source).exists() {
++                get_virtio_blk_mmio_device_name(sandbox, &layer.source).await?;
++            }
++            // Replacing a Firecracker placeholder does not hotplug a new disk.
++            // Scan its GPT before waiting for partitions of the new backing file.
++            if is_gpt_partitioned(layer)
++                && !Path::new(&get_partition_device_path(&layer.source, 1)).exists()
++            {
++                let disk = fs::File::open(&layer.source)?;
++                // SAFETY: disk is an open block device; BLKRRPART takes no pointer.
++                unsafe { reread_partition_table(disk.as_raw_fd()) }
++                    .context("rescan Firecracker EROFS partitions")?;
++            }
++            layer.source.clone()
++        }
+         DRIVER_SCSI_TYPE => {
+             // For SCSI devices, we need to wait for the device to appear and get its path before mounting.
+             get_scsi_device_name(sandbox, &layer.source).await?

@@ -18,26 +18,16 @@ let
 
   kata = import ./kata.nix { inherit pkgs; };
   package = pkgs.containerd.overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [ ./containerd-sparse.patch ];
+    patches = (old.patches or [ ]) ++ [ ./containerd-erofs.patch ];
+    nativeCheckInputs = (old.nativeCheckInputs or [ ]) ++ [ pkgs.erofs-utils ];
     doCheck = true;
     checkPhase = ''
       runHook preCheck
-      go test ./plugins/snapshots/blockfile -run TestCopyFileWithSyncPreservesHoles -v
+      go test ./plugins/mount/fsview/erofs -v
       runHook postCheck
     '';
   });
   seccompProfile = import ./seccomp.nix { inherit pkgs; };
-
-  scratch = "${containerdDataDir}/empty-8GiB.ext4";
-  prepareScratch = pkgs.writeShellScript "${name}-containerd-scratch" ''
-    set -euo pipefail
-    if [[ ! -e '${scratch}' ]]; then
-      ${pkgs.coreutils}/bin/truncate -s 8G '${scratch}.tmp'
-      ${pkgs.e2fsprogs}/bin/mkfs.ext4 -q -F -m 0 -b 4096 \
-        -E lazy_itable_init=0,lazy_journal_init=0 '${scratch}.tmp'
-      ${pkgs.coreutils}/bin/mv '${scratch}.tmp' '${scratch}'
-    fi
-  '';
 
   containerdConfig = pkgs.writeText "${name}-containerd-config.toml" ''
     version = 4
@@ -46,7 +36,9 @@ let
     disabled_plugins = ["io.containerd.nri.v1.nri"]
 
     [plugins."io.containerd.cri.v1.images"]
-      snapshotter = "blockfile"
+      snapshotter = "erofs"
+      use_local_image_pull = true
+      discard_unpacked_layers = true
 
     [plugins."io.containerd.cri.v1.images".pinned_images]
       sandbox = "registry.k8s.io/pause:3.10.2"
@@ -60,14 +52,22 @@ let
     [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata.options]
       ConfigPath = "${kata.config}"
 
-    [plugins."io.containerd.snapshotter.v1.blockfile"]
-      scratch_file = "${scratch}"
-      root_path = "${containerdDataDir}/blockfile"
-      fs_type = "ext4"
+    [plugins."io.containerd.snapshotter.v1.erofs"]
+      # Kata supplies a bounded guest tmpfs for the writable upper.
+      default_size = "0"
+
+    [plugins."io.containerd.differ.v1.erofs"]
+      # Bound compression CPU per layer while other workspaces start and run.
+      mkfs_options = ["-T0", "--mkfs-time", "--sort=none", "-zlz4hc", "--workers=2"]
+      enable_tar_index = false
+
+    [plugins."io.containerd.service.v1.diff-service"]
+      default = ["erofs", "walking"]
 
     [[plugins."io.containerd.transfer.v1.local".unpack_config]]
       platform = "linux/amd64"
-      snapshotter = "blockfile"
+      snapshotter = "erofs"
+      differ = "erofs"
 
     [plugins."io.containerd.cri.v1.runtime".cni]
       bin_dirs = ["${networkPolicy}/bin", "${pkgs.cni-plugins}/bin"]
@@ -101,12 +101,15 @@ in
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "notify";
-        ExecStartPre = prepareScratch;
+        ExecStartPre = "${pkgs.kmod}/bin/modprobe erofs";
         ExecStart = "${package}/bin/containerd --config ${containerdConfig}";
         Environment = "PATH=${
           lib.makeBinPath [
             kata.package
             pkgs.runc
+            pkgs.erofs-utils
+            pkgs.e2fsprogs
+            pkgs.util-linux
           ]
         }";
         Restart = "on-failure";

@@ -137,6 +137,12 @@ func loadWorkspaceConfig() (workspaceConfig, error) {
 }
 
 func prepareWorkspace(config workspaceConfig) error {
+	if err := os.MkdirAll("/tmp", 01777); err != nil {
+		return err
+	}
+	if err := syscall.Mount("tmpfs", "/tmp", "tmpfs", syscall.MS_NOSUID|syscall.MS_NODEV, "size=1g,mode=1777"); err != nil {
+		return fmt.Errorf("mount /tmp: %w", err)
+	}
 	if err := setupRunDirectories(); err != nil {
 		return err
 	}

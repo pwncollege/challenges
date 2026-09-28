@@ -1,0 +1,1642 @@
+Firecracker read-only VMDK support, adapted to v1.17.0.
+Upstream: https://github.com/firecracker-microvm/firecracker/pull/5741
+Revision: 46a50761d890437bc38b9785fb878bd9494c95cc
+Only dependency/lockfile context differs from the upstream implementation.
+Remove this patch when upgrading to a Firecracker version containing PR #5741.
+
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -11,6 +11,12 @@
+  "vm-memory",
+  "zerocopy",
+ ]
++
++[[package]]
++name = "adler2"
++version = "2.0.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
+ 
+ [[package]]
+ name = "aho-corasick"
+@@ -258,6 +264,12 @@
+ version = "1.0.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
++
++[[package]]
++name = "cfg_aliases"
++version = "0.2.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
+ 
+ [[package]]
+ name = "chacha20"
+@@ -743,6 +755,24 @@
+ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
+ 
+ [[package]]
++name = "imago"
++version = "0.2.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "10824637f85b06dd6652a11caa62110e8cd33af4c875863c3c192f9ccc698375"
++dependencies = [
++ "cfg-if",
++ "libc",
++ "maybe-async",
++ "miniz_oxide",
++ "nix 0.30.1",
++ "page_size",
++ "rustc_version",
++ "tracing",
++ "vm-memory",
++ "windows-sys",
++]
++
++[[package]]
+ name = "indexmap"
+ version = "2.14.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -960,6 +990,17 @@
+ checksum = "0ca88d725a0a943b096803bd34e73a4437208b6077654cc4ecb2947a5f91618d"
+ 
+ [[package]]
++name = "maybe-async"
++version = "0.2.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "746873a384ad60adc5db74471dfaba74bd278afbdcfd81db93fafcdfc8b5ca0c"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 2.0.119",
++]
++
++[[package]]
+ name = "memchr"
+ version = "2.8.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -990,6 +1031,15 @@
+ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
+ 
+ [[package]]
++name = "miniz_oxide"
++version = "0.8.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
++dependencies = [
++ "adler2",
++]
++
++[[package]]
+ name = "nix"
+ version = "0.27.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -997,6 +1047,18 @@
+ dependencies = [
+  "bitflags 2.13.1",
+  "cfg-if",
++ "libc",
++]
++
++[[package]]
++name = "nix"
++version = "0.30.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
++dependencies = [
++ "bitflags 2.13.1",
++ "cfg-if",
++ "cfg_aliases",
+  "libc",
+ ]
+ 
+@@ -1513,6 +1575,37 @@
+ checksum = "7d56353a2a665ad0f41a421187180aab746c8c325620617ad883a99a1cbe66d2"
+ 
+ [[package]]
++name = "tracing"
++version = "0.1.44"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
++dependencies = [
++ "pin-project-lite",
++ "tracing-attributes",
++ "tracing-core",
++]
++
++[[package]]
++name = "tracing-attributes"
++version = "0.1.31"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 2.0.119",
++]
++
++[[package]]
++name = "tracing-core"
++version = "0.1.36"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
++dependencies = [
++ "once_cell",
++]
++
++[[package]]
+ name = "unarray"
+ version = "0.1.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -1551,7 +1644,7 @@
+  "bitflags 2.13.1",
+  "cfg-if",
+  "libc",
+- "nix",
++ "nix 0.27.1",
+  "thiserror 1.0.69",
+  "userfaultfd-sys",
+ ]
+@@ -1662,6 +1755,7 @@
+  "event-manager",
+  "gdbstub",
+  "gdbstub_arch",
++ "imago",
+  "itertools 0.15.0",
+  "kvm-bindings",
+  "kvm-ioctls",
+--- a/resources/seccomp/aarch64-unknown-linux-musl.json
++++ b/resources/seccomp/aarch64-unknown-linux-musl.json
+@@ -26,6 +26,10 @@
+                 "syscall": "read"
+             },
+             {
++                "syscall": "readlinkat",
++                "comment": "Used to canonicalize VMDK descriptor paths on drive patch"
++            },
++            {
+                 "syscall": "write"
+             },
+             {
+@@ -101,6 +105,10 @@
+             {
+                 "syscall": "lseek",
+                 "comment": "Used by the block device"
++            },
++            {
++                "syscall": "preadv",
++                "comment": "Used by the imago VMDK disk image backend"
+             },
+             {
+                 "syscall": "mremap",
+--- a/resources/seccomp/x86_64-unknown-linux-musl.json
++++ b/resources/seccomp/x86_64-unknown-linux-musl.json
+@@ -23,7 +23,14 @@
+                 "syscall": "open"
+             },
+             {
++                "syscall": "openat"
++            },
++            {
+                 "syscall": "read"
++            },
++            {
++                "syscall": "readlink",
++                "comment": "Used to canonicalize VMDK descriptor paths on drive patch"
+             },
+             {
+                 "syscall": "write"
+@@ -101,6 +108,10 @@
+             {
+                 "syscall": "lseek",
+                 "comment": "Used by the block device"
++            },
++            {
++                "syscall": "preadv",
++                "comment": "Used by the imago VMDK disk image backend"
+             },
+             {
+                 "syscall": "mremap",
+--- a/src/firecracker/swagger/firecracker.yaml
++++ b/src/firecracker/swagger/firecracker.yaml
+@@ -1261,6 +1261,14 @@
+           This field is optional for virtio-block config and should be omitted for vhost-user-block configuration.
+         enum: ["Sync", "Async"]
+         default: "Sync"
++      image_format:
++        type: string
++        description:
++          Format of the file at path_on_host. "Vmdk" images must be opened
++          read-only and use the Sync IO engine.
++          This field is optional for virtio-block config and should be omitted for vhost-user-block configuration.
++        enum: ["Raw", "Vmdk"]
++        default: "Raw"
+       blk_size:
+         type: integer
+         description:
+--- a/src/vmm/Cargo.toml
++++ b/src/vmm/Cargo.toml
+@@ -33,6 +33,7 @@
+ event-manager = "0.4.2"
+ gdbstub = { version = "0.7.10", optional = true }
+ gdbstub_arch = { version = "0.3.3", optional = true }
++imago = { version = "0.2.5", default-features = false, features = ["sync", "vm-memory"] }
+ kvm-bindings = { version = "0.14.0", features = ["fam-wrappers", "serde"] }
+ kvm-ioctls = "0.25.0"
+ libc = "0.2.186"
+--- a/src/vmm/src/builder.rs
++++ b/src/vmm/src/builder.rs
+@@ -906,6 +906,7 @@
+                 ),
+                 rate_limiter: None,
+                 file_engine_type: None,
++                image_format: None,
+                 blk_size: None,
+                 topology: None,
+ 
+--- a/src/vmm/src/device_manager/mod.rs
++++ b/src/vmm/src/device_manager/mod.rs
+@@ -914,6 +914,7 @@
+             path_on_host: Some(f.as_path().to_str().unwrap().to_string()),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+             socket: None,
+--- a/src/vmm/src/devices/virtio/block/vhost_user/device.rs
++++ b/src/vmm/src/devices/virtio/block/vhost_user/device.rs
+@@ -104,6 +104,7 @@
+             path_on_host: None,
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -423,6 +424,7 @@
+             path_on_host: None,
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -441,6 +443,7 @@
+             path_on_host: Some("path".to_string()),
+             rate_limiter: None,
+             file_engine_type: Some(FileEngineType::Sync),
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -459,6 +462,7 @@
+             path_on_host: Some("path".to_string()),
+             rate_limiter: None,
+             file_engine_type: Some(FileEngineType::Sync),
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+--- a/src/vmm/src/devices/virtio/block/virtio/device.rs
++++ b/src/vmm/src/devices/virtio/block/virtio/device.rs
+@@ -13,9 +13,10 @@
+ use std::os::fd::AsRawFd;
+ use std::os::linux::fs::MetadataExt;
+ use std::os::unix::fs::FileTypeExt;
+-use std::path::PathBuf;
++use std::path::{Path, PathBuf};
+ use std::sync::Arc;
+ 
++pub use block_io::DiskImageFormat;
+ use block_io::FileEngine;
+ use serde::{Deserialize, Serialize};
+ use vm_memory::ByteValued;
+@@ -94,20 +95,69 @@
+         Ok(disk_size)
+     }
+ 
++    fn from_disk_image(
++        disk_image_path: &str,
++        mut disk_image: File,
++        is_disk_read_only: bool,
++        file_engine_type: FileEngineType,
++        image_format: DiskImageFormat,
++    ) -> Result<(FileEngine, u64), VirtioBlockError> {
++        match image_format {
++            DiskImageFormat::Vmdk => {
++                if !is_disk_read_only {
++                    return Err(VirtioBlockError::FileEngine(block_io::BlockIoError::Vmdk(
++                        block_io::VmdkIoError::RequiresReadOnly,
++                    )));
++                }
++                if file_engine_type == FileEngineType::Async {
++                    return Err(VirtioBlockError::FileEngine(block_io::BlockIoError::Vmdk(
++                        block_io::VmdkIoError::AsyncNotSupported,
++                    )));
++                }
++
++                let vmdk_engine = block_io::VmdkFileEngine::from_path(Path::new(disk_image_path))
++                    .map_err(|e| {
++                    VirtioBlockError::FileEngine(block_io::BlockIoError::Vmdk(e))
++                })?;
++                let disk_size = vmdk_engine.disk_size();
++                Ok((FileEngine::Vmdk(vmdk_engine), disk_size))
++            }
++            DiskImageFormat::Raw => {
++                let disk_size = Self::file_size(disk_image_path, &mut disk_image)?;
++                let engine = FileEngine::from_file(disk_image, file_engine_type)
++                    .map_err(VirtioBlockError::FileEngine)?;
++                Ok((engine, disk_size))
++            }
++        }
++    }
++
++    fn file_engine_type(&self) -> FileEngineType {
++        match self.file_engine {
++            FileEngine::Async(_) => FileEngineType::Async,
++            FileEngine::Sync(_) | FileEngine::Vmdk(_) => FileEngineType::Sync,
++        }
++    }
++
+     /// Create a new file for the block device using a FileEngine
+     pub fn new(
+         disk_image_path: String,
+         is_disk_read_only: bool,
+         file_engine_type: FileEngineType,
++        image_format: DiskImageFormat,
+     ) -> Result<Self, VirtioBlockError> {
+-        let mut disk_image = Self::open_file(&disk_image_path, is_disk_read_only)?;
+-        let disk_size = Self::file_size(&disk_image_path, &mut disk_image)?;
++        let disk_image = Self::open_file(&disk_image_path, is_disk_read_only)?;
+         let image_id = Self::build_disk_image_id(&disk_image);
++        let (file_engine, disk_size) = Self::from_disk_image(
++            &disk_image_path,
++            disk_image,
++            is_disk_read_only,
++            file_engine_type,
++            image_format,
++        )?;
+ 
+         Ok(Self {
+             file_path: disk_image_path,
+-            file_engine: FileEngine::from_file(disk_image, file_engine_type)
+-                .map_err(VirtioBlockError::FileEngine)?,
++            file_engine,
+             nsectors: disk_size >> SECTOR_SHIFT,
+             image_id,
+         })
+@@ -120,12 +170,34 @@
+         is_disk_read_only: bool,
+     ) -> Result<(), VirtioBlockError> {
+         let mut disk_image = Self::open_file(&disk_image_path, is_disk_read_only)?;
+-        let disk_size = Self::file_size(&disk_image_path, &mut disk_image)?;
+-
+         self.image_id = Self::build_disk_image_id(&disk_image);
+-        self.file_engine
+-            .update_file_path(disk_image)
+-            .map_err(VirtioBlockError::FileEngine)?;
++
++        let image_format = DiskImageFormat::from(&self.file_engine);
++        let can_reuse_engine = image_format == DiskImageFormat::Raw
++            && !matches!(self.file_engine, FileEngine::Vmdk(_));
++
++        let disk_size = if can_reuse_engine {
++            let disk_size = Self::file_size(&disk_image_path, &mut disk_image)?;
++            match &mut self.file_engine {
++                FileEngine::Async(engine) => engine
++                    .update_file(disk_image)
++                    .map_err(|e| VirtioBlockError::FileEngine(block_io::BlockIoError::Async(e)))?,
++                FileEngine::Sync(engine) => engine.update_file(disk_image),
++                FileEngine::Vmdk(_) => unreachable!("checked by can_reuse_engine above"),
++            }
++            disk_size
++        } else {
++            let (file_engine, disk_size) = Self::from_disk_image(
++                &disk_image_path,
++                disk_image,
++                is_disk_read_only,
++                self.file_engine_type(),
++                image_format,
++            )?;
++            self.file_engine = file_engine;
++            disk_size
++        };
++
+         self.nsectors = disk_size >> SECTOR_SHIFT;
+         self.file_path = disk_image_path;
+ 
+@@ -326,6 +398,10 @@
+     #[serde(default)]
+     #[serde(rename = "io_engine")]
+     pub file_engine_type: FileEngineType,
++    /// The disk image format of the backing file.
++    #[serde(default)]
++    #[serde(rename = "image_format")]
++    pub image_format: DiskImageFormat,
+     /// Logical block size.
+     pub blk_size: Option<u32>,
+     /// Block topology settings
+@@ -348,6 +424,7 @@
+                 path_on_host: path_on_host.clone(),
+                 rate_limiter: value.rate_limiter,
+                 file_engine_type: value.file_engine_type.unwrap_or_default(),
++                image_format: value.image_format.unwrap_or_default(),
+                 blk_size: value.blk_size,
+                 topology: value.topology,
+             })
+@@ -370,6 +447,8 @@
+             path_on_host: Some(value.path_on_host),
+             rate_limiter: value.rate_limiter,
+             file_engine_type: Some(value.file_engine_type),
++            image_format: (value.image_format != DiskImageFormat::Raw)
++                .then_some(value.image_format),
+             blk_size: value.blk_size,
+             topology: value.topology,
+ 
+@@ -410,7 +489,7 @@
+     ($file_engine: expr) => {
+         match $file_engine {
+             FileEngine::Async(engine) => engine,
+-            FileEngine::Sync(_) => {
++            FileEngine::Sync(_) | FileEngine::Vmdk(_) => {
+                 error!("The block device doesn't use an async IO engine");
+                 return;
+             }
+@@ -435,6 +514,7 @@
+             config.path_on_host,
+             config.is_read_only,
+             config.file_engine_type,
++            config.image_format,
+         )?;
+ 
+         let rate_limiter = config
+@@ -463,7 +543,10 @@
+             ..Default::default()
+         };
+ 
+-        if config.blk_size.is_none() && config.topology.is_none() {
++        if config.blk_size.is_none()
++            && config.topology.is_none()
++            && !matches!(disk_properties.file_engine, FileEngine::Vmdk(_))
++        {
+             if let Some((blk_size, topology)) = query_blk_attrs(disk_properties.file_engine.file())
+                 .and_then(calculate_blk_size_and_topology)
+             {
+@@ -521,6 +604,7 @@
+             cache_type: self.cache_type,
+             rate_limiter: rl.into_option(),
+             file_engine_type: self.file_engine_type(),
++            image_format: DiskImageFormat::from(&self.disk.file_engine),
+             blk_size: Some(self.config_space.blk_size),
+             topology: Some(self.config_space.topology),
+         }
+@@ -733,6 +817,7 @@
+         match self.disk.file_engine {
+             FileEngine::Sync(_) => FileEngineType::Sync,
+             FileEngine::Async(_) => FileEngineType::Async,
++            FileEngine::Vmdk(_) => FileEngineType::Sync,
+         }
+     }
+ 
+@@ -880,6 +965,7 @@
+     use super::*;
+     use crate::check_metric_after_block;
+     use crate::devices::virtio::block::virtio::IO_URING_NUM_ENTRIES;
++    use crate::devices::virtio::block::virtio::io::format::vmdk::tests::create_test_vmdk;
+     use crate::devices::virtio::block::virtio::test_utils::{
+         RequestDescriptorChain, default_block, read_blk_req_descriptors, set_queue,
+         set_rate_limiter, simulate_async_completion_event,
+@@ -927,6 +1013,7 @@
+             path_on_host: Some("path".to_string()),
+             rate_limiter: None,
+             file_engine_type: Default::default(),
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -945,6 +1032,7 @@
+             path_on_host: None,
+             rate_limiter: None,
+             file_engine_type: Default::default(),
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -963,6 +1051,7 @@
+             path_on_host: Some("path".to_string()),
+             rate_limiter: None,
+             file_engine_type: Default::default(),
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -979,22 +1068,70 @@
+         f.as_file().set_len(size).unwrap();
+ 
+         for engine in [FileEngineType::Sync, FileEngineType::Async] {
+-            let disk_properties =
+-                DiskProperties::new(String::from(f.as_path().to_str().unwrap()), true, engine)
+-                    .unwrap();
++            let disk_properties = DiskProperties::new(
++                String::from(f.as_path().to_str().unwrap()),
++                true,
++                engine,
++                DiskImageFormat::Raw,
++            )
++            .unwrap();
+ 
+             assert_eq!(size, u64::from(SECTOR_SIZE) * num_sectors);
+             assert_eq!(disk_properties.nsectors, num_sectors);
+             // Testing `backing_file.virtio_block_disk_image_id()` implies
+             // duplicating that logic in tests, so skipping it.
+ 
+-            let res = DiskProperties::new("invalid-disk-path".to_string(), true, engine);
++            let res = DiskProperties::new(
++                "invalid-disk-path".to_string(),
++                true,
++                engine,
++                DiskImageFormat::Raw,
++            );
+             assert!(
+                 matches!(res, Err(VirtioBlockError::BackingFile(_, _))),
+                 "{:?}",
+                 res
+             );
+         }
++    }
++
++    #[test]
++    fn test_vmdk_disk_properties() {
++        let (_dir, descriptor) = create_test_vmdk("extent");
++        let path = descriptor.to_string_lossy().into_owned();
++
++        assert!(matches!(
++            DiskProperties::new(
++                path.clone(),
++                false,
++                FileEngineType::Sync,
++                DiskImageFormat::Vmdk
++            ),
++            Err(VirtioBlockError::FileEngine(block_io::BlockIoError::Vmdk(
++                block_io::VmdkIoError::RequiresReadOnly
++            )))
++        ));
++        assert!(matches!(
++            DiskProperties::new(
++                path.clone(),
++                true,
++                FileEngineType::Async,
++                DiskImageFormat::Vmdk
++            ),
++            Err(VirtioBlockError::FileEngine(block_io::BlockIoError::Vmdk(
++                block_io::VmdkIoError::AsyncNotSupported
++            )))
++        ));
++
++        let mut disk =
++            DiskProperties::new(path, true, FileEngineType::Sync, DiskImageFormat::Vmdk).unwrap();
++        assert!(matches!(disk.file_engine, FileEngine::Vmdk(_)));
++        assert_eq!(disk.nsectors, 2048);
++
++        let (_dir2, descriptor2) = create_test_vmdk("extent");
++        disk.update(descriptor2.to_string_lossy().into_owned(), true)
++            .unwrap();
++        assert_eq!(disk.nsectors, 2048);
+     }
+ 
+     #[test]
+@@ -1041,6 +1178,7 @@
+             cache_type: CacheType::Unsafe,
+             rate_limiter: None,
+             file_engine_type: FileEngineType::Sync,
++            image_format: DiskImageFormat::Raw,
+             blk_size: Some(4096),
+             topology: None,
+         };
+@@ -1069,6 +1207,7 @@
+             cache_type: CacheType::Unsafe,
+             rate_limiter: None,
+             file_engine_type: FileEngineType::Async,
++            image_format: DiskImageFormat::Raw,
+             blk_size: None,
+             topology: None,
+         };
+@@ -1089,6 +1228,7 @@
+             cache_type: CacheType::Unsafe,
+             rate_limiter: None,
+             file_engine_type: FileEngineType::Sync,
++            image_format: DiskImageFormat::Raw,
+             blk_size: None,
+             topology: None,
+         };
+@@ -1112,6 +1252,7 @@
+             cache_type: CacheType::Unsafe,
+             rate_limiter: None,
+             file_engine_type: FileEngineType::Sync,
++            image_format: DiskImageFormat::Raw,
+             blk_size: None,
+             topology: None,
+         };
+--- /dev/null
++++ b/src/vmm/src/devices/virtio/block/virtio/io/format/mod.rs
+@@ -0,0 +1,18 @@
++// Copyright (c) 2026 Tencent. All Rights Reserved.
++// SPDX-License-Identifier: Apache-2.0
++
++pub mod vmdk;
++
++use serde::{Deserialize, Serialize};
++
++pub use self::vmdk::{VmdkFileEngine, VmdkIoError};
++
++/// The disk image format of the backing file.
++#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
++pub enum DiskImageFormat {
++    /// Raw disk image (no format header).
++    #[default]
++    Raw,
++    /// VMDK disk image.
++    Vmdk,
++}
+--- /dev/null
++++ b/src/vmm/src/devices/virtio/block/virtio/io/format/vmdk.rs
+@@ -0,0 +1,296 @@
++// Copyright (c) 2026 Tencent. All Rights Reserved.
++// SPDX-License-Identifier: Apache-2.0
++
++use std::ffi::CString;
++use std::fs;
++use std::io;
++use std::os::fd::{AsRawFd, FromRawFd};
++use std::os::unix::ffi::OsStrExt;
++use std::os::unix::fs::OpenOptionsExt;
++use std::path::{Component, Path, PathBuf};
++
++use imago::FormatDriverBuilder;
++use imago::file::File as ImagoFile;
++use imago::format::access::FormatAccess;
++use imago::format::gate::ImplicitOpenGate;
++use imago::io_buffers::IoVectorMut;
++use imago::vmdk::Vmdk;
++use imago::{Storage, StorageOpenOptions};
++use vm_memory::{GuestMemoryBackend, GuestMemoryError};
++
++use crate::vstate::memory::{GuestAddress, GuestMemoryMmap};
++
++/// Errors specific to the VMDK IO engine.
++#[derive(Debug, thiserror::Error, displaydoc::Display)]
++pub enum VmdkIoError {
++    /// Failed to open VMDK image: {0}
++    Open(io::Error),
++    /// VMDK backend does not support the async file engine.
++    AsyncNotSupported,
++    /// VMDK read error: {0}
++    Read(io::Error),
++    /// VMDK write not supported (read-only image)
++    WriteNotSupported,
++    /// VMDK backend requires is_read_only=true.
++    RequiresReadOnly,
++    /// Guest memory error: {0}
++    GuestMemory(GuestMemoryError),
++    /// VMDK flush error: {0}
++    Flush(io::Error),
++}
++
++#[derive(Debug)]
++pub struct VmdkFileEngine {
++    access: FormatAccess<ImagoFile>,
++}
++
++#[derive(Debug)]
++struct VmdkImplicitOpenGate {
++    descriptor_path: PathBuf,
++    descriptor_dir: fs::File,
++}
++
++impl VmdkImplicitOpenGate {
++    fn new(path: &Path) -> io::Result<Self> {
++        let descriptor_path = fs::canonicalize(path)?;
++        let descriptor_dir_path = descriptor_path
++            .parent()
++            .ok_or_else(|| io::Error::other("VMDK descriptor has no parent directory"))?;
++        let descriptor_dir = fs::OpenOptions::new()
++            .read(true)
++            .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
++            .open(descriptor_dir_path)?;
++
++        Ok(Self {
++            descriptor_path,
++            descriptor_dir,
++        })
++    }
++
++    fn open_extent(&self, path: &Path) -> io::Result<ImagoFile> {
++        // VMDK descriptors are untrusted input.  Extents are read-only, direct children of the
++        // descriptor directory, and are opened relative to its held directory FD to prevent path
++        // traversal, symlink traversal, and check-then-open races.
++        let relative = path
++            .strip_prefix(
++                self.descriptor_path
++                    .parent()
++                    .expect("canonical descriptor path has a parent"),
++            )
++            .map_err(|_| {
++                io::Error::new(
++                    io::ErrorKind::PermissionDenied,
++                    "VMDK extent is outside the descriptor directory",
++                )
++            })?;
++        let mut components = relative.components();
++        let Some(Component::Normal(filename)) = components.next() else {
++            return Err(io::Error::new(
++                io::ErrorKind::PermissionDenied,
++                "VMDK extent must be a direct child of the descriptor directory",
++            ));
++        };
++        if components.next().is_some() {
++            return Err(io::Error::new(
++                io::ErrorKind::PermissionDenied,
++                "VMDK extent must be a direct child of the descriptor directory",
++            ));
++        }
++        let filename = CString::new(filename.as_bytes()).map_err(|_| {
++            io::Error::new(
++                io::ErrorKind::InvalidInput,
++                "VMDK extent filename contains a null byte",
++            )
++        })?;
++        // SAFETY: descriptor_dir is an open directory FD and filename is a NUL-terminated component.
++        let fd = unsafe {
++            libc::openat(
++                self.descriptor_dir.as_raw_fd(),
++                filename.as_ptr(),
++                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
++            )
++        };
++        if fd < 0 {
++            return Err(io::Error::last_os_error());
++        }
++
++        // SAFETY: fd was returned by openat and ownership is transferred to std::fs::File.
++        // from_open_file (not TryFrom) skips fcntl(F_GETFL) / alignment probes.
++        ImagoFile::from_open_file(
++            unsafe { fs::File::from_raw_fd(fd) },
++            StorageOpenOptions::new()
++                .filename(path)
++                .write(false)
++                .direct(false),
++        )
++    }
++}
++
++impl ImplicitOpenGate<ImagoFile> for VmdkImplicitOpenGate {
++    fn open_format<F: FormatDriverBuilder<ImagoFile>>(
++        &mut self,
++        _builder: F,
++    ) -> io::Result<FormatAccess<ImagoFile>> {
++        Err(io::Error::new(
++            io::ErrorKind::PermissionDenied,
++            "Opening implicit VMDK format dependencies is denied",
++        ))
++    }
++
++    fn open_storage(&mut self, options: StorageOpenOptions) -> io::Result<ImagoFile> {
++        if options.get_writable() {
++            return Err(io::Error::new(
++                io::ErrorKind::PermissionDenied,
++                "Opening writable VMDK dependencies is denied",
++            ));
++        }
++
++        let path = options.get_filename().ok_or_else(|| {
++            io::Error::new(
++                io::ErrorKind::InvalidInput,
++                "VMDK dependency is missing its filename",
++            )
++        })?;
++        if path == self.descriptor_path {
++            return ImagoFile::open(options);
++        }
++
++        self.open_extent(path)
++    }
++}
++
++impl VmdkFileEngine {
++    pub fn from_path(path: &Path) -> Result<Self, VmdkIoError> {
++        let gate = VmdkImplicitOpenGate::new(path).map_err(VmdkIoError::Open)?;
++        let vmdk = Vmdk::<ImagoFile>::builder_path(&gate.descriptor_path)
++            .write(false)
++            .open(gate)
++            .map_err(VmdkIoError::Open)?;
++
++        Ok(Self {
++            access: FormatAccess::new(vmdk),
++        })
++    }
++
++    pub fn disk_size(&self) -> u64 {
++        self.access.size()
++    }
++
++    pub fn read(
++        &self,
++        offset: u64,
++        mem: &GuestMemoryMmap,
++        addr: GuestAddress,
++        count: u32,
++    ) -> Result<u32, VmdkIoError> {
++        let slice = mem
++            .get_slice(addr, count as usize)
++            .map_err(VmdkIoError::GuestMemory)?;
++        let slices = [slice];
++        let (bufv, _guard) = IoVectorMut::from_volatile_slice(&slices);
++        self.access.readv(bufv, offset).map_err(VmdkIoError::Read)?;
++
++        Ok(count)
++    }
++
++    pub fn write(
++        &self,
++        _offset: u64,
++        _mem: &GuestMemoryMmap,
++        _addr: GuestAddress,
++        _count: u32,
++    ) -> Result<u32, VmdkIoError> {
++        Err(VmdkIoError::WriteNotSupported)
++    }
++
++    pub fn flush(&self) -> Result<(), VmdkIoError> {
++        self.access.flush().map_err(VmdkIoError::Flush)
++    }
++}
++
++#[cfg(test)]
++pub(crate) mod tests {
++    use std::fs;
++    use std::io::Write;
++    use std::os::unix::fs::symlink;
++    use std::path::PathBuf;
++
++    use vmm_sys_util::tempdir::TempDir;
++
++    use super::*;
++    use crate::devices::virtio::test_utils::default_mem;
++    use crate::vstate::memory::Bytes;
++
++    pub(crate) fn create_test_vmdk(extent: &str) -> (TempDir, PathBuf) {
++        let dir = TempDir::new().unwrap();
++        let extent_file = dir.as_path().join("extent");
++        let extent_size: u64 = 1024 * 1024;
++        let mut file = fs::File::create(&extent_file).unwrap();
++        file.set_len(extent_size).unwrap();
++
++        let test_data = b"Hello VMDK from Firecracker!";
++        file.write_all(test_data).unwrap();
++        let extent_sectors = extent_size / 512;
++
++        let descriptor_file = dir.as_path().join("descriptor.vmdk");
++        let descriptor_content = format!(
++            r#"# Disk DescriptorFile
++version=1
++CID=fffffffe
++parentCID=ffffffff
++createType="monolithicFlat"
++
++# Extent description
++RW {extent_sectors} FLAT "{extent}" 0
++
++# The Disk Data Base
++#DDB
++"#
++        );
++        fs::write(&descriptor_file, descriptor_content).unwrap();
++
++        (dir, descriptor_file)
++    }
++
++    #[test]
++    fn test_vmdk_engine_open_and_read() {
++        let (_dir, descriptor) = create_test_vmdk("extent");
++        let engine = VmdkFileEngine::from_path(&descriptor).unwrap();
++
++        assert_eq!(engine.disk_size(), 1024 * 1024);
++
++        let mem = default_mem();
++        engine.read(0, &mem, GuestAddress(0), 512).unwrap();
++        let mut buf = vec![0u8; 512];
++        mem.read_slice(&mut buf, GuestAddress(0)).unwrap();
++        assert_eq!(&buf[..28], b"Hello VMDK from Firecracker!");
++        assert!(matches!(
++            engine.write(0, &mem, GuestAddress(0), 512),
++            Err(VmdkIoError::WriteNotSupported)
++        ));
++        engine.flush().unwrap();
++    }
++
++    #[test]
++    fn test_vmdk_engine_rejects_unsafe_extents() {
++        for extent in ["../secret", "/etc/passwd", "sub/extent"] {
++            let (_dir, descriptor) = create_test_vmdk(extent);
++            VmdkFileEngine::from_path(&descriptor).unwrap_err();
++        }
++
++        let (dir, descriptor) = create_test_vmdk("symlink");
++        symlink(dir.as_path().join("extent"), dir.as_path().join("symlink")).unwrap();
++        VmdkFileEngine::from_path(&descriptor).unwrap_err();
++    }
++
++    #[test]
++    fn test_vmdk_gate_rejects_writable_extent() {
++        let (dir, descriptor) = create_test_vmdk("extent");
++        let mut gate = VmdkImplicitOpenGate::new(&descriptor).unwrap();
++        let options = StorageOpenOptions::new()
++            .filename(dir.as_path().join("extent"))
++            .write(true);
++
++        gate.open_storage(options).unwrap_err();
++    }
++}
+--- a/src/vmm/src/devices/virtio/block/virtio/io/mod.rs
++++ b/src/vmm/src/devices/virtio/block/virtio/io/mod.rs
+@@ -2,12 +2,14 @@
+ // SPDX-License-Identifier: Apache-2.0
+ 
+ pub mod async_io;
++pub mod format;
+ pub mod sync_io;
+ 
+ use std::fmt::Debug;
+ use std::fs::File;
+ 
+ pub use self::async_io::{AsyncFileEngine, AsyncIoError};
++pub use self::format::{DiskImageFormat, VmdkFileEngine, VmdkIoError};
+ pub use self::sync_io::{SyncFileEngine, SyncIoError};
+ use crate::devices::virtio::block::virtio::PendingRequest;
+ use crate::devices::virtio::block::virtio::device::FileEngineType;
+@@ -31,6 +33,8 @@
+     Sync(SyncIoError),
+     /// Async error: {0}
+     Async(AsyncIoError),
++    /// VMDK error: {0}
++    Vmdk(VmdkIoError),
+ }
+ 
+ impl BlockIoError {
+@@ -54,6 +58,16 @@
+     #[allow(unused)]
+     Async(AsyncFileEngine),
+     Sync(SyncFileEngine),
++    Vmdk(VmdkFileEngine),
++}
++
++impl From<&FileEngine> for DiskImageFormat {
++    fn from(engine: &FileEngine) -> Self {
++        match engine {
++            FileEngine::Vmdk(_) => DiskImageFormat::Vmdk,
++            FileEngine::Async(_) | FileEngine::Sync(_) => DiskImageFormat::Raw,
++        }
++    }
+ }
+ 
+ impl FileEngine {
+@@ -70,6 +84,9 @@
+         match self {
+             FileEngine::Async(engine) => engine.update_file(file).map_err(BlockIoError::Async)?,
+             FileEngine::Sync(engine) => engine.update_file(file),
++            FileEngine::Vmdk(_) => {
++                return Err(BlockIoError::Vmdk(VmdkIoError::WriteNotSupported));
++            }
+         };
+ 
+         Ok(())
+@@ -79,6 +96,9 @@
+         match self {
+             FileEngine::Async(engine) => engine.file(),
+             FileEngine::Sync(engine) => engine.file(),
++            FileEngine::Vmdk(_) => {
++                panic!("file() is not supported for VMDK engine")
++            }
+         }
+     }
+ 
+@@ -105,6 +125,13 @@
+                     error: BlockIoError::Sync(err),
+                 }),
+             },
++            FileEngine::Vmdk(engine) => match engine.read(offset, mem, addr, count) {
++                Ok(count) => Ok(FileEngineOk::Executed(RequestOk { req, count })),
++                Err(err) => Err(RequestError {
++                    req,
++                    error: BlockIoError::Vmdk(err),
++                }),
++            },
+         }
+     }
+ 
+@@ -131,6 +158,13 @@
+                     error: BlockIoError::Sync(err),
+                 }),
+             },
++            FileEngine::Vmdk(engine) => match engine.write(offset, mem, addr, count) {
++                Ok(count) => Ok(FileEngineOk::Executed(RequestOk { req, count })),
++                Err(err) => Err(RequestError {
++                    req,
++                    error: BlockIoError::Vmdk(err),
++                }),
++            },
+         }
+     }
+ 
+@@ -151,6 +185,13 @@
+                 Err(err) => Err(RequestError {
+                     req,
+                     error: BlockIoError::Sync(err),
++                }),
++            },
++            FileEngine::Vmdk(engine) => match engine.flush() {
++                Ok(_) => Ok(FileEngineOk::Executed(RequestOk { req, count: 0 })),
++                Err(err) => Err(RequestError {
++                    req,
++                    error: BlockIoError::Vmdk(err),
+                 }),
+             },
+         }
+@@ -176,6 +217,10 @@
+                     error: BlockIoError::Sync(err),
+                 }),
+             },
++            FileEngine::Vmdk(_) => Err(RequestError {
++                req,
++                error: BlockIoError::Vmdk(VmdkIoError::WriteNotSupported),
++            }),
+         }
+     }
+ 
+@@ -183,6 +228,7 @@
+         match self {
+             FileEngine::Async(engine) => engine.drain(discard).map_err(BlockIoError::Async),
+             FileEngine::Sync(_engine) => Ok(()),
++            FileEngine::Vmdk(_engine) => Ok(()),
+         }
+     }
+ 
+@@ -192,6 +238,7 @@
+                 engine.drain_and_flush(discard).map_err(BlockIoError::Async)
+             }
+             FileEngine::Sync(engine) => engine.flush().map_err(BlockIoError::Sync),
++            FileEngine::Vmdk(engine) => engine.flush().map_err(BlockIoError::Vmdk),
+         }
+     }
+ }
+@@ -206,6 +253,7 @@
+ 
+     use super::*;
+     use crate::devices::virtio::block::virtio::device::FileEngineType;
++    use crate::devices::virtio::block::virtio::io::format::vmdk::tests::create_test_vmdk;
+     use crate::utils::u64_to_usize;
+     use crate::vmm_config::machine_config::HugePageConfig;
+     use crate::vstate::memory;
+@@ -414,4 +462,50 @@
+         engine.drain(true).unwrap();
+         engine.drain_and_flush(true).unwrap();
+     }
+-}
++
++    #[test]
++    fn test_vmdk() {
++        let (_dir, descriptor) = create_test_vmdk("extent");
++        let mut engine = FileEngine::Vmdk(VmdkFileEngine::from_path(&descriptor).unwrap());
++        let mem = create_mem();
++
++        assert_sync_execution!(
++            engine.read(0, &mem, GuestAddress(0), 512, PendingRequest::default()),
++            512
++        );
++        assert!(matches!(
++            engine
++                .read(
++                    0,
++                    &mem,
++                    GuestAddress(MEM_LEN as u64),
++                    512,
++                    PendingRequest::default()
++                )
++                .unwrap_err()
++                .error,
++            BlockIoError::Vmdk(VmdkIoError::GuestMemory(_))
++        ));
++        assert!(matches!(
++            engine
++                .write(0, &mem, GuestAddress(0), 512, PendingRequest::default())
++                .unwrap_err()
++                .error,
++            BlockIoError::Vmdk(VmdkIoError::WriteNotSupported)
++        ));
++        assert_sync_execution!(engine.flush(PendingRequest::default()), 0);
++        assert!(matches!(
++            engine
++                .discard((0, 512), PendingRequest::default())
++                .unwrap_err()
++                .error,
++            BlockIoError::Vmdk(VmdkIoError::WriteNotSupported)
++        ));
++        engine.drain(true).unwrap();
++        engine.drain_and_flush(true).unwrap();
++        assert!(matches!(
++            engine.update_file_path(File::open(descriptor).unwrap()),
++            Err(BlockIoError::Vmdk(VmdkIoError::WriteNotSupported))
++        ));
++    }
++}
+--- a/src/vmm/src/devices/virtio/block/virtio/persist.rs
++++ b/src/vmm/src/devices/virtio/block/virtio/persist.rs
+@@ -8,6 +8,7 @@
+ use vmm_sys_util::eventfd::EventFd;
+ 
+ use super::device::DiskProperties;
++use super::io::DiskImageFormat;
+ use super::*;
+ use crate::devices::virtio::block::persist::BlockConstructorArgs;
+ use crate::devices::virtio::block::virtio::device::FileEngineType;
+@@ -64,6 +65,8 @@
+     blk_size: u32,
+     topology: VirtioBlkTopology,
+     discard_sector_alignment: u32,
++    #[serde(default)]
++    disk_image_format: DiskImageFormat,
+ }
+ 
+ impl Persist<'_> for VirtioBlock {
+@@ -85,6 +88,7 @@
+             blk_size: self.config_space.blk_size,
+             topology: self.config_space.topology,
+             discard_sector_alignment: self.config_space.discard_sector_alignment,
++            disk_image_format: DiskImageFormat::from(&self.disk.file_engine),
+         }
+     }
+ 
+@@ -100,6 +104,7 @@
+             state.disk_path.clone(),
+             is_read_only,
+             state.file_engine_type.into(),
++            state.disk_image_format,
+         )?;
+ 
+         let queue_evts = [EventFd::new(libc::EFD_NONBLOCK).map_err(VirtioBlockError::EventFd)?];
+@@ -174,6 +179,7 @@
+             cache_type: CacheType::Writeback,
+             rate_limiter: None,
+             file_engine_type: FileEngineType::default(),
++            image_format: DiskImageFormat::Raw,
+             blk_size: None,
+             topology: None,
+         };
+@@ -218,6 +224,7 @@
+             cache_type: CacheType::Unsafe,
+             rate_limiter: None,
+             file_engine_type: FileEngineType::default(),
++            image_format: DiskImageFormat::Raw,
+             blk_size: None,
+             topology: None,
+         };
+--- a/src/vmm/src/devices/virtio/block/virtio/test_utils.rs
++++ b/src/vmm/src/devices/virtio/block/virtio/test_utils.rs
+@@ -13,6 +13,7 @@
+ use super::RequestHeader;
+ use super::device::VirtioBlockConfig;
+ use crate::devices::virtio::block::virtio::device::FileEngineType;
++use crate::devices::virtio::block::virtio::io::DiskImageFormat;
+ #[cfg(test)]
+ use crate::devices::virtio::block::virtio::io::FileEngine;
+ use crate::devices::virtio::block::virtio::{CacheType, VirtioBlock};
+@@ -59,6 +60,7 @@
+             }),
+         }),
+         file_engine_type,
++        image_format: DiskImageFormat::Raw,
+         blk_size: None,
+         topology: None,
+     };
+@@ -122,7 +124,7 @@
+             simulate_queue_event(b, None);
+             simulate_async_completion_event(b, expected_irq);
+         }
+-        FileEngine::Sync(_) => {
++        FileEngine::Sync(_) | FileEngine::Vmdk(_) => {
+             simulate_queue_event(b, Some(expected_irq));
+         }
+     }
+--- a/src/vmm/src/resources.rs
++++ b/src/vmm/src/resources.rs
+@@ -624,6 +624,7 @@
+                 path_on_host: Some(tmp_file.as_path().to_str().unwrap().to_string()),
+                 rate_limiter: Some(RateLimiterConfig::default()),
+                 file_engine_type: None,
++                image_format: None,
+                 blk_size: None,
+                 topology: None,
+ 
+--- a/src/vmm/src/vmm_config/drive.rs
++++ b/src/vmm/src/vmm_config/drive.rs
+@@ -10,6 +10,7 @@
+ use super::RateLimiterConfig;
+ use crate::VmmError;
+ use crate::devices::virtio::block::device::Block;
++pub use crate::devices::virtio::block::virtio::device::DiskImageFormat;
+ pub use crate::devices::virtio::block::virtio::device::FileEngineType;
+ use crate::devices::virtio::block::virtio::device::VirtioBlkTopology;
+ use crate::devices::virtio::block::{BlockError, CacheType};
+@@ -64,6 +65,9 @@
+     // pub file_engine_type: FileEngineType,
+     #[serde(rename = "io_engine")]
+     pub file_engine_type: Option<FileEngineType>,
++    /// The disk image format of the backing file.
++    #[serde(rename = "image_format", skip_serializing_if = "Option::is_none")]
++    pub image_format: Option<DiskImageFormat>,
+     /// Logical block size.
+     pub blk_size: Option<u32>,
+     /// Block topology settings
+@@ -221,6 +225,7 @@
+                 path_on_host: self.path_on_host.clone(),
+                 rate_limiter: self.rate_limiter,
+                 file_engine_type: self.file_engine_type,
++                image_format: self.image_format,
+                 blk_size: self.blk_size,
+                 topology: self.topology,
+ 
+@@ -251,6 +256,7 @@
+             path_on_host: Some(dummy_path),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -288,6 +294,7 @@
+             path_on_host: Some(dummy_path),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -323,6 +330,7 @@
+             path_on_host: Some(dummy_path),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -355,6 +363,7 @@
+             path_on_host: Some(dummy_path_1),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -374,6 +383,7 @@
+             path_on_host: Some(dummy_path_2),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -404,6 +414,7 @@
+             path_on_host: Some(dummy_path_1),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -423,6 +434,7 @@
+             path_on_host: Some(dummy_path_2),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -442,6 +454,7 @@
+             path_on_host: Some(dummy_path_3),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -486,6 +499,7 @@
+             path_on_host: Some(dummy_path_1),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -505,6 +519,7 @@
+             path_on_host: Some(dummy_path_2),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -524,6 +539,7 @@
+             path_on_host: Some(dummy_path_3),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -569,6 +585,7 @@
+             path_on_host: Some(dummy_path_1.clone()),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -588,6 +605,7 @@
+             path_on_host: Some(dummy_path_2.clone()),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -663,6 +681,7 @@
+             path_on_host: Some(dummy_path_1),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -682,6 +701,7 @@
+             path_on_host: Some(dummy_path_2),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+@@ -711,6 +731,7 @@
+             path_on_host: Some(dummy_file.as_path().to_str().unwrap().to_string()),
+             rate_limiter: None,
+             file_engine_type: Some(FileEngineType::Sync),
++            image_format: None,
+             blk_size: Some(512),
+             topology: Some(VirtioBlkTopology {
+                 physical_block_exp: 0,
+@@ -749,6 +770,7 @@
+             path_on_host: Some(backing_file.as_path().to_str().unwrap().to_string()),
+             rate_limiter: None,
+             file_engine_type: None,
++            image_format: None,
+             blk_size: None,
+             topology: None,
+ 
+--- a/src/vmm/tests/integration_tests.rs
++++ b/src/vmm/tests/integration_tests.rs
+@@ -498,6 +498,7 @@
+         path_on_host: Some(tmp_file),
+         rate_limiter: None,
+         file_engine_type: None,
++        image_format: None,
+         blk_size: None,
+         topology: None,
+ 
+--- a/tests/framework/microvm.py
++++ b/tests/framework/microvm.py
+@@ -916,6 +916,7 @@
+         io_engine=None,
+         topology=None,
+         blk_size=None,
++        image_format=None,
+     ):
+         """Add a block device."""
+ 
+@@ -931,6 +932,7 @@
+             io_engine=io_engine,
+             topology=topology,
+             blk_size=blk_size,
++            image_format=image_format,
+         )
+         self.disks[drive_id] = path_on_host
+ 
+--- a/tests/host_tools/drive.py
++++ b/tests/host_tools/drive.py
+@@ -62,3 +62,81 @@
+                 os.remove(self.path)
+             except OSError:
+                 pass
++
++
++class VmdkFile:
++    """Build a read-only ``monolithicFlat`` VMDK image (descriptor + FLAT extent).
++
++    Firecracker only supports read-only VMDK images backed by a single flat
++    extent (``monolithicFlat``). This helper writes a plain-text VMDK descriptor
++    alongside a flat extent file that is filled with a recognizable byte pattern,
++    so the image can be attached as a read-only ``virtio`` block device and the
++    data can be verified from inside the guest.
++
++    The descriptor and the extent are placed in the same directory; the extent is
++    referenced from the descriptor by its base name only, which is what lets
++    Firecracker open it once both files are jailed into the microVM root.
++    """
++
++    def __init__(
++        self, path=None, size=16, pattern=b"FIRECRACKER VMDK INTEGRATION TEST"
++    ):
++        """Create a ``size`` MiB VMDK with ``pattern`` repeated to fill the extent.
++
++        :param path: path of the descriptor file; if ``None`` a temp file is used.
++        :param size: size of the image, in MiB.
++        :param pattern: byte pattern used to fill the flat extent.
++        """
++        if path is None:
++            path = os.path.join(tempfile.mkdtemp(prefix="vmdk"), "disk.vmdk")
++        self.path = path
++        self.size = size
++        self.pattern = pattern
++        self._build()
++
++    @property
++    def descriptor_path(self):
++        """Path of the VMDK descriptor file (passed to Firecracker)."""
++        return self.path
++
++    @property
++    def extent_path(self):
++        """Path of the flat extent file backing the descriptor."""
++        stem, _ = os.path.splitext(self.path)
++        return stem + "-flat.vmdk"
++
++    def _build(self):
++        """Write the descriptor and the flat extent with the byte pattern."""
++        total_bytes = self.size * 1024 * 1024
++        sectors = total_bytes // 512
++
++        # Fill the flat extent with the repeated pattern so that reading the
++        # device back yields deterministic, verifiable data.
++        repeated = (self.pattern * (total_bytes // len(self.pattern) + 1))[:total_bytes]
++        with open(self.extent_path, "wb") as extent:
++            extent.write(repeated)
++
++        extent_name = os.path.basename(self.extent_path)
++        descriptor = (
++            "# Disk DescriptorFile\n"
++            "version=1\n"
++            "CID=ffffffff\n"
++            "parentCID=ffffffff\n"
++            'createType="monolithicFlat"\n'
++            "\n"
++            "# Extent description\n"
++            f'RW {sectors} FLAT "{extent_name}" 0\n'
++            "\n"
++            "# The disk Data Base\n"
++            "#DDB\n"
++        )
++        with open(self.path, "w", encoding="utf-8") as desc:
++            desc.write(descriptor)
++
++    def __del__(self):
++        """Remove the descriptor and the flat extent."""
++        for pth in (self.path, self.extent_path):
++            try:
++                os.remove(pth)
++            except OSError:
++                pass
+--- /dev/null
++++ b/tests/integration_tests/functional/test_vmdk.py
+@@ -0,0 +1,92 @@
++# Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
++# SPDX-License-Identifier: Apache-2.0
++"""Integration tests for read-only VMDK disk image support."""
++
++import hashlib
++import os
++
++import pytest
++
++import host_tools.drive as drive_tools
++
++MB = 1024 * 1024
++
++
++def _check_vmdk_data(ssh, dev_path, extent_path):
++    """Verify the guest reads back exactly the data written to the flat extent.
++
++    Mirrors the read-back / ``cmp`` step used by other block integration tests:
++    the full device is checksummed from inside the guest and compared against the
++    checksum of the flat extent written on the host.
++    """
++    _, stdout, stderr = ssh.run("md5sum {}".format(dev_path))
++    assert stderr == "", stderr
++    guest_md5 = stdout.split()[0]
++
++    with open(extent_path, "rb") as extent:
++        host_md5 = hashlib.md5(extent.read()).hexdigest()
++    assert guest_md5 == host_md5
++
++
++def _check_vmdk_size(ssh, dev_path, size_bytes):
++    """Verify the virtio-block device reports the flat extent's size in bytes."""
++    _, stdout, stderr = ssh.run("blockdev --getsize64 {}".format(dev_path))
++    assert stderr == "", stderr
++    assert int(stdout.strip()) == size_bytes
++
++
++def test_vmdk_readonly_read(uvm):
++    """Boot with a read-only VMDK data disk and verify the end-to-end read path.
++
++    The VMDK is mounted as a read-only virtio-block drive. The data read back
++    from the guest must match the flat extent written on the host, and the
++    device must report the expected size. A guest-side write must be rejected,
++    guarding the read-only contract.
++    """
++    test_microvm = uvm
++    test_microvm.spawn()
++    test_microvm.basic_config()
++    test_microvm.add_net_iface()
++
++    vmdk = drive_tools.VmdkFile(
++        os.path.join(test_microvm.fsfiles, "vmdk.vmdk"), size=16
++    )
++    # Both the descriptor and the flat extent must be reachable inside the
++    # jail, otherwise the VMDK backend cannot open the extent.
++    test_microvm.create_jailed_resource(vmdk.extent_path)
++    test_microvm.add_drive(
++        "vmdk", vmdk.descriptor_path, is_read_only=True, image_format="Vmdk"
++    )
++
++    test_microvm.start()
++
++    _check_vmdk_data(test_microvm.ssh, "/dev/vdb", vmdk.extent_path)
++    _check_vmdk_size(test_microvm.ssh, "/dev/vdb", vmdk.size * MB)
++
++    # Writes to a read-only disk must fail from the guest. When the virtio-blk
++    # device negotiates VIRTIO_BLK_F_RO, the Linux block layer rejects writes
++    # before they ever reach Firecracker, surfacing as EPERM
++    # ("Operation not permitted") rather than an I/O error from the device.
++    _, _, stderr = test_microvm.ssh.run("dd if=/dev/zero of=/dev/vdb bs=512 count=1")
++    assert "Operation not permitted" in stderr
++
++
++def test_vmdk_requires_read_only(uvm):
++    """A VMDK drive must be attached with ``is_read_only=true``."""
++    test_microvm = uvm
++    test_microvm.spawn()
++    test_microvm.basic_config()
++
++    vmdk = drive_tools.VmdkFile(
++        os.path.join(test_microvm.fsfiles, "vmdk.vmdk"), size=16
++    )
++    jail_path = test_microvm.create_jailed_resource(vmdk.descriptor_path)
++    with pytest.raises(RuntimeError, match="VMDK backend requires is_read_only=true."):
++        test_microvm.api.drive.put(
++            drive_id="vmdk",
++            path_on_host=jail_path,
++            is_read_only=False,
++            is_root_device=False,
++            io_engine="Sync",
++            image_format="Vmdk",
++        )
+--- a/tests/integration_tests/style/test_licenses.py
++++ b/tests/integration_tests/style/test_licenses.py
+@@ -31,6 +31,8 @@
+ RIVOS_LICENSE = "SPDX-License-Identifier: Apache-2.0"
+ ORACLE_COPYRIGHT = "Copyright © 2020, Oracle and/or its affiliates."
+ ORACLE_LICENSE = "SPDX-License-Identifier: Apache-2.0"
++TENCENT_COPYRIGHT = "Copyright (c) 2026 Tencent. All Rights Reserved."
++TENCENT_LICENSE = "SPDX-License-Identifier: Apache-2.0"
+ 
+ EXCLUDE = ["build", ".kernel", ".git"]
+ 
+@@ -98,6 +100,11 @@
+             file, ORACLE_LICENSE
+         )
+ 
++        has_tencent_copyright = (
++            TENCENT_COPYRIGHT in copyright_info
++            and _look_for_license(file, TENCENT_LICENSE)
++        )
++
+         return (
+             has_amazon_copyright
+             or has_chromium_copyright
+@@ -106,6 +113,7 @@
+             or has_intel_copyright
+             or has_rivos_copyright
+             or has_oracle_copyright
++            or has_tencent_copyright
+         )
+ 
+ 

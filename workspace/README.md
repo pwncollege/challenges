@@ -43,21 +43,30 @@ that enables KVM and EROFS. Integration tests
 execute a nested KVM guest and verify the read-only runtime disk, HTTP/HTTPS
 egress, denied egress, workspace lifecycle, and home transfers between nodes.
 
-Containerd's blockfile snapshotter supplies container roots as sparse ext4 disk
-images, with an 8 GiB total capacity per container, including the unpacked image
-and filesystem metadata. Nix and home disks have their own capacities.
-Containerd prepares the empty filesystem once at startup.
-Image unpacking uses temporary host loop mounts;
-running workspaces attach the image files directly. Nix and home disks also
-attach directly, so workspace VMs need no virtiofs daemon or host home mounts.
+Containerd stores container images as shared LZ4HC-compressed EROFS layers.
+Each workspace gets a separate 1 GiB tmpfs for its writable rootfs.
+Kata attaches the layer files through a read-only VMDK descriptor, and guest
+OverlayFS combines their contents with the writable tmpfs. Base images can be
+larger than 1 GiB; only newly written or copied-up data uses the upper limit.
+Updating a file from the image copies the whole file into the upper filesystem, so modifying a sufficiently large image file can exhaust the upper.
 
-Two local patches are included: Kata reserves read-only Firecracker
-drive slots for immutable images, and containerd uses its existing sparse-copy
-helper when preparing blockfile snapshots. Container roots copy allocated data
-when created; their empty capacity stays sparse.
+The entrypoint mounts a separate 1 GiB tmpfs at `/tmp`, with `nosuid,nodev` and
+mode 1777. Its pages consume guest RAM as written; this is a size ceiling, not
+reserved or additional memory. The default VM has 2 GiB RAM and one vCPU.
+Rootfs writes and `/tmp` share that RAM with programs and the guest kernel; the two limits do not reserve memory
+and cannot both be filled alongside programs without exhausting the VM.
+Both the rootfs upper and `/tmp` are discarded when the workspace stops.
+Persistent home disks have their own capacity and lifecycle.
 
-The sparse-copy issue is tracked in [containerd PR #12956](https://github.com/containerd/containerd/pull/12956).
-Its helper landed in [continuity PR #276](https://github.com/containerd/continuity/pull/276);
-our patch connects blockfile to it. Firecracker already supports read-only disks,
-but Kata 4.2.0 creates only writable placeholder slots for later attachments.
-The Kata patch adds read-only slots and routes immutable disks to them.
+Ordinary OCI layers are converted during image pull. CRI uses containerd's local
+pull path with `discard_unpacked_layers`, allowing GC to remove downloaded layer
+blobs after unpacking. The EROFS layers and image metadata remain, shared across
+images with the same layer ancestry. Pulls need temporary download space.
+The node start API requires an already-pulled image; image conversion is outside
+the start request. Native EROFS registry layers are also supported by containerd,
+although our current image build pipeline publishes conventional OCI layers.
+
+Nix, image, and home disks attach directly to the VM. Workspaces need no virtiofs
+daemon or host home mounts. The platform has one container rootfs implementation:
+layered EROFS with a tmpfs upper. Local patches and reproducible storage/load tests
+are described in [the runtime test guide](platform/container/tests/README.md).

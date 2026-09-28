@@ -256,6 +256,8 @@ test("start, proxy, replace, stop, and restart preserve the home volume", async 
   assert.equal((await command(startPath, { ...nodeBody, runtime_config: { container_image_ref: IMAGE } })).status, 409);
   assert.deepEqual(await execWorkspace(first.complete.url, ["/bin/sh", "-c", "printf initialized > /home/hacker/init.txt"]),
     { exit_code: 0, stdout: "", stderr: "" });
+  assert.equal((await execWorkspace(first.complete.url, ["/bin/sh", "-c",
+    "printf disposable > /run/workspace/user/lifetime && printf disposable > /tmp/lifetime"])).exit_code, 0);
 
   const replacement = await startWorkspace({
     runtime_config: {
@@ -270,6 +272,8 @@ test("start, proxy, replace, stop, and restart preserve the home volume", async 
   assert.equal(replacement.response.status, 200);
   assert.ok(replacement.complete?.workspace_uuid, JSON.stringify(replacement.error ?? replacement.events));
   assert.notEqual(replacement.complete.workspace_uuid, first.complete.workspace_uuid);
+  assert.equal((await execWorkspace(replacement.complete.url, ["/bin/sh", "-c",
+    "test ! -e /run/workspace/user/lifetime && test ! -e /tmp/lifetime"])).exit_code, 0);
 
   assert.equal((await command(startPath, nodeBody)).status, 409, "a delayed start must not resurrect the stopped workspace");
 
@@ -308,7 +312,7 @@ test("start, proxy, replace, stop, and restart preserve the home volume", async 
 test("read-only EROFS, nested KVM, and CNI egress work inside Kata", async () => {
   const started = await startWorkspace();
   assert.ok(started.complete, JSON.stringify(started.error ?? started.events));
-  for (const fixture of ["runtime-storage.py", "nested-kvm.py", "egress.py"]) {
+  for (const fixture of ["runtime-storage.py", "storage-limits.py", "nested-kvm.py", "egress.py"]) {
     const script = await fs.readFile(new URL(`./fixtures/${fixture}`, import.meta.url), "utf8");
     const executed = await execWorkspace(started.complete.url, ["python3", "-c", script]);
     assert.equal(executed.exit_code, 0, `${fixture}: ${executed.stderr}`);
@@ -341,6 +345,35 @@ test("workspaces share the runtime disk across overlapping lifetimes", async () 
   assert.equal((await stopWorkspace()).status, 200);
 });
 
+test("replacing a failed start releases attached storage", async () => {
+  const failedUUID = randomUUID();
+  const nextUUID = randomUUID();
+  const home = await homeVolume();
+  const volume = { volume_uuid: home.volume_uuid, dst_path: "/home/hacker", max_size_bytes: 1073741824 };
+  try {
+    // This fails inside the container before its workspace agent starts, after
+    // Kata has attached the root, Nix, and home disks.
+    const failed = await daemonFetch(`/api/workspaces/${failedUUID}/start`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ runtime_config: { container_image_ref: IMAGE, env: { PWN_USER: "invalid/user" } }, volume }),
+    });
+    assert.equal(failed.status, 502, await failed.text());
+    const next = await daemonFetch(`/api/workspaces/${nextUUID}/start`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ replace_workspace_uuid: failedUUID, runtime_config: { container_image_ref: IMAGE }, volume }),
+    });
+    assert.equal(next.status, 200, await next.text());
+    const executed = await execWorkspace(`${DAEMON}/w/${nextUUID}/`, ["cat", "/home/hacker/init.txt"]);
+    assert.equal(executed.exit_code, 0, executed.stderr);
+    assert.equal(executed.stdout, "initialized");
+  } finally {
+    for (const identity of [nextUUID, failedUUID]) {
+      const stopped = await daemonFetch(`/api/workspaces/${identity}/stop`, { method: "POST" });
+      assert.equal(stopped.status, 200, await stopped.text());
+    }
+  }
+});
+
 test("moving the home between two daemons preserves its contents", { skip: !SECONDARY_DAEMON }, async () => {
   const health = await fetch(`${SECONDARY_DAEMON}/api/health`);
   assert.equal(health.status, 200);
@@ -369,7 +402,7 @@ test("moving the home between two daemons preserves its contents", { skip: !SECO
     assert.ok(moved.complete, JSON.stringify(moved.error ?? moved.events));
     assert.equal(moved.complete.url, `${daemon}/w/${moved.complete.workspace_uuid}/`);
     const executed = await execWorkspace(moved.complete.url, ["cat", "/home/hacker/init.txt"]);
-    assert.equal(executed.exit_code, 0);
+    assert.equal(executed.exit_code, 0, executed.stderr);
     assert.equal(executed.stdout, expected);
     expected = `written-on-node-${nodeId}`;
     assert.equal((await execWorkspace(moved.complete.url, ["/bin/sh", "-c", `printf %s ${expected} > /home/hacker/init.txt`])).exit_code, 0);

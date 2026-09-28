@@ -1,0 +1,162 @@
+{
+  "date": "2026-09-27",
+  "host": {
+    "cpu": "AMD EPYC 7371",
+    "cores": 16,
+    "threads": 32,
+    "ram_gib": 125,
+    "storage": "ext4 on NVMe RAID",
+    "other_load": "Existing unrelated VM; no concurrent builds"
+  },
+  "guest": {
+    "vcpus": 1,
+    "ram_gib": 2,
+    "root_tmpfs_gib": 1,
+    "tmp_tmpfs_gib": 1
+  },
+  "scenarios": {
+    "burst-with-pull": {
+      "image": "docker.io/library/alpine:3.22",
+      "count": 100,
+      "arrival_seconds": 10.0,
+      "summary": {
+        "successes": 100,
+        "failures": 0,
+        "minimum_available_gib": 67.4688720703125,
+        "median_seconds": 2.7386965985642746,
+        "p95_seconds": 2.946879212046042,
+        "maximum_seconds": 3.0059459151234478,
+        "last_ready_seconds": 12.396441004006192
+      },
+      "cleanup_errors": [],
+      "init_read_mib": 0
+    },
+    "burst-distinct": {
+      "image": "127.0.0.1:18080/storage:{i}",
+      "count": 100,
+      "arrival_seconds": 10.0,
+      "summary": {
+        "successes": 100,
+        "failures": 0,
+        "minimum_available_gib": 67.21200942993164,
+        "median_seconds": 2.697174846427515,
+        "p95_seconds": 2.9309180439449847,
+        "maximum_seconds": 3.1045722959097475,
+        "last_ready_seconds": 12.409931695088744,
+        "p95_usable_seconds": 2.934668640838936,
+        "median_usable_seconds": 2.7016867575002834,
+        "maximum_usable_seconds": 3.109963981900364,
+        "last_usable_seconds": 12.413507314166054
+      },
+      "cleanup_errors": [],
+      "init_read_mib": 0
+    },
+    "burst-simultaneous": {
+      "image": "127.0.0.1:18080/storage:{i}",
+      "count": 100,
+      "arrival_seconds": 0.0,
+      "summary": {
+        "successes": 100,
+        "failures": 0,
+        "minimum_available_gib": 67.06038284301758,
+        "median_seconds": 9.614915965939872,
+        "p95_seconds": 9.911121983081102,
+        "maximum_seconds": 10.022120708134025,
+        "last_ready_seconds": 10.081127445911989,
+        "p95_usable_seconds": 9.914691507117823,
+        "median_usable_seconds": 9.624575668363832,
+        "maximum_usable_seconds": 10.025129670044407,
+        "last_usable_seconds": 10.084135205950588
+      },
+      "cleanup_errors": [],
+      "init_read_mib": 0
+    },
+    "burst-heavy-init": {
+      "image": "127.0.0.1:18080/storage:{i}",
+      "count": 100,
+      "arrival_seconds": 10.0,
+      "summary": {
+        "successes": 100,
+        "failures": 0,
+        "minimum_available_gib": 40.29778289794922,
+        "median_seconds": 4.078882132424042,
+        "p95_seconds": 5.092149859992787,
+        "maximum_seconds": 5.56305146496743,
+        "last_ready_seconds": 14.150975197087973,
+        "p95_usable_seconds": 6.886895453790203,
+        "median_usable_seconds": 5.616673585143872,
+        "maximum_usable_seconds": 7.355528554879129,
+        "last_usable_seconds": 14.870059532113373
+      },
+      "cleanup_errors": [],
+      "init_read_mib": 256
+    }
+  },
+  "sharing": {
+    "images": 100,
+    "shared_base_layers": 5,
+    "shared_base_bytes": 1084911616,
+    "unique_top_layers": 100,
+    "unique_top_bytes": 819200,
+    "original_layer_blobs_checked": 104,
+    "original_layer_blobs_remaining": 0,
+    "writable_root_disk_files": 0
+  },
+  "pulls": {
+    "first_image_seconds": 264.9927973719314,
+    "following_images": 99,
+    "median_following_image_seconds": 0.023676554206758738,
+    "p95_following_image_seconds": 0.027517490088939667,
+    "note": "Local HTTP registry; first image prepares 2 GiB synthetic payload (half random, half zero) with two LZ4HC workers alongside E2E and burst-with-pull. Previous interrupted pulls excluded."
+  },
+  "capacity": {
+    "backend": "erofs",
+    "image": "localhost/workspace-storage:20g",
+    "sequential": [
+      {
+        "read_seconds": 46.379222397,
+        "read_bytes": 21474836480,
+        "sha256": "798906558e0ec6ea34b368c76456f5b57e348f1a6059ffcd1c49451144e9e77c",
+        "copyup_fsync_seconds": 0.0009461149999998586,
+        "root_capacity": 1073741824,
+        "start_seconds": 2.171627295901999
+      }
+    ],
+    "concurrent": [
+      {
+        "read_seconds": 48.969977752,
+        "read_bytes": 21474836480,
+        "sha256": "798906558e0ec6ea34b368c76456f5b57e348f1a6059ffcd1c49451144e9e77c",
+        "copyup_fsync_seconds": 0.0009033340000001999,
+        "root_capacity": 1073741824,
+        "start_seconds": 2.1618027889635414
+      }
+    ],
+    "concurrent_wall_seconds": 51.93708354816772
+  },
+  "offline_after_service_restart": {
+    "backend": "erofs",
+    "image": "127.0.0.1:18080/storage:0",
+    "sequential": [
+      {
+        "read_seconds": 3.8076967600000007,
+        "read_bytes": 2147483648,
+        "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+        "copyup_fsync_seconds": 0.0009279110000000035,
+        "root_capacity": 1073741824,
+        "start_seconds": 2.184110439848155
+      }
+    ],
+    "concurrent": [
+      {
+        "read_seconds": 3.6722165680000005,
+        "read_bytes": 2147483648,
+        "sha256": "8f5e7a7021eec66ef0ac76a4d7b19397aa5cd801247e0b74576118c98761052e",
+        "copyup_fsync_seconds": 0.0009389609999999049,
+        "root_capacity": 1073741824,
+        "start_seconds": 2.1354858179111034
+      }
+    ],
+    "concurrent_wall_seconds": 6.574499799171463
+  }
+}

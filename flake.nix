@@ -171,6 +171,7 @@
             activatorOptions.volumeBasePath = "/var/lib/pwn.college/homes";
             extraPackages = [
               pkgs.nodejs_24
+              pkgs.containerd
             ];
           };
         }

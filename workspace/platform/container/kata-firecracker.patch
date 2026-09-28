@@ -1,0 +1,226 @@
+Kata Firecracker: read-only disk slots and layered EROFS attachments.
+Kata PR #12763 added the EROFS/QEMU path; Firecracker integration remained a TODO:
+https://github.com/kata-containers/kata-containers/pull/12763
+Requires Firecracker VMDK support: https://github.com/firecracker-microvm/firecracker/pull/5741
+
+--- a/src/runtime-rs/crates/hypervisor/src/firecracker/fc_api.rs
++++ b/src/runtime-rs/crates/hypervisor/src/firecracker/fc_api.rs
+@@ -9,7 +9,7 @@
+         sl, FcInner,
+     },
+     kernel_param::KernelParams,
+-    NetworkConfig, Param,
++    BlockConfigModern, NetworkConfig, Param, VmdkConfig,
+ };
+ use anyhow::{anyhow, Context, Result};
+ use bytes::Bytes;
+@@ -21,13 +21,14 @@
+ use kata_types::config::hypervisor::RateLimiterConfig;
+ use nix::mount::MsFlags;
+ use serde_json::json;
+-use tokio::{fs, fs::File};
++use std::{collections::HashMap, fmt::Write as _, path::Path};
++use tokio::fs;
+ 
+ const REQUEST_RETRY: u32 = 500;
+ const FC_KERNEL: &str = "vmlinux";
+ const FC_ROOT_FS: &str = "rootfs";
+ const DRIVE_PREFIX: &str = "drive";
+-const DISK_POOL_SIZE: u32 = 6;
++pub(super) const DISK_POOL_SIZE: u32 = 8;
+ 
+ impl FcInner {
+     pub(crate) fn get_resource(&self, src: &str, dst: &str) -> Result<String> {
+@@ -145,27 +146,24 @@
+             .await
+             .context(format!("failed to create directory {:?}", &abs_path));
+ 
+-        // We create some placeholder drives to be used for patching block devices while the vmm is
+-        // running, as firecracker does not support device hotplug.
+-        for i in 1..DISK_POOL_SIZE {
+-            let full_path_name = format!("{abs_path}/drive{i}");
+-
+-            let _ = File::create(&full_path_name)
+-                .await
+-                .context(format!("failed to create file {:?}", &full_path_name));
+-
+-            let path_on_host = match self.jailed {
+-                false => abs_path.clone(),
+-                true => rel_path.clone(),
+-            };
+-            let body: String = json!({
+-                "drive_id": format!("drive{}",i),
+-                "path_on_host": format!("{}/drive{}", path_on_host, i),
++        // Both format and read-only flags are fixed at VM boot. Writable slots
++        // use raw disks; read-only slots use flat VMDK descriptors, including
++        // a single extent for ordinary EROFS images such as /nix/store.
++        fs::write(format!("{abs_path}/empty"), [0_u8; 512]).await?;
++        fs::write(format!("{abs_path}/empty.vmdk"),
++            "# Disk DescriptorFile\nversion=1\nCID=fffffffe\nparentCID=ffffffff\ncreateType=\"twoGbMaxExtentFlat\"\nRW 1 FLAT \"empty\" 0\n").await?;
++        for i in 1..(2 * DISK_POOL_SIZE - 1) {
++            let read_only = i >= DISK_POOL_SIZE;
++            let prefix = if self.jailed { &rel_path } else { &abs_path };
++            let placeholder = if read_only { "empty.vmdk" } else { "empty" };
++            let body = json!({
++                "drive_id": format!("drive{i}"),
++                "path_on_host": format!("{prefix}/{placeholder}"),
+                 "is_root_device": false,
+-                "is_read_only": false
++                "is_read_only": read_only,
++                "image_format": if read_only { "Vmdk" } else { "Raw" },
+             })
+             .to_string();
+-
+             self.request_with_retry(Method::PUT, &format!("/drives/drive{i}"), body)
+                 .await?;
+         }
+@@ -182,6 +180,10 @@
+             .get_resource(drive_path, new_drive_id)
+             .context("get resource CONTAINER ROOTFS")?;
+ 
++        self.patch_drive(drive_id, &new_drive_path).await
++    }
++
++    pub(crate) async fn patch_drive(&self, drive_id: &str, new_drive_path: &str) -> Result<()> {
+         let block_rate_limit = RateLimiterConfig::new(
+             self.config.blockdev_info.disk_rate_limiter_bw_max_rate,
+             self.config.blockdev_info.disk_rate_limiter_ops_max_rate,
+@@ -206,6 +208,65 @@
+         )
+         .await?;
+         Ok(())
++    }
++
++    // Only controlled direct-child filenames enter the descriptor. Firecracker's
++    // VMDK gate requires every extent to live beside it, including inside a jail.
++    pub(crate) async fn prepare_readonly_drive(
++        &self,
++        config: &BlockConfigModern,
++        id: u64,
++    ) -> Result<String> {
++        let mut raw = VmdkConfig::default();
++        if config.vmdk.is_none() {
++            let size = std::fs::metadata(&config.path_on_host)?.len();
++            raw.push_extent_chunked(&config.path_on_host, size.div_ceil(512));
++        }
++        let layout = config.vmdk.as_ref().unwrap_or(&raw);
++        if layout.total_sectors().filter(|size| *size > 0).is_none() {
++            return Err(anyhow!("empty or overflowing Firecracker VMDK layout"));
++        }
++        let directory = Path::new(&self.vm_path).join(ROOT);
++        let mut descriptor = String::from("# Disk DescriptorFile\nversion=1\nCID=fffffffe\nparentCID=ffffffff\ncreateType=\"twoGbMaxExtentFlat\"\n");
++        let mut paths = HashMap::new();
++        for extent in &layout.extents {
++            let metadata = std::fs::metadata(&extent.path_on_host)?;
++            let end = extent
++                .file_offset
++                .checked_add(extent.sectors)
++                .ok_or_else(|| anyhow!("VMDK extent overflow"))?;
++            if !metadata.is_file() || metadata.len() / 512 < end {
++                return Err(anyhow!("invalid VMDK extent {}", extent.path_on_host));
++            }
++            let next = paths.len();
++            let name = match paths.entry(&extent.path_on_host) {
++                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
++                std::collections::hash_map::Entry::Vacant(entry) => {
++                    let name = format!("drive{id}-extent{next}");
++                    let target = directory.join(&name);
++                    // Bind individual files; never expose the host snapshot directory.
++                    mount::bind_mount_unchecked(
++                        &extent.path_on_host,
++                        target.to_str().unwrap(),
++                        true,
++                        MsFlags::MS_SLAVE,
++                    )?;
++                    entry.insert(name)
++                }
++            };
++            writeln!(
++                descriptor,
++                "RW {} FLAT \"{}\" {}",
++                extent.sectors, name, extent.file_offset
++            )?;
++        }
++        let name = format!("drive{id}.vmdk");
++        fs::write(directory.join(&name), descriptor).await?;
++        Ok(if self.jailed {
++            format!("/{name}")
++        } else {
++            directory.join(name).display().to_string()
++        })
+     }
+ 
+     pub(crate) async fn add_net_device(
+@@ -314,11 +375,20 @@
+             self.umount_jail_resource(FC_KERNEL).ok();
+             self.umount_jail_resource(FC_ROOT_FS).ok();
+ 
+-            for i in 1..DISK_POOL_SIZE {
++            for i in 1..(2 * DISK_POOL_SIZE - 1) {
+                 self.umount_jail_resource(&[DRIVE_PREFIX, &i.to_string()].concat())
+                     .ok();
+             }
+ 
++            if let Ok(entries) = std::fs::read_dir(Path::new(&self.vm_path).join(ROOT)) {
++                for entry in entries.flatten() {
++                    let name = entry.file_name();
++                    let name = name.to_string_lossy();
++                    if name.starts_with("drive") && name.contains("-extent") {
++                        self.umount_jail_resource(&name).ok();
++                    }
++                }
++            }
+             self.umount_jail_resource("").ok();
+         }
+         std::fs::remove_dir_all(self.vm_path.as_str())
+--- a/src/runtime-rs/crates/hypervisor/src/firecracker/inner_device.rs
++++ b/src/runtime-rs/crates/hypervisor/src/firecracker/inner_device.rs
+@@ -4,7 +4,8 @@
+ //
+ //SPDX-License-Identifier: Apache-2.0
+ 
+-use super::FcInner;
++use super::{fc_api::DISK_POOL_SIZE, FcInner};
++use crate::device::util::get_virt_drive_name;
+ use crate::firecracker::{
+     inner_hypervisor::{FC_AGENT_SOCKET_NAME, ROOT},
+     sl,
+@@ -28,10 +29,34 @@
+ 
+         match device {
+             DeviceType::BlockModern(block_mod) => {
+-                let block = block_mod.lock().await.clone();
+-                self.hotplug_block_device(block.config.path_on_host.as_str(), block.config.index)
+-                    .await
+-                    .context("add block device")
++                let mut block = block_mod.lock().await;
++                let index = block.config.index;
++                if index == 0 {
++                    // The VM root disk is already attached read-only at boot.
++                    return Ok(());
++                }
++                if index >= u64::from(DISK_POOL_SIZE) {
++                    return Err(anyhow!(
++                        "Firecracker block device index {index} exceeds the drive pool"
++                    ));
++                }
++                let drive_index = if block.config.is_readonly {
++                    index + u64::from(DISK_POOL_SIZE - 1)
++                } else {
++                    index
++                };
++                block.config.virt_path =
++                    format!("/dev/{}", get_virt_drive_name(drive_index as i32)?);
++                if block.config.is_readonly {
++                    let path = self
++                        .prepare_readonly_drive(&block.config, drive_index)
++                        .await?;
++                    self.patch_drive(&drive_index.to_string(), &path).await
++                } else {
++                    self.hotplug_block_device(block.config.path_on_host.as_str(), drive_index)
++                        .await
++                        .context("add block device")
++                }
+             }
+             DeviceType::Network(network) => self
+                 .add_net_device(&network.config, network.device_id)

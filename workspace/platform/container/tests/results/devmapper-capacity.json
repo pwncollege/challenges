@@ -1,0 +1,27 @@
+{
+  "backend": "devmapper-capacity",
+  "image": "localhost/workspace-storage:20g",
+  "sequential": [
+    {
+      "read_seconds": 33.538184945,
+      "read_bytes": 21474836480,
+      "sha256": "798906558e0ec6ea34b368c76456f5b57e348f1a6059ffcd1c49451144e9e77c",
+      "copyup_fsync_seconds": 0.001060669000000125,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.6229944550432265
+    }
+  ],
+  "concurrent": [
+    {
+      "read_seconds": 34.298300706,
+      "read_bytes": 21474836480,
+      "sha256": "798906558e0ec6ea34b368c76456f5b57e348f1a6059ffcd1c49451144e9e77c",
+      "copyup_fsync_seconds": 0.0010830710000000465,
+      "root_mount": "/dev/vdc / ext4 rw,relatime,stripe=16 0 0",
+      "root_capacity": 33501757440,
+      "start_seconds": 2.5360960089601576
+    }
+  ],
+  "concurrent_wall_seconds": 37.725550872972235
+}
