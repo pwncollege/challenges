@@ -1,0 +1,32 @@
+{% extends "../../common/test-service.py.j2" %}
+{% block assertions %}
+assert response.status_code == 200
+assert "flag" not in response.cookies
+first = re.search(r"Next: (\S+)", response.text).group(1)
+assert first.startswith("/?color=")
+wrong = session.get(base_url, params={"color": "wrong"}, timeout=3)
+assert wrong.status_code == 400
+skipped = session.get(base_url, params={"finish": "yes"}, timeout=3)
+assert skipped.text == response.text
+response = session.get(base_url + first, timeout=3)
+assert "session" in response.cookies
+assert "flag" not in response.cookies
+second = re.search(r"Next: (\S+)", response.text).group(1)
+assert second.startswith("/?shape=")
+# Without the progress cookie, even the correct next choice cannot advance.
+fresh = requests.Session()
+fresh.trust_env = False
+forgotten = fresh.get(base_url + second, timeout=3)
+assert forgotten.text == skipped.text
+combined = fresh.get(
+    base_url,
+    params={"color": first.split("=")[1], "shape": second.split("=")[1], "finish": "yes"},
+    timeout=3,
+)
+assert combined.text == f"Next: {second}\n"
+assert "flag" not in combined.cookies
+response = session.get(base_url + second, timeout=3)
+assert response.text == "Next: /?finish=yes\n"
+assert "flag" not in response.cookies
+assert "pwn.college{" not in response.text
+{% endblock %}

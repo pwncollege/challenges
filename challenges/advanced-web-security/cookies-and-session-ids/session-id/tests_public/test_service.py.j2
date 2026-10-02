@@ -1,0 +1,12 @@
+{% extends "../../common/test-service.py.j2" %}
+{% block assertions %}
+assert response.status_code == 200
+assert re.fullmatch(r"[0-9a-f]{32}", response.cookies["session_id"])
+assert "flag" not in response.cookies
+assert "pwn.college{" not in response.text
+session.cookies.clear()
+response = session.get(base_url, cookies={"session_id": "invalid"}, timeout=3)
+assert response.status_code == 403
+assert "flag" not in response.cookies
+assert "pwn.college{" not in response.text
+{% endblock %}

@@ -1,0 +1,8 @@
+{% extends "../../common/test-service.py.j2" %}
+{% block assertions %}
+assert response.status_code == 200
+assert re.fullmatch(r"[0-9a-f]+", response.cookies["flag"])
+assert bytes.fromhex(response.cookies["flag"])
+assert "pwn.college{" not in response.text
+assert "pwn.college{" not in response.headers["Set-Cookie"]
+{% endblock %}
