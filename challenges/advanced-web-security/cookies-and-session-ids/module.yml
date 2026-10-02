@@ -1,0 +1,23 @@
+name: Cookies and Session IDs
+resources:
+- type: challenge
+  id: cookie-flag
+  name: Cookie Jar
+- type: challenge
+  id: cookie-xor
+  name: Scrambled Cookie
+- type: challenge
+  id: cookie-steps
+  name: Cookie Trail
+- type: challenge
+  id: session-id
+  name: Return Ticket
+- type: challenge
+  id: cookie-ctr
+  name: Encrypted Authority
+- type: challenge
+  id: session-files
+  name: Session Inspector
+- type: challenge
+  id: session-sequential
+  name: Predictable Sessions

@@ -1,0 +1,30 @@
+{% extends "../../common/test-service.py.j2" %}
+{% block imports %}
+import os
+import pathlib
+{% endblock %}
+{% block assertions %}
+assert response.status_code == 200
+assert "Hello, guest." in response.text
+session_id = response.cookies["session_id"]
+assert re.fullmatch(r"[0-9a-f]{32}", session_id)
+response = session.get(base_url + "/session", params={"session_id": session_id}, timeout=3)
+assert response.status_code == 200
+assert response.json() == {"username": "guest", "is_admin": False}
+response = session.get(base_url, timeout=3)
+assert response.cookies["session_id"] == session_id
+response = session.get(base_url + "/sessions", timeout=3)
+assert response.status_code == 200
+assert {entry["username"] for entry in response.json()} == {"admin", "guest"}
+assert "pwn.college{" not in response.text
+for invalid in ("", "../flag", "f" * 31, "g" * 32):
+    response = session.get(base_url + "/session", params={"session_id": invalid}, timeout=3)
+    assert response.status_code == 400
+    assert "pwn.college{" not in response.text
+response = session.get(base_url + "/session", params={"session_id": "0" * 32}, timeout=3)
+assert response.status_code == 404
+directories = list(pathlib.Path("/tmp").glob("cookie-sessions-*"))
+assert directories, "session storage was not created"
+for directory in directories:
+    assert not os.access(directory, os.R_OK), "session files are readable outside the app"
+{% endblock %}

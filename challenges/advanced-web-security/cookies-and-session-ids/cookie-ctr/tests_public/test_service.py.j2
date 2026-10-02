@@ -1,0 +1,19 @@
+{% extends "../../common/test-service.py.j2" %}
+{% block assertions %}
+assert response.status_code == 200
+cookie = response.cookies["auth"]
+assert re.fullmatch(r"[0-9a-f]+", cookie)
+assert "pwn.college{" not in response.text
+assert "is_admin" not in response.headers["Set-Cookie"]
+response = session.get(base_url, timeout=3)
+assert response.status_code == 403
+assert "pwn.college{" not in response.text
+session.cookies.clear()
+response = session.get(base_url, timeout=3)
+assert bytes.fromhex(response.cookies["auth"])[:8] != bytes.fromhex(cookie)[:8]
+session.cookies.clear()
+for cookie in ("not-hex", "00", "00" * 8):
+    response = session.get(base_url, cookies={"auth": cookie}, timeout=3)
+    assert response.status_code == 400
+    assert "pwn.college{" not in response.text
+{% endblock %}

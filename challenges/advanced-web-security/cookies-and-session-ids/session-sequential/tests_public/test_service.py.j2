@@ -1,0 +1,54 @@
+{% extends "../../common/test-service.py.j2" %}
+{% block imports %}
+import os
+import pathlib
+{% endblock %}
+{% block assertions %}
+assert response.status_code == 200
+assert response.text.startswith("You are not logged in.")
+assert "/sessions" not in response.text
+assert "pwn.college{" not in response.text
+
+response = session.post(base_url + "/register", data={"username": "alice", "password": "correct horse"}, timeout=3)
+assert response.status_code == 201
+response = session.post(base_url + "/register", data={"username": "alice", "password": "duplicate"}, timeout=3)
+assert response.status_code == 409
+response = session.post(base_url + "/login", data={"username": "alice", "password": "wrong"}, timeout=3)
+assert response.status_code == 403
+assert "session_id" not in response.cookies
+
+response = session.post(
+    base_url + "/login", data={"username": "alice", "password": "correct horse"}, timeout=3
+)
+assert response.status_code == 200
+first_session_id = response.cookies["session_id"]
+assert re.fullmatch(r"[0-9]+", first_session_id)
+response = session.get(base_url, timeout=3)
+assert response.text == "Hello, alice.\nLogout: POST /logout\n"
+response = session.get(base_url + "/session", params={"session_id": first_session_id}, timeout=3)
+assert response.json() == {"username": "alice", "is_admin": False}
+
+response = session.post(base_url + "/logout", timeout=3)
+assert response.status_code == 200
+assert "session_id" not in session.cookies
+response = session.get(base_url + "/session", params={"session_id": first_session_id}, timeout=3)
+assert response.status_code == 404
+response = session.post(
+    base_url + "/login", data={"username": "alice", "password": "correct horse"}, timeout=3
+)
+second_session_id = response.cookies["session_id"]
+assert int(second_session_id) == int(first_session_id) + 1
+
+response = session.get(base_url + "/sessions", timeout=3)
+assert response.status_code == 404
+assert "pwn.college{" not in response.text
+for invalid in ("", "../flag", "-1", "12x"):
+    response = session.get(base_url + "/session", params={"session_id": invalid}, timeout=3)
+    assert response.status_code == 400
+    assert "pwn.college{" not in response.text
+
+directories = list(pathlib.Path("/tmp").glob("cookie-sessions-*"))
+assert directories, "session storage was not created"
+for directory in directories:
+    assert not os.access(directory, os.R_OK), "session files are readable outside the app"
+{% endblock %}

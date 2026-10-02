@@ -1,0 +1,6 @@
+{% extends "../../common/test-service.py.j2" %}
+{% block assertions %}
+assert response.status_code == 200
+assert "flag" in response.cookies
+assert "pwn.college{" not in response.text
+{% endblock %}
