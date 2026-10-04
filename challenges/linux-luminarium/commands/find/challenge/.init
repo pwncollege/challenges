@@ -17,7 +17,8 @@ def get_dirs(root):
 		if set(dirpath.split("/")) & BAD_PATHS or oct(perm)[-1] != "5":
 			dirnames[:] = [ ]
 			continue
-		yield dirpath
+		if dirpath != "/" and not os.path.isdir(os.path.join(dirpath, "flag")):
+			yield dirpath
 
 flag_dir = pathlib.Path(RND.choice(list(get_dirs("/"))))
 flag_path = flag_dir / "flag"
