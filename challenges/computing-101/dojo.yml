@@ -15,5 +15,7 @@ modules:
 - id: assembly-assortment
 - id: the-stack-revisited
 - id: numbers-as-strings
+- id: building-a-standard-library
+- id: building-a-shell
 - id: debugging-refresher
 - id: building-a-web-server

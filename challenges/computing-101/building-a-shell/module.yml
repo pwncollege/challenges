@@ -1,0 +1,31 @@
+name: Building a Shell
+resources:
+- type: header
+  content: "sh"
+- type: challenge
+  id: sh-exec
+  name: "Running Another Program"
+- type: challenge
+  id: sh-fork
+  name: "Keeping a Parent"
+- type: challenge
+  id: sh-wait
+  name: "Waiting for the Child"
+- type: challenge
+  id: sh-loop
+  name: "The Next Command"
+- type: challenge
+  id: sh-errors
+  name: "When Execution Fails"
+- type: challenge
+  id: sh-exit
+  name: "Leaving the Shell"
+- type: challenge
+  id: sh-arg
+  name: "One Argument"
+- type: challenge
+  id: sh-args
+  name: "Several Arguments"
+- type: challenge
+  id: sh-argv
+  name: "Building argv"
