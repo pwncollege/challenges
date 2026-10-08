@@ -1,0 +1,8 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+from Crypto.Util.strxor import strxor
+
+key = open("/challenge/.key", "rb").read()
+ciphertext = strxor(b"sleep", key[:5])
+
+print(f"TASK: {ciphertext.hex()}")
