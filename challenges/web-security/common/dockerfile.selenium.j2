@@ -2,13 +2,19 @@
 {% block additional_packages %}{% endblock %}
 {% block before_copy %}
 RUN <<END
-    apt-get install -y python3-pip wget python3-selenium python3-psutil curl software-properties-common
+    set -e
+    apt-get update
+    apt-get install -y software-properties-common
     add-apt-repository -y ppa:mozillateam/ppa
     echo 'Package: firefox*' > /etc/apt/preferences.d/mozilla-firefox
     echo 'Pin: release o=LP-PPA-mozillateam' >> /etc/apt/preferences.d/mozilla-firefox
     echo 'Pin-Priority: 1001' >> /etc/apt/preferences.d/mozilla-firefox
     apt-get update
-    apt-get install -y firefox 
+    apt-get install -y curl firefox python3-pip python3-psutil python3-selenium wget
 END
-RUN curl -L https://github.com/mozilla/geckodriver/releases/download/v0.34.0/geckodriver-v0.34.0-linux64.tar.gz | tar xz -C /usr/local/bin
+RUN curl --fail --show-error --location --retry 3 \
+        --output /tmp/geckodriver.tar.gz \
+        https://github.com/mozilla/geckodriver/releases/download/v0.34.0/geckodriver-v0.34.0-linux64.tar.gz
+RUN tar xzf /tmp/geckodriver.tar.gz -C /usr/local/bin
+RUN rm /tmp/geckodriver.tar.gz
 {% endblock %}

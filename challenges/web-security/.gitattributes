@@ -1,1 +1,11 @@
 **/tests_private/** filter=git-crypt-web-security diff=git-crypt-web-security
+common/xss-advanced.py.j2 filter=git-crypt-web-security diff=git-crypt-web-security
+common/xss-browser.py.j2 filter=git-crypt-web-security diff=git-crypt-web-security
+postmessage-origin-validation/challenge/** filter=git-crypt-web-security diff=git-crypt-web-security
+xss-csp-gadget/challenge/** filter=git-crypt-web-security diff=git-crypt-web-security
+xss-css-exfil/challenge/** filter=git-crypt-web-security diff=git-crypt-web-security
+xss-dangling-markup/challenge/** filter=git-crypt-web-security diff=git-crypt-web-security
+xss-dom-clobbering/challenge/** filter=git-crypt-web-security diff=git-crypt-web-security
+xss-httponly/challenge/** filter=git-crypt-web-security diff=git-crypt-web-security
+xss-mutation/challenge/** filter=git-crypt-web-security diff=git-crypt-web-security
+xss-prototype-pollution/challenge/** filter=git-crypt-web-security diff=git-crypt-web-security

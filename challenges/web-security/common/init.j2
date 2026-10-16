@@ -2,4 +2,4 @@
 
 [ -x /challenge/server ] && chmod u+s /challenge/server
 [ -x /challenge/victim ] && chmod u+s /challenge/victim
-echo "127.0.0.1 hacker.localhost challenge.localhost" >> /etc/hosts
+echo "127.0.0.1 hacker.localhost challenge.localhost{% block additional_hosts %}{% endblock %}" >> /etc/hosts
