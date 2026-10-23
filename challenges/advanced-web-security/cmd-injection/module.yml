@@ -1,0 +1,20 @@
+name: Command Injection
+resources:
+- type: challenge
+  id: cmdi-ls-semicolon
+  name: Command Separators
+- type: challenge
+  id: cmdi-ls-pipe
+  name: Pipelines
+- type: challenge
+  id: cmdi-ls-quote
+  name: Quoting
+- type: challenge
+  id: cmdi-env
+  name: Environment Variables
+- type: challenge
+  id: cmdi-ls-filter
+  name: Filtering
+- type: challenge
+  id: cmdi-touch-blind
+  name: Blind Command Injection

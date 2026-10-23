@@ -1,0 +1,47 @@
+name: Cross-Site Scripting
+resources:
+- type: challenge
+  id: xss-stored-html
+  name: Stored HTML Injection
+- type: challenge
+  id: xss-stored-alert
+  name: Stored XSS
+- type: challenge
+  id: xss-context
+  name: XSS Contexts
+- type: challenge
+  id: xss-reflected
+  name: Reflected XSS
+- type: challenge
+  id: xss-rf-get
+  name: Forging GET Requests
+- type: challenge
+  id: xss-rf-post
+  name: Forging POST Requests
+- type: challenge
+  id: xss-exfil-cookie
+  name: Cookie Exfiltration
+- type: challenge
+  id: xss-httponly
+  name: HttpOnly Cookies
+- type: challenge
+  id: xss-dom-clobbering
+  name: DOM Clobbering
+- type: challenge
+  id: xss-prototype-pollution
+  name: Prototype Pollution
+- type: challenge
+  id: xss-mutation
+  name: Mutation XSS
+- type: challenge
+  id: xss-csp-gadget
+  name: CSP Gadgets
+- type: challenge
+  id: xss-css-exfil
+  name: CSS Exfiltration
+- type: challenge
+  id: xss-dangling-markup
+  name: Dangling Markup
+- type: challenge
+  id: postmessage-origin-validation
+  name: PostMessage Origin Validation
