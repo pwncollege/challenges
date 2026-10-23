@@ -1,0 +1,17 @@
+name: Cross-Site Request Forgery
+resources:
+- type: challenge
+  id: csrf-get
+  name: CSRF with GET
+- type: challenge
+  id: csrf-post
+  name: CSRF with POST
+- type: challenge
+  id: csrf-reflected-alert
+  name: CSRF to Reflected XSS
+- type: challenge
+  id: csrf-xss-post
+  name: CSRF and XSS Posts
+- type: challenge
+  id: csrf-xss-cookie
+  name: CSRF and Cookie Theft

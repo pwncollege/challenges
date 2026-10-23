@@ -1,0 +1,8 @@
+name: Authentication
+resources:
+- type: challenge
+  id: auth-bypass-param
+  name: Authentication Bypass via Parameters
+- type: challenge
+  id: auth-bypass-cookie
+  name: Authentication Bypass via Cookies

@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+
+import subprocess
+import requests
+import atexit
+import time
+
+{% from '../../../../common/random_names.j2' import generate_names %}
+{% set challenge = namespace() %}
+{{ generate_names(challenge, random) }}
+
+proc = subprocess.Popen(['/challenge/server'])
+for _ in range(100):
+    try:
+        requests.get("http://challenge.localhost/")
+        break
+    except requests.RequestException:
+        time.sleep(0.1)
+else:
+    raise AssertionError("server did not become ready in time")
+
+
+# Test that the touch service works normally
+response = requests.get(f"http://challenge.localhost/{{challenge.endpoint_challenge}}",
+                        params={"{{challenge.parameter_filepath}}": "/tmp/test_file"})
+assert response.status_code == 200
+assert "Welcome to the touch service" in response.text
+assert "Ran touch /tmp/test_file!" in response.text

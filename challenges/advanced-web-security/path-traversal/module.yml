@@ -1,0 +1,8 @@
+name: Path Traversal
+resources:
+- type: challenge
+  id: path-traversal-1
+  name: Path Traversal 1
+- type: challenge
+  id: path-traversal-2
+  name: Path Traversal 2
