@@ -16,3 +16,4 @@ modules:
 - id: csrf
 - id: path-traversal
 - id: xss
+- id: php-security

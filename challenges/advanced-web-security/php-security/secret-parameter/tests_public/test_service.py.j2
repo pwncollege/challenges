@@ -1,0 +1,8 @@
+{% extends "../../common/test-service.py.j2" %}
+
+{% block checks %}
+for secret in ["wrong", "0", "super-secure-password-1337x"]:
+    response = session.get(base_url, params={"secret": secret}, timeout=3)
+    assert response.status_code == 200
+    assert response.text == "Provide the secret.\n"
+{% endblock %}

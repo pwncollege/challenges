@@ -1,0 +1,8 @@
+{% extends "../../common/test-upload.py.j2" %}
+
+{% block filter_check %}
+response = session.post(base_url, files={"file": ("blocked.php", b"<?php echo 1337; ?>")}, timeout=3)
+assert response.status_code == 403
+response = session.get(base_url + "/uploads/blocked.php", timeout=3)
+assert response.status_code == 404
+{% endblock %}
