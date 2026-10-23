@@ -1,0 +1,17 @@
+name: PHP Security
+resources:
+- type: challenge
+  id: secret-parameter
+  name: Secret Parameter
+- type: challenge
+  id: arbitrary-file-read
+  name: Arbitrary File Read
+- type: challenge
+  id: unrestricted-upload
+  name: Unrestricted Upload
+- type: challenge
+  id: upload-case-filter
+  name: Upload Extension Filter
+- type: challenge
+  id: arbitrary-file-inclusion
+  name: Arbitrary File Inclusion

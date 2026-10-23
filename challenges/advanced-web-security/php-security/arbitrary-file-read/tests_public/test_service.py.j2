@@ -1,0 +1,7 @@
+{% extends "../../common/test-service.py.j2" %}
+
+{% block checks %}
+response = session.get(base_url, params={"file": "/etc/hostname"}, timeout=3)
+assert response.status_code == 200
+assert response.text == pathlib.Path("/etc/hostname").read_text()
+{% endblock %}
