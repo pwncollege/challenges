@@ -1,0 +1,4 @@
+{% extends "../../common/tests_public/service.py.j2" %}
+{% block engine %}"Go text/template"{% endblock %}
+{% block template %}"{% raw %}Hello, {{.Name}}!{% endraw %}"{% endblock %}
+{% block expected %}"Hello, learner!"{% endblock %}

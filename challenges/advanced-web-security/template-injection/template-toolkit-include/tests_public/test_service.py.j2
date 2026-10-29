@@ -1,0 +1,8 @@
+{% extends "../../common/tests_public/service.py.j2" %}
+{% block engine %}"Template Toolkit"{% endblock %}
+{% block template %}"Hello, [% name %]!"{% endblock %}
+{% block expected %}"Hello, learner!"{% endblock %}
+{% block assertions %}
+assert not pathlib.Path("/flag").exists()
+assert not os.access("/srv/snippets/secret-note", os.R_OK)
+{% endblock %}

@@ -11,3 +11,4 @@ modules:
 - id: request-paths
 - id: http-requests
 - id: cookies-and-session-ids
+- id: template-injection

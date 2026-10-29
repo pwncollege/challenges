@@ -1,0 +1,4 @@
+{% extends "../../common/tests_public/service.py.j2" %}
+{% block engine %}"Ruby ERB"{% endblock %}
+{% block template %}"Hello, <%= name %>!"{% endblock %}
+{% block expected %}"Hello, learner!"{% endblock %}

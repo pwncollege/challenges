@@ -1,0 +1,9 @@
+{% extends "../../common/tests_public/service.py.j2" %}
+{% block engine %}"Jinja"{% endblock %}
+{% block template %}"{% raw %}Hello, {{name}}!{% endraw %}"{% endblock %}
+{% block expected %}"Hello, learner!"{% endblock %}
+{% block assertions %}
+for character in info.json()["forbidden"]:
+    blocked = session.post(base_url + "/render", data={"template": character}, timeout=3)
+    assert blocked.status_code == 400
+{% endblock %}

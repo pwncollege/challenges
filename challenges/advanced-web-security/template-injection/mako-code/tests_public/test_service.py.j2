@@ -1,0 +1,9 @@
+{% extends "../../common/tests_public/service.py.j2" %}
+{% block engine %}"Mako"{% endblock %}
+{% block template %}"Hello, ${name}!"{% endblock %}
+{% block expected %}"Hello, learner!"{% endblock %}
+{% block assertions %}
+blocked = session.post(base_url + "/render", data={"template": "% import os"}, timeout=3)
+assert blocked.status_code == 400
+assert not pathlib.Path("/flag").exists()
+{% endblock %}

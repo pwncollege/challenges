@@ -1,0 +1,4 @@
+{% extends "../../common/tests_public/service.py.j2" %}
+{% block engine %}"Django Templates"{% endblock %}
+{% block template %}"{% raw %}Project: {{ project.name }}{% endraw %}"{% endblock %}
+{% block expected %}"Project: template-preview"{% endblock %}

@@ -1,0 +1,4 @@
+{% extends "../../common/tests_public/service.py.j2" %}
+{% block engine %}"Twig"{% endblock %}
+{% block template %}"{% raw %}Hello, {{ name }}!{% endraw %}"{% endblock %}
+{% block expected %}"Hello, learner!"{% endblock %}

@@ -1,0 +1,60 @@
+name: Template Injection
+resources:
+- type: header
+  content: Data and Capabilities
+- type: challenge
+  id: jinja-context
+  name: Jinja Context
+- type: challenge
+  id: django-context
+  name: Django Context
+- type: challenge
+  id: mustache-sections
+  name: Mustache Sections
+- type: challenge
+  id: go-methods
+  name: Go Methods
+- type: challenge
+  id: handlebars-prototype
+  name: Handlebars Prototype Methods
+- type: header
+  content: Loaders and Includes
+- type: challenge
+  id: twig-loader
+  name: Twig Loader
+- type: challenge
+  id: template-toolkit-include
+  name: Template Toolkit Include
+- type: header
+  content: Embedded Code
+- type: challenge
+  id: erb-code
+  name: ERB Expressions
+- type: challenge
+  id: ejs-code
+  name: EJS Expressions
+- type: challenge
+  id: mako-code
+  name: Mako Expressions
+- type: challenge
+  id: tornado-code
+  name: Tornado Statements
+- type: challenge
+  id: simpletemplate-code
+  name: SimpleTemplate Statements
+- type: header
+  content: Python Template Jails
+- type: challenge
+  id: jinja-jail
+  name: Jinja Object Graph
+- type: challenge
+  id: jinja-jail-underscores
+  name: Jinja Without Underscores
+- type: challenge
+  id: jinja-jail-punctuation
+  name: Jinja Without Punctuation
+- type: header
+  content: Chained Vulnerabilities
+- type: challenge
+  id: prototype-pollution
+  name: Polluted Templates
