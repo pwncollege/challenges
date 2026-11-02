@@ -1,0 +1,43 @@
+{% include "../../numbers-as-strings/common/shim.S" %}
+
+/* One additional argument for sscanf's input, format, and destinations. */
+.bss
+cc_arg3: .skip 8
+
+.text
+.global call_fn3
+.type call_fn3, @function
+call_fn3:
+    save_harness_state
+    mov qword ptr [rip + cc_fn], rdi
+    mov qword ptr [rip + cc_arg1], rsi
+    mov qword ptr [rip + cc_arg2], rdx
+    mov qword ptr [rip + cc_arg3], rcx
+    seed_callee_saved
+    and rsp, -16
+    mov qword ptr [rip + cc_expected_rsp], rsp
+    mov rdi, qword ptr [rip + cc_arg1]
+    mov rsi, qword ptr [rip + cc_arg2]
+    mov rdx, qword ptr [rip + cc_arg3]
+    mov rax, qword ptr [rip + cc_incoming]
+    mov rcx, qword ptr [rip + cc_incoming + 8]
+    mov r8, qword ptr [rip + cc_incoming + 32]
+    mov r9, qword ptr [rip + cc_incoming + 40]
+    mov r10, qword ptr [rip + cc_incoming + 48]
+    mov r11, qword ptr [rip + cc_incoming + 56]
+    call qword ptr [rip + cc_fn]
+    snapshot_and_restore
+.size call_fn3, .-call_fn3
+
+/* Fill reusable stack space: a read buffer cannot rely on fresh zeroes. */
+.global dirty_stack
+.type dirty_stack, @function
+dirty_stack:
+    lea rdi, [rsp - 4096]
+    mov ecx, 512
+    mov rax, 0x3939393939393939
+    rep stosq
+    ret
+.size dirty_stack, .-dirty_stack
+
+.section .note.GNU-stack, "", @progbits
