@@ -1,0 +1,35 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from Crypto.Random import get_random_bytes
+
+flag = open("/flag", "rb").read().strip()
+
+key = get_random_bytes(16)
+cipher = AES.new(key=key, mode=AES.MODE_ECB)
+
+for n in range(31337):
+    print("")
+    print("Choose an action?")
+    print("1. Encrypt chosen plaintext.")
+    print("2. Prepend something to the flag.")
+    if (choice := int(input("Choice? "))) == 1:
+        pt = input("Data? ").strip().encode()
+    elif choice == 2:
+        pt = input("Data? ").strip().encode() + flag
+    else:
+        break
+
+    padded_pt = pad(pt, cipher.block_size) if len(pt)%cipher.block_size else pt
+    ct = cipher.encrypt(padded_pt)
+    print(f"Result: {ct.hex()}")
+
+    if n == 0:
+        print("I'm here to help!")
+        print("For the first 10, I will split them into blocks for you!")
+        print("After this, you'll have to split them yourself.")
+    if n < 10:
+        print(f"# of blocks: {len(ct)//16}.")
+        for n,i in enumerate(range(0, len(ct)-15, 16), start=1):
+            print(f"Block {n}: {ct[i:i+16].hex()}")

@@ -1,0 +1,14 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+from Crypto.PublicKey import RSA
+
+flag = open("/flag", "rb").read()
+assert len(flag) <= 256
+
+key = RSA.generate(2048)
+print(f"(public)  n = {key.n:#x}")
+print(f"(public)  e = {key.e:#x}")
+print(f"(private) d = {key.d:#x}")
+
+ciphertext = pow(int.from_bytes(flag, "little"), key.e, key.n).to_bytes(256, "little")
+print(f"Flag Ciphertext (hex): {ciphertext.hex()}")

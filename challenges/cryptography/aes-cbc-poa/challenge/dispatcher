@@ -1,0 +1,17 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+
+import sys
+
+key = open("/challenge/.key", "rb").read()
+cipher = AES.new(key=key, mode=AES.MODE_CBC)
+
+if len(sys.argv) > 1 and sys.argv[1] == "flag":
+    plaintext = open("/flag", "rb").read().strip()
+else:
+    plaintext = b"sleep"
+
+ciphertext = cipher.iv + cipher.encrypt(pad(plaintext, cipher.block_size))
+print(f"TASK: {ciphertext.hex()}")
