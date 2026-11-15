@@ -14,7 +14,7 @@ jne fail
 After the `cmp`, if the values were _not_ equal, the CPU jumps to the location labeled `fail`.
 The terminology used for this is that it "takes the branch" (in the road/code).
 If the values _were_ equal, the CPU simply continues to the next instruction.
-The terminology used for this is behavior of _not_ taking the branch that it "falls through" to the next instruction.
+The terminology used for this behavior of _not_ taking the branch is that, it "falls through" to the next instruction.
 
 Under the hood, `jne` checks the Zero Flag (ZF) that `cmp` set: `jne` jumps when ZF = 0 (meaning the subtraction result was non-zero, i.e., the values differed).
 There's also `je` (**J**ump if **E**qual), which does the opposite: it jumps when the values _are_ equal.
