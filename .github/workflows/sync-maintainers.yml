@@ -30,6 +30,9 @@ jobs:
             echo "Error: GPG_ROOT_PRIVATE_KEY is not set."
             exit 1
           fi
+          GNUPGHOME="$(mktemp -d "$RUNNER_TEMP/gnupg.XXXXXX")"
+          export GNUPGHOME
+          printf 'GNUPGHOME=%s\n' "$GNUPGHOME" >> "$GITHUB_ENV"
           printf '%s' "$GPG_ROOT_PRIVATE_KEY" | gpg --batch --import
           git crypt unlock
 
