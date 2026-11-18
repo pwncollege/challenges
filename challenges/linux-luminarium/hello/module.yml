@@ -8,7 +8,7 @@ resources:
 - name: Other Tutorials
   type: markdown
   content: |
-    - An [extensive bash tutorial](https://bash.cyberciti.biz/guide/Main_Page).
+    - An <a href="https://bash.cyberciti.biz/guide/Main_Page" target="_blank" rel="noopener noreferrer">extensive bash tutorial</a>.
 - type: challenge
   id: hello
   name: Intro to Commands
