@@ -37,7 +37,7 @@ Each line contains, separated by `:`s, the username, an `x` as a placeholder for
 
 We can see the `hacker` user at the bottom.
 That's you!
-Most of the rest of these users are either there for historical reasons, are service accounts to support various installed software, or some are "utility" accounts (e.g., the `nobody` user is used to ensure that, e.g., some programs run without any special privileges).
+Most of the rest of these users are either there for historical reasons, are service accounts to support various installed software, or some are "utility" accounts (e.g., the `nobody` user is used to ensure that some programs run without any special privileges).
 
 One important user is `root`: the system administrator.
 The system administrator has obvious security implications: a `hacker` user that can somehow, through various functionalities of Linux, become the `root` user would be able to wreak havoc on the system.
