@@ -20,21 +20,20 @@ runs:
       with:
         fetch-depth: 0
 
-    - name: Manage encrypted files
+    - name: Unlock encrypted files
+      if: ${{ inputs.gpg_private_key != '' }}
+      uses: ./.github/actions/unlock-git-crypt
+      with:
+        gpg_private_key: ${{ inputs.gpg_private_key }}
+
+    - name: Remove encrypted files
+      if: ${{ inputs.gpg_private_key == '' }}
       shell: 'nix develop -c bash -euo pipefail {0}'
-      env:
-        GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
-        CHALLENGES_DIR: challenges/${{ inputs.challenges }}
       run: |
-        if [ -n "$GPG_PRIVATE_KEY" ]; then
-          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
-          git crypt unlock
-        else
-          git crypt status -e \
-            | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
-            | sort -u \
-            | xargs -r rm -f
-        fi
+        git crypt status -e \
+          | sed -n 's/^[[:space:]]*encrypted:[[:space:]]*//p' \
+          | sort -u \
+          | xargs -r rm -f
 
     - name: Validate dojo.yml
       shell: 'nix develop -c bash -euo pipefail {0}'
