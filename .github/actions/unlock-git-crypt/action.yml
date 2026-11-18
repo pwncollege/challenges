@@ -1,0 +1,26 @@
+name: Unlock git-crypt
+description: Unlock encrypted repository files with an isolated GnuPG agent.
+inputs:
+  gpg_private_key:
+    description: OpenPGP private key used to unlock git-crypt.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Unlock repository
+      shell: >-
+        nix shell --inputs-from .
+        nixpkgs#bash nixpkgs#git nixpkgs#git-crypt nixpkgs#gnupg
+        --command bash --noprofile --norc -euo pipefail {0}
+      env:
+        GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
+      run: |
+        if [ -z "$GPG_PRIVATE_KEY" ]; then
+          echo "::error::A GPG private key is required to unlock git-crypt."
+          exit 1
+        fi
+        GNUPGHOME="$(mktemp -d "$RUNNER_TEMP/gnupg.XXXXXX")"
+        export GNUPGHOME
+        trap 'gpgconf --kill all || true; rm -rf -- "$GNUPGHOME"' EXIT
+        printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+        git crypt unlock

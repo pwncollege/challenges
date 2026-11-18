@@ -22,19 +22,9 @@ jobs:
       - uses: ./.github/actions/setup-nix
 
       - name: Unlock git-crypt
-        shell: 'nix shell nixpkgs#git nixpkgs#git-crypt nixpkgs#gnupg --command bash --noprofile --norc -euo pipefail {0}'
-        env:
-          GPG_ROOT_PRIVATE_KEY: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
-        run: |
-          if [ -z "$GPG_ROOT_PRIVATE_KEY" ]; then
-            echo "Error: GPG_ROOT_PRIVATE_KEY is not set."
-            exit 1
-          fi
-          GNUPGHOME="$(mktemp -d "$RUNNER_TEMP/gnupg.XXXXXX")"
-          export GNUPGHOME
-          printf 'GNUPGHOME=%s\n' "$GNUPGHOME" >> "$GITHUB_ENV"
-          printf '%s' "$GPG_ROOT_PRIVATE_KEY" | gpg --batch --import
-          git crypt unlock
+        uses: ./.github/actions/unlock-git-crypt
+        with:
+          gpg_private_key: ${{ secrets.GPG_ROOT_PRIVATE_KEY }}
 
       - name: Sync maintainers
         shell: 'nix shell nixpkgs#uv nixpkgs#git nixpkgs#git-crypt nixpkgs#gnupg --command bash --noprofile --norc -euo pipefail {0}'
