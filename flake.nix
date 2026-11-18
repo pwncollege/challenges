@@ -142,6 +142,7 @@
                 docker
                 git
                 git-crypt
+                gnupg
                 jq
                 pwn-platform-runtime
                 pwnshop
