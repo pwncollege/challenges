@@ -93,7 +93,7 @@ drwxr-xr-x 2 root root 4096 May 22 13:42 pwn_directory
 root@dojo:~# chmod go-rwx *
 root@dojo:~# ls -l
 total 4
--rw------- 1 hacker root    0 May 22 13:42 college_file
+-rw------- 1 root   root    0 May 22 13:42 college_file
 drwx------ 2 root   root 4096 May 22 13:42 pwn_directory
 root@dojo:~#
 ```
