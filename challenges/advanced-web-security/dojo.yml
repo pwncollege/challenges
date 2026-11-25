@@ -10,6 +10,7 @@ modules:
 - id: hosts-and-proxies
 - id: request-paths
 - id: http-requests
+- id: https-security
 - id: cookies-and-session-ids
 - id: authentication
 - id: cmd-injection
