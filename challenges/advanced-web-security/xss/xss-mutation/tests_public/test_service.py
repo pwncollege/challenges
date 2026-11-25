@@ -10,6 +10,7 @@ from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.firefox.service import Service as FirefoxService
 
 
+# Left running on purpose: the test container is discarded afterward, and CI runners deny signalling it.
 server = subprocess.Popen(["/challenge/server"])
 browser = None
 try:
@@ -44,5 +45,3 @@ try:
 finally:
     if browser is not None:
         browser.quit()
-    server.terminate()
-    server.wait()
