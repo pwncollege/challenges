@@ -63,5 +63,33 @@ runs:
           --attempts 5 \
           --timeout 600 \
           --silent-failures \
+          --log-failures "$RUNNER_TEMP/test-failures" \
           "$CHALLENGES_DIR"
         echo "::endgroup::"
+
+    # TEMPORARY, for debugging CI-only failures: keep each failing test's output. The logs can show
+    # tests_private solve code (tracebacks print source lines) and artifacts on this public repository
+    # are downloadable by anyone signed in, so encrypt them with the module's git-crypt key. Decrypt with:
+    #   LOG_KEY=$(sha256sum .git/git-crypt/keys/MODULE | cut -d' ' -f1) \
+    #     openssl enc -d -aes-256-cbc -pbkdf2 -pass env:LOG_KEY -in test-failures.tar.gz.enc | tar xz
+    - name: Encrypt test failure logs
+      id: failure-logs
+      if: ${{ failure() && inputs.gpg_private_key != '' }}
+      shell: bash -euo pipefail {0}
+      env:
+        CHALLENGES: ${{ inputs.challenges }}
+      run: |
+        [ -d "$RUNNER_TEMP/test-failures" ] || exit 0
+        LOG_KEY="$(sha256sum "$(git rev-parse --git-path "git-crypt/keys/${CHALLENGES%%/*}")" | cut -d' ' -f1)"
+        export LOG_KEY
+        tar -C "$RUNNER_TEMP" -czf - test-failures \
+          | openssl enc -aes-256-cbc -pbkdf2 -pass env:LOG_KEY -out "$RUNNER_TEMP/test-failures.tar.gz.enc"
+        echo "name=test-failures-${CHALLENGES//\//-}" >> "$GITHUB_OUTPUT"
+
+    - name: Upload encrypted test failure logs
+      if: ${{ failure() && steps.failure-logs.outputs.name != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.failure-logs.outputs.name }}
+        path: ${{ runner.temp }}/test-failures.tar.gz.enc
+        retention-days: 7
