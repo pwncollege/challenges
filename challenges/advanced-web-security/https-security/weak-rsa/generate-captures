@@ -1,0 +1,204 @@
+#!/usr/bin/python3 -I
+"""Generate weak-rsa's committed packet captures: challenge/captures/{N.pcap,N.json}.
+
+Each capture records curl fetching a placeholder page over TLS 1.2 with RSA key exchange, from a
+Flask server whose 2048-bit key has adjacent primes. The JSON locates the TLS record carrying the
+placeholder and holds the session keys .init uses to re-encrypt the flag into it; git-crypt keeps
+it out of the public repo. The RSA keys themselves are discarded.
+
+tcpdump needs root and packet-capture privileges, so run this in a throwaway container:
+
+    docker run --rm -v "$PWD/challenges/advanced-web-security/https-security/weak-rsa:/weak-rsa" \\
+        -e DEBIAN_FRONTEND=noninteractive ubuntu:24.04 bash -c 'apt-get update -qq && apt-get install -qqy \\
+        curl openssl python3-cryptography python3-flask python3-pycryptodome tcpdump tshark >/dev/null &&
+        /weak-rsa/generate-captures /weak-rsa/challenge/captures'
+"""
+
+import hashlib
+import hmac
+import json
+import os
+import signal
+import ssl
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from math import gcd
+from pathlib import Path
+
+import flask
+from Cryptodome.Util.number import getPrime, isPrime
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from werkzeug.serving import make_server
+
+CAPTURE_COUNT = 8
+# The response body is padded to this size so .init can swap in a flag without changing any lengths.
+CAPACITY = 256
+PLACEHOLDER = bytes(CAPACITY)
+# An application-data record carrying the body: explicit nonce, ciphertext, and GCM tag.
+RECORD_HEADER = bytes([23, 3, 3]) + (8 + CAPACITY + 16).to_bytes(2, "big")
+e = 65537
+
+app = flask.Flask(__name__)
+
+
+@app.get("/")
+def index():
+    return flask.Response(PLACEHOLDER, mimetype="text/plain")
+
+
+def weak_key():
+    while True:
+        p = getPrime(1024)
+        # Setting both high bits ensures the product of the nearby primes has 2048 bits.
+        if p >> 1022 != 3:
+            continue
+        q = p + 2
+        while not isPrime(q):
+            q += 2
+        phi = (p - 1) * (q - 1)
+        if (p * q).bit_length() == 2048 and gcd(e, phi) == 1:
+            break
+
+    d = pow(e, -1, phi)
+    return rsa.RSAPrivateNumbers(
+        p=p,
+        q=q,
+        d=d,
+        dmp1=rsa.rsa_crt_dmp1(d, p),
+        dmq1=rsa.rsa_crt_dmq1(d, q),
+        iqmp=rsa.rsa_crt_iqmp(p, q),
+        public_numbers=rsa.RSAPublicNumbers(e, p * q),
+    ).private_key()
+
+
+def wait_until(what, condition):
+    for _ in range(600):
+        if condition():
+            return
+        time.sleep(0.05)
+    raise SystemExit(f"timed out waiting for {what}")
+
+
+def prf(secret, label, seed, length):
+    # TLS 1.2 PRF with SHA-256 (RFC 5246, section 5).
+    seed = label + seed
+    output, a = b"", seed
+    while len(output) < length:
+        a = hmac.digest(secret, a, hashlib.sha256)
+        output += hmac.digest(secret, a + seed, hashlib.sha256)
+    return output[:length]
+
+
+def locate_body_record(pcap, keylog):
+    """Find the record carrying the placeholder, and the server key material to rewrite it."""
+    ((client_random, master_secret),) = (
+        line.split()[1:] for line in keylog.read_text().splitlines() if line.startswith("CLIENT_RANDOM ")
+    )
+    server_random = subprocess.check_output(
+        ["tshark", "-r", pcap, "-Y", "tls.handshake.type == 2", "-T", "fields", "-e", "tls.handshake.random"],
+        text=True,
+    ).strip().replace(":", "")
+    # AES128-GCM-SHA256 key block: client key, server key, client salt, server salt.
+    key_block = prf(
+        bytes.fromhex(master_secret),
+        b"key expansion",
+        bytes.fromhex(server_random) + bytes.fromhex(client_random),
+        40,
+    )
+    key, salt = key_block[16:32], key_block[36:40]
+
+    data = pcap.read_bytes()
+    offset = data.find(RECORD_HEADER)
+    while offset != -1:
+        nonce = salt + data[offset + 5 : offset + 13]
+        ciphertext = data[offset + 13 : offset + 5 + int.from_bytes(RECORD_HEADER[3:], "big")]
+        for seq in range(16):
+            aad = seq.to_bytes(8, "big") + RECORD_HEADER[:3] + CAPACITY.to_bytes(2, "big")
+            try:
+                if AESGCM(key).decrypt(nonce, ciphertext, aad) == PLACEHOLDER:
+                    return dict(key=key.hex(), salt=salt.hex(), offset=offset, seq=seq, capacity=CAPACITY)
+            except Exception:
+                pass
+        offset = data.find(RECORD_HEADER, offset + 1)
+    raise SystemExit(f"no placeholder record found in {pcap}")
+
+
+def capture(work):
+    key, cert = work / "server.key", work / "server.crt"
+    key.write_bytes(
+        weak_key().private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        )
+    )
+    subprocess.run(
+        [
+            "openssl", "req", "-new", "-x509", "-key", key, "-out", cert,
+            "-subj", "/CN=challenge.localhost", "-days", "365",
+            "-addext", "subjectAltName=DNS:challenge.localhost",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = context.maximum_version = ssl.TLSVersion.TLSv1_2
+    # RSA key exchange makes the captured session decryptable with the recovered key.
+    context.set_ciphers("AES128-GCM-SHA256")
+    context.load_cert_chain(cert, key)
+    server = make_server("127.0.0.1", 443, app, ssl_context=context)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    pcap, keylog, tcpdump_log = work / "traffic.pcap", work / "keylog", work / "tcpdump.log"
+    with open(tcpdump_log, "w") as log:
+        tcpdump = subprocess.Popen(
+            ["tcpdump", "-i", "lo", "-s", "0", "--immediate-mode", "-U", "-Z", "root", "-w", pcap, "tcp port 443"],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            env={"LC_ALL": "C", "PATH": os.environ["PATH"]},
+        )
+    try:
+        wait_until("tcpdump to start capturing", lambda: "listening on lo" in tcpdump_log.read_text())
+        subprocess.run(
+            [
+                "curl", "--insecure", "--tlsv1.2", "--tls-max", "1.2", "--ciphers", "AES128-GCM-SHA256",
+                "--resolve", "challenge.localhost:443:127.0.0.1",
+                "--fail", "--silent", "--show-error", "--max-time", "30", "--output", "/dev/null",
+                "https://challenge.localhost/",
+            ],
+            check=True,
+            env={**os.environ, "SSLKEYLOGFILE": str(keylog)},
+        )
+        # Stop capturing only once the server's FIN, the end of the response connection, is in the file.
+        fin_filter = "src port 443 and tcp[tcpflags] & tcp-fin != 0"
+        wait_until(
+            "the server to close the captured connection",
+            lambda: subprocess.run(["tcpdump", "-nr", pcap, fin_filter], capture_output=True).stdout.strip(),
+        )
+        tcpdump.send_signal(signal.SIGINT)
+        if tcpdump.wait(timeout=30) != 0:
+            raise SystemExit(f"tcpdump failed:\n{tcpdump_log.read_text()}")
+    finally:
+        tcpdump.kill()
+        server.shutdown()
+    return pcap.read_bytes(), locate_body_record(pcap, keylog)
+
+
+output = Path(sys.argv[1])
+output.mkdir(exist_ok=True)
+for index in range(CAPTURE_COUNT):
+    with tempfile.TemporaryDirectory() as work:
+        pcap, record = capture(Path(work))
+    (output / f"{index}.pcap").write_bytes(pcap)
+    (output / f"{index}.json").write_text(json.dumps(record) + "\n")
+
+# Hand the files to whoever owns the checkout, rather than the container's root.
+owner = output.parent.stat()
+for path in (output, *output.iterdir()):
+    os.chown(path, owner.st_uid, owner.st_gid)
+print(f"wrote {CAPTURE_COUNT} captures to {output}")

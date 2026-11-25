@@ -1,0 +1,11 @@
+name: HTTPS Security
+resources:
+- type: challenge
+  id: dh
+  name: Diffie–Hellman Key Exchange
+- type: challenge
+  id: weak-rsa
+  name: Weak RSA
+- type: challenge
+  id: hidden-flag-1
+  name: Look Closer
