@@ -9,6 +9,7 @@ capture = Path("/challenge/traffic.pcap")
 assert capture.is_file() and capture.stat().st_size > 24
 assert not os.access(capture, os.W_OK)
 assert b"pwn.college{" not in capture.read_bytes()
+assert not os.access("/challenge/keys", os.R_OK) and not os.access("/challenge/keys", os.X_OK)
 assert not os.access("/run/https-security/server.key", os.R_OK)
 assert not os.access("/run/https-security/server.log", os.R_OK)
 
