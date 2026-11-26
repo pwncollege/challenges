@@ -1,0 +1,34 @@
+#!/bin/bash
+
+NUM=$((RANDOM % 512))
+echo $NUM > /challenge/.correct
+chmod 600 /challenge/.correct
+
+# NUM is injected at runtime via /challenge/.read-secret, called from a
+# breakpoint command in .gdb that targets the int3_loc label below.
+ASM=$(mktemp).o
+as -o $ASM <<EOF
+.intel_syntax noprefix
+
+.global main
+main:
+    pop rdi
+    cmp rdi, 3
+    jne no_break
+
+.global int3_loc
+int3_loc:
+    int3
+
+    mov rdi, 0
+    mov rax, 60
+    syscall
+
+no_break:
+    mov rdi, 0
+    mov rax, 60
+    syscall
+EOF
+
+ld -o /challenge/debug-me $ASM 2>/tmp/.init.log
+rm $ASM
