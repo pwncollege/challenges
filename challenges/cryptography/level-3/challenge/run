@@ -1,0 +1,16 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+from Crypto.Random import get_random_bytes
+from Crypto.Util.strxor import strxor
+
+flag = open("/flag", "rb").read()
+
+key = get_random_bytes(256)
+ciphertext = strxor(flag, key[:len(flag)])
+
+print(f"Flag Ciphertext (hex): {ciphertext.hex()}")
+
+while True:
+    plaintext = bytes.fromhex(input("Plaintext (hex): "))
+    ciphertext = strxor(plaintext, key[:len(plaintext)])
+    print(f"Ciphertext (hex): {ciphertext.hex()}")

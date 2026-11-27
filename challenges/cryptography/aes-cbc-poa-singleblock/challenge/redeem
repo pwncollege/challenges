@@ -1,0 +1,5 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3 -I
+
+if input("Password? ").strip() == open("/challenge/.pw").read().strip():
+    print("Victory! Your flag:")
+    print(open("/flag").read())
